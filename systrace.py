@@ -30,11 +30,21 @@ def main():
                     default='trace.html', metavar='FILE')
   parser.add_option('-t', '--time', dest='trace_time', type='int',
                     help='trace for N seconds', metavar='N')
+  parser.add_option('-b', '--buf-size', dest='trace_buf_size', type='int',
+                    help='use a trace buffer size of N KB', metavar='N')
+  parser.add_option('-f', '--cpu-freq', dest='trace_cpu_freq', default=False,
+                    action='store_true', help='trace CPU frequency changes')
+  parser.add_option('-l', '--cpu-load', dest='trace_cpu_load', default=False,
+                    action='store_true', help='trace CPU load')
   parser.add_option('-w', '--workqueue', dest='trace_workqueue', default=False,
                     action='store_true', help='trace the kernel workqueues')
   options, args = parser.parse_args()
 
   atrace_args = ['adb', 'shell', 'atrace', '-s']
+  if options.trace_cpu_freq:
+    atrace_args.append('-f')
+  if options.trace_cpu_load:
+    atrace_args.append('-l')
   if options.trace_workqueue:
     atrace_args.append('-w')
   if options.trace_time is not None:
@@ -42,6 +52,11 @@ def main():
       atrace_args.extend(['-t', str(options.trace_time)])
     else:
       parser.error('the trace time must be a positive number')
+  if options.trace_buf_size is not None:
+    if options.trace_buf_size > 0:
+      atrace_args.extend(['-b', str(options.trace_buf_size)])
+    else:
+      parser.error('the trace buffer size must be a positive number')
 
   html_filename = options.output_file
   html_file = open(html_filename, 'w')

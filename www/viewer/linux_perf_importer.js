@@ -574,50 +574,48 @@ cr.define('tracing', function() {
           var prio = parseInt(event[3]);
           this.markPidRunnable(ts, pid, comm, prio);
 
-        } else if (eventName == 'power_start') {
-          var event = /type=(\d+) state=(\d) cpu_id=(\d)+/.exec(eventBase[5]);
+        } else if (eventName == 'cpu_frequency') {
+          var event = /state=(\d+) cpu_id=(\d+)/.exec(eventBase[5]);
           if (!event) {
             this.model_.importErrors.push('Line ' + (lineNumber + 1) +
-                ': Malformed power_start event');
+                ': Malformed cpu_frequency event');
             continue;
           }
-          var targetCpuNumber = parseInt(event[3]);
+          var targetCpuNumber = parseInt(event[2]);
           var targetCpu = this.getOrCreateCpuState(targetCpuNumber);
-          var powerCounter;
-          if (event[1] == '1') {
-            powerCounter = targetCpu.cpu.getOrCreateCounter('', 'C-State');
-          } else {
-            this.model_.importErrors.push('Line ' + (lineNumber + 1) +
-                ': Don\'t understand power_start events of type ' + event[1]);
-            continue;
+          var freqCounter =
+              targetCpu.cpu.getOrCreateCounter('', 'Frequency');
+          if (freqCounter.numSeries == 0) {
+            freqCounter.seriesNames.push('state');
+            freqCounter.seriesColors.push(
+                tracing.getStringColorId(freqCounter.name + '.' + 'state'));
           }
-          if (powerCounter.numSeries == 0) {
-            powerCounter.seriesNames.push('state');
-            powerCounter.seriesColors.push(
-                tracing.getStringColorId(powerCounter.name + '.' + 'state'));
-          }
-          var powerState = parseInt(event[2]);
-          powerCounter.timestamps.push(ts);
-          powerCounter.samples.push(powerState);
-        } else if (eventName == 'power_frequency') {
-          var event = /type=(\d+) state=(\d+) cpu_id=(\d)+/.exec(eventBase[5]);
+          var freqState = parseInt(event[1]);
+          freqCounter.timestamps.push(ts);
+          freqCounter.samples.push(freqState);
+        } else if (eventName == 'cpufreq_interactive_already' ||
+                   eventName == 'cpufreq_interactive_target') {
+          var event = /cpu=(\d+) load=(\d+) cur=(\d+) targ=(\d+)/.
+              exec(eventBase[5]);
           if (!event) {
             this.model_.importErrors.push('Line ' + (lineNumber + 1) +
-                ': Malformed power_start event');
+                ': Malformed cpufreq_interactive_* event');
             continue;
           }
-          var targetCpuNumber = parseInt(event[3]);
+          var targetCpuNumber = parseInt(event[1]);
           var targetCpu = this.getOrCreateCpuState(targetCpuNumber);
-          var powerCounter =
-              targetCpu.cpu.getOrCreateCounter('', 'Power Frequency');
-          if (powerCounter.numSeries == 0) {
-            powerCounter.seriesNames.push('state');
-            powerCounter.seriesColors.push(
-                tracing.getStringColorId(powerCounter.name + '.' + 'state'));
+          var loadCounter =
+              targetCpu.cpu.getOrCreateCounter('', 'Load');
+          if (loadCounter.numSeries == 0) {
+            loadCounter.seriesNames.push('state');
+            loadCounter.seriesColors.push(
+                tracing.getStringColorId(loadCounter.name + '.' + 'state'));
           }
-          var powerState = parseInt(event[2]);
-          powerCounter.timestamps.push(ts);
-          powerCounter.samples.push(powerState);
+          var loadState = parseInt(event[2]);
+          loadCounter.timestamps.push(ts);
+          loadCounter.samples.push(loadState);
+          loadCounter.maxTotal = 100;
+          loadCounter.skipUpdateBounds = true;
         } else if (eventName == 'workqueue_execute_start') {
           var event = workqueueExecuteStartRE.exec(eventBase[5]);
           if (!event) {

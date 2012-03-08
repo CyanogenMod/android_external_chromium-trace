@@ -220,7 +220,10 @@ cr.define('tracing', function() {
         if (total > maxTotal)
           maxTotal = total;
       }
-      this.maxTotal = maxTotal;
+
+      if (this.maxTotal === undefined) {
+        this.maxTotal = maxTotal;
+      }
     }
 
   };
