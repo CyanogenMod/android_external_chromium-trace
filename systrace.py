@@ -22,7 +22,7 @@ This is a tool for capturing a trace that includes data from both userland and
 the kernel.  It creates an HTML file for visualizing the trace.
 """
 
-import optparse, os, subprocess, sys
+import errno, optparse, os, select, subprocess, sys, time
 
 def main():
   parser = optparse.OptionParser()
@@ -63,30 +63,37 @@ def main():
   html_file.write(html_prefix)
 
   trace_started = False
-  popen = subprocess.Popen(atrace_args, stdout=subprocess.PIPE,
+  leftovers = ''
+  adb = subprocess.Popen(atrace_args, stdout=subprocess.PIPE,
                            stderr=subprocess.PIPE)
   while True:
-    stdout, stderr = popen.communicate()
-    if len(stderr) > 0:
-      print sys.stderr, stderr
-      break
-    if len(stdout) > 0:
+    ready = select.select([adb.stdout, adb.stderr], [], [adb.stdout, adb.stderr])
+    if adb.stderr in ready[0]:
+      err = os.read(adb.stderr.fileno(), 4096)
+      sys.stderr.write(err)
+      sys.stderr.flush()
+    if adb.stdout in ready[0]:
+      out = os.read(adb.stdout.fileno(), 4096)
       if not trace_started:
-        lines = stdout.splitlines()
+        out = leftovers + out
+        lines = out.splitlines(True)
+        out, leftovers = '', ''
         for i, line in enumerate(lines):
-          if line == 'TRACE:':
-            print "downloading trace...",
+          if line.replace('\r', '') == 'TRACE:\n':
+            sys.stdout.write("downloading trace...")
             sys.stdout.flush()
-            stdout = '\n'.join(lines[i+1:])
+            out = ''.join(lines[i+1:])
             trace_started = True
             break
+          elif 'TRACE:'.startswith(line) and i == len(lines) - 1:
+            leftovers = line
           else:
-            print line
+            sys.stdout.write(line)
             sys.stdout.flush()
-      html_stdout = stdout.replace('\n', '\\n\\\n').replace('\r', '')
-      if len(html_stdout) > 0:
-        html_file.write(html_stdout)
-    result = popen.poll()
+      html_out = out.replace('\n', '\\n\\\n').replace('\r', '')
+      if len(html_out) > 0:
+        html_file.write(html_out)
+    result = adb.poll()
     if result is not None:
       break
   if result != 0:
@@ -94,14 +101,14 @@ def main():
   else:
     html_file.write(html_suffix)
     html_file.close()
-    print "done\n\n    wrote file://%s/%s\n" % (os.getcwd(), options.output_file)
+    print " done\n\n    wrote file://%s/%s\n" % (os.getcwd(), options.output_file)
 
 html_prefix = """<!DOCTYPE HTML>
 <html>
 <head i18n-values="dir:textdirection;">
 <title>Android System Trace</title>
-<link rel="stylesheet" href="http://www.corp.google.com/~jgennis/android_tracing/viewer/timeline.css">
-<link rel="stylesheet" href="http://www.corp.google.com/~jgennis/android_tracing/viewer/timeline_view.css">
+<link rel="stylesheet" href="http://www.corp.google.com/~jgennis/android_tracing/0.1/viewer/timeline.css">
+<link rel="stylesheet" href="http://www.corp.google.com/~jgennis/android_tracing/0.1/viewer/timeline_view.css">
 <script src="http://www.corp.google.com/~jgennis/android_tracing/0.1/shared/js/cr.js"></script>
 <script src="http://www.corp.google.com/~jgennis/android_tracing/0.1/shared/js/cr/event_target.js"></script>
 <script src="http://www.corp.google.com/~jgennis/android_tracing/0.1/shared/js/cr/ui.js"></script>
@@ -134,8 +141,7 @@ html_prefix = """<!DOCTYPE HTML>
   var linuxPerfData = "\\
 """
 
-html_suffix = """\\n\\
-           dummy-0000  [000] 0.0: 0: trace_event_clock_sync: parent_ts=0.0\\n";
+html_suffix = """           dummy-0000  [000] 0.0: 0: trace_event_clock_sync: parent_ts=0.0\\n";
   var timelineViewEl;
   function onLoad() {
     reload();
