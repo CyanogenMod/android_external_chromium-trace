@@ -12,6 +12,16 @@ the kernel.  It creates an HTML file for visualizing the trace.
 
 import errno, optparse, os, select, subprocess, sys, time
 
+# This list is based on the tags in frameworks/native/include/utils/Trace.h.
+trace_tag_bits = {
+  'gfx':      1<<1,
+  'input':    1<<2,
+  'view':     1<<3,
+  'webview':  1<<4,
+  'wm':       1<<5,
+  'am':       1<<6,
+}
+
 def main():
   parser = optparse.OptionParser()
   parser.add_option('-o', dest='output_file', help='write HTML to FILE',
@@ -26,7 +36,31 @@ def main():
                     action='store_true', help='trace CPU load')
   parser.add_option('-w', '--workqueue', dest='trace_workqueue', default=False,
                     action='store_true', help='trace the kernel workqueues')
+  parser.add_option('--set-tags', dest='set_tags', action='store',
+                    help='set the enabled trace tags and exit; set to a ' +
+                    'comma separated list of: ' +
+                    ', '.join(trace_tag_bits.iterkeys()))
   options, args = parser.parse_args()
+
+  if options.set_tags:
+    flags = 0
+    tags = options.set_tags.split(',')
+    for tag in tags:
+      try:
+        flags |= trace_tag_bits[tag]
+      except KeyError:
+        parser.error('unrecognized tag: %s\nknown tags are: %s' %
+                     (tag, ', '.join(trace_tag_bits.iterkeys())))
+    atrace_args = ['adb', 'shell', 'setprop', 'atrace.tags.enableflags', hex(flags)]
+    try:
+      subprocess.check_call(atrace_args)
+    except subprocess.CalledProcessError, e:
+      print sys.stderr, 'unable to set tags: %s' % e
+    print '\nSet enabled tags to: %s\n' % ', '.join(tags)
+    print ('You will likely need to restart the Android framework for this to ' +
+          'take effect:\n\n    adb shell stop\n    adb shell ' +
+          'start\n')
+    return
 
   atrace_args = ['adb', 'shell', 'atrace', '-s']
   if options.trace_cpu_freq:
@@ -59,7 +93,7 @@ def main():
   trace_started = False
   leftovers = ''
   adb = subprocess.Popen(atrace_args, stdout=subprocess.PIPE,
-                           stderr=subprocess.PIPE)
+                         stderr=subprocess.PIPE)
   while True:
     ready = select.select([adb.stdout, adb.stderr], [], [adb.stdout, adb.stderr])
     if adb.stderr in ready[0]:
