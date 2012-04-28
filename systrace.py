@@ -1,20 +1,8 @@
 #!/usr/bin/env python
 
-#
-# Copyright 2012, The Android Open Source Project
-#
-# Licensed under the Apache License, Version 2.0 (the "License");
-# you may not use this file except in compliance with the License.
-# You may obtain a copy of the License at
-#
-#     http://www.apache.org/licenses/LICENSE-2.0
-#
-# Unless required by applicable law or agreed to in writing, software
-# distributed under the License is distributed on an "AS IS" BASIS,
-# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-# See the License for the specific language governing permissions and
-# limitations under the License.
-#
+# Copyright (c) 2011 The Chromium Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
 
 """Android system-wide tracing utility.
 
@@ -58,9 +46,15 @@ def main():
     else:
       parser.error('the trace buffer size must be a positive number')
 
+  script_dir = os.path.dirname(os.path.abspath(sys.argv[0]))
+  css_filename = os.path.join(script_dir, 'style.css')
+  js_filename = os.path.join(script_dir, 'script.js')
+  css = open(css_filename).read()
+  js = open(js_filename).read()
+
   html_filename = options.output_file
   html_file = open(html_filename, 'w')
-  html_file.write(html_prefix)
+  html_file.write(html_prefix % (css, js))
 
   trace_started = False
   leftovers = ''
@@ -107,22 +101,8 @@ html_prefix = """<!DOCTYPE HTML>
 <html>
 <head i18n-values="dir:textdirection;">
 <title>Android System Trace</title>
-<link rel="stylesheet" href="http://www.corp.google.com/~jgennis/android_tracing/0.1/viewer/timeline.css">
-<link rel="stylesheet" href="http://www.corp.google.com/~jgennis/android_tracing/0.1/viewer/timeline_view.css">
-<script src="http://www.corp.google.com/~jgennis/android_tracing/0.1/shared/js/cr.js"></script>
-<script src="http://www.corp.google.com/~jgennis/android_tracing/0.1/shared/js/cr/event_target.js"></script>
-<script src="http://www.corp.google.com/~jgennis/android_tracing/0.1/shared/js/cr/ui.js"></script>
-<script src="http://www.corp.google.com/~jgennis/android_tracing/0.1/shared/js/util.js"></script>
-<script src="http://www.corp.google.com/~jgennis/android_tracing/0.1/viewer/timeline_model.js"></script>
-<script src="http://www.corp.google.com/~jgennis/android_tracing/0.1/viewer/linux_perf_importer.js"></script>
-<script src="http://www.corp.google.com/~jgennis/android_tracing/0.1/viewer/trace_event_importer.js"></script>
-<script src="http://www.corp.google.com/~jgennis/android_tracing/0.1/viewer/sorted_array_utils.js"></script>
-<script src="http://www.corp.google.com/~jgennis/android_tracing/0.1/viewer/measuring_stick.js"></script>
-<script src="http://www.corp.google.com/~jgennis/android_tracing/0.1/viewer/timeline.js"></script>
-<script src="http://www.corp.google.com/~jgennis/android_tracing/0.1/viewer/timeline_track.js"></script>
-<script src="http://www.corp.google.com/~jgennis/android_tracing/0.1/viewer/timeline_view.js"></script>
-<script src="http://www.corp.google.com/~jgennis/android_tracing/0.1/viewer/fast_rect_renderer.js"></script>
-<script src="http://www.corp.google.com/~jgennis/android_tracing/0.1/viewer/test_utils.js"></script>
+<style type="text/css">%s</style>
+<script language="javascript">%s</script>
 <style>
   .view {
     overflow: hidden;
