@@ -10,7 +10,7 @@ This is a tool for capturing a trace that includes data from both userland and
 the kernel.  It creates an HTML file for visualizing the trace.
 """
 
-import errno, optparse, os, select, subprocess, sys, time
+import errno, optparse, os, select, subprocess, sys, time, zlib
 
 # This list is based on the tags in frameworks/native/include/utils/Trace.h.
 trace_tag_bits = {
@@ -62,7 +62,7 @@ def main():
           'start\n')
     return
 
-  atrace_args = ['adb', 'shell', 'atrace', '-s']
+  atrace_args = ['adb', 'shell', 'atrace', '-s', '-z']
   if options.trace_cpu_freq:
     atrace_args.append('-f')
   if options.trace_cpu_load:
@@ -94,6 +94,7 @@ def main():
   leftovers = ''
   adb = subprocess.Popen(atrace_args, stdout=subprocess.PIPE,
                          stderr=subprocess.PIPE)
+  dec = zlib.decompressobj()
   while True:
     ready = select.select([adb.stdout, adb.stderr], [], [adb.stdout, adb.stderr])
     if adb.stderr in ready[0]:
@@ -101,24 +102,31 @@ def main():
       sys.stderr.write(err)
       sys.stderr.flush()
     if adb.stdout in ready[0]:
-      out = os.read(adb.stdout.fileno(), 4096)
+      out = leftovers + os.read(adb.stdout.fileno(), 4096)
+      out = out.replace('\r\n', '\n')
+      if out.endswith('\r'):
+        out = out[:-1]
+        leftovers = '\r'
+      else:
+        leftovers = ''
       if not trace_started:
-        out = leftovers + out
         lines = out.splitlines(True)
-        out, leftovers = '', ''
+        out = ''
         for i, line in enumerate(lines):
-          if line.replace('\r', '') == 'TRACE:\n':
+          if line == 'TRACE:\n':
             sys.stdout.write("downloading trace...")
             sys.stdout.flush()
             out = ''.join(lines[i+1:])
             trace_started = True
             break
           elif 'TRACE:'.startswith(line) and i == len(lines) - 1:
-            leftovers = line
+            leftovers = line + leftovers
           else:
             sys.stdout.write(line)
             sys.stdout.flush()
-      html_out = out.replace('\n', '\\n\\\n').replace('\r', '')
+      if len(out) > 0:
+        out = dec.decompress(out)
+      html_out = out.replace('\n', '\\n\\\n')
       if len(html_out) > 0:
         html_file.write(html_out)
     result = adb.poll()
@@ -127,6 +135,9 @@ def main():
   if result != 0:
     print sys.stderr, 'adb returned error code %d' % result
   else:
+    html_out = dec.flush().replace('\n', '\\n\\\n').replace('\r', '')
+    if len(html_out) > 0:
+      html_file.write(html_out)
     html_file.write(html_suffix)
     html_file.close()
     print " done\n\n    wrote file://%s/%s\n" % (os.getcwd(), options.output_file)
