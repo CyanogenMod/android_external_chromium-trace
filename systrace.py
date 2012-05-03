@@ -20,6 +20,7 @@ trace_tag_bits = {
   'webview':  1<<4,
   'wm':       1<<5,
   'am':       1<<6,
+  'sync':     1<<7,
 }
 
 def main():
@@ -34,6 +35,10 @@ def main():
                     action='store_true', help='trace CPU frequency changes')
   parser.add_option('-l', '--cpu-load', dest='trace_cpu_load', default=False,
                     action='store_true', help='trace CPU load')
+  parser.add_option('-s', '--no-cpu-sched', dest='trace_cpu_sched', default=True,
+                    action='store_false', help='inhibit tracing CPU ' +
+                    'scheduler (allows longer trace times by reducing data ' +
+                    'rate into buffer)')
   parser.add_option('-w', '--workqueue', dest='trace_workqueue', default=False,
                     action='store_true', help='trace the kernel workqueues')
   parser.add_option('--set-tags', dest='set_tags', action='store',
@@ -62,11 +67,13 @@ def main():
           'start\n')
     return
 
-  atrace_args = ['adb', 'shell', 'atrace', '-s', '-z']
+  atrace_args = ['adb', 'shell', 'atrace', '-z']
   if options.trace_cpu_freq:
     atrace_args.append('-f')
   if options.trace_cpu_load:
     atrace_args.append('-l')
+  if options.trace_cpu_sched:
+    atrace_args.append('-s')
   if options.trace_workqueue:
     atrace_args.append('-w')
   if options.trace_time is not None:
