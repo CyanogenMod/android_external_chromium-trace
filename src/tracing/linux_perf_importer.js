@@ -63,6 +63,10 @@ cr.define('tracing', function() {
     }
   };
 
+  function ThreadState(tid) {
+    this.openSlices = [];
+  }
+
   /**
    * Imports linux perf events into a specified model.
    * @constructor
@@ -76,6 +80,10 @@ cr.define('tracing', function() {
     this.kernelThreadStates_ = {};
     this.buildMapFromLinuxPidsToTimelineThreads();
     this.lineNumber = -1;
+
+    // To allow simple indexing of threads, we store all the threads by their
+    // kernel KPID. The KPID is a unique key for a thread in the trace.
+    this.threadStateByKPID_ = {};
   }
 
   TestExports = {};
@@ -162,14 +170,30 @@ cr.define('tracing', function() {
     },
 
     /**
+     * @return {number} The pid extracted from the kernel thread name.
+     */
+    parsePid: function(kernelThreadName) {
+        var pid = /.+-(\d+)/.exec(kernelThreadName)[1];
+        pid = parseInt(pid);
+        return pid;
+    },
+
+    /**
+     * @return {number} The string portion of the thread extracted from the
+     * kernel thread name.
+     */
+    parseThreadName: function(kernelThreadName) {
+        return /(.+)-\d+/.exec(kernelThreadName)[1];
+    },
+
+    /**
      * @return {TimelinThread} A thread corresponding to the kernelThreadName.
      */
     getOrCreateKernelThread: function(kernelThreadName, opt_pid, opt_tid) {
       if (!this.kernelThreadStates_[kernelThreadName]) {
         var pid = opt_pid;
         if (pid == undefined) {
-          pid = /.+-(\d+)/.exec(kernelThreadName)[1];
-          pid = parseInt(pid, 10);
+          pid = this.parsePid(kernelThreadName);
         }
         var tid = opt_tid;
         if (tid == undefined)
@@ -225,6 +249,12 @@ cr.define('tracing', function() {
             continue;
           if (!thread.tempCpuSlices)
             thread.tempCpuSlices = [];
+
+          // Because Chrome's Array.sort is not a stable sort, we need to keep
+          // the slice index around to keep slices with identical start times in
+          // the proper order when sorting them.
+          slice.index = i;
+
           thread.tempCpuSlices.push(slice);
         }
       }
@@ -241,7 +271,13 @@ cr.define('tracing', function() {
         delete thread.tempCpuSlices;
 
         origSlices.sort(function(x, y) {
-          return x.start - y.start;
+          var delta = x.start - y.start;
+          if (delta == 0) {
+            // Break ties using the original slice ordering.
+            return x.index - y.index;
+          } else {
+            return delta;
+          }
         });
 
         // Walk the slice list and put slices between each original slice
@@ -380,6 +416,141 @@ cr.define('tracing', function() {
     malformedEvent: function(eventName) {
       this.importError('Malformed ' + eventName + ' event');
     },
+
+    /**
+     * Helper to process a 'begin' event (e.g. initiate a slice).
+     * @param {ThreadState} state Thread state (holds slices).
+     * @param {string} name The trace event name.
+     * @param {number} ts The trace event begin timestamp.
+     */
+    processBegin: function(state, tname, name, ts, pid, tid) {
+      var colorId = tracing.getStringColorId(name);
+      var slice = new tracing.TimelineThreadSlice(name, colorId, ts, null);
+      // XXX: Should these be removed from the slice before putting it into the
+      // model?
+      slice.pid = pid;
+      slice.tid = tid;
+      slice.threadName = tname;
+      state.openSlices.push(slice);
+    },
+
+    /**
+     * Helper to process an 'end' event (e.g. close a slice).
+     * @param {ThreadState} state Thread state (holds slices).
+     * @param {number} ts The trace event begin timestamp.
+     */
+    processEnd: function(state, ts) {
+      if (state.openSlices.length == 0) {
+        // Ignore E events that are unmatched.
+        return;
+      }
+      var slice = state.openSlices.pop();
+      slice.duration = ts - slice.start;
+
+      // Store the slice on the correct subrow.
+      var thread = this.model_.getOrCreateProcess(slice.pid).
+          getOrCreateThread(slice.tid);
+      if (!thread.name)
+        thread.name = slice.threadName;
+      this.threadsByLinuxPid[slice.tid] = thread;
+      var subRowIndex = state.openSlices.length;
+      thread.getSubrow(subRowIndex).push(slice);
+
+      // Add the slice to the subSlices array of its parent.
+      if (state.openSlices.length) {
+        var parentSlice = state.openSlices[state.openSlices.length - 1];
+        parentSlice.subSlices.push(slice);
+      }
+    },
+
+    /**
+     * Helper function that closes any open slices. This happens when a trace
+     * ends before an 'E' phase event can get posted. When that happens, this
+     * closes the slice at the highest timestamp we recorded and sets the
+     * didNotFinish flag to true.
+     */
+    autoCloseOpenSlices: function() {
+      // We need to know the model bounds in order to assign an end-time to
+      // the open slices.
+      this.model_.updateBounds();
+
+      // The model's max value in the trace is wrong at this point if there are
+      // un-closed events. To close those events, we need the true global max
+      // value. To compute this, build a list of timestamps that weren't
+      // included in the max calculation, then compute the real maximum based
+      // on that.
+      var openTimestamps = [];
+      for (var kpid in this.threadStateByKPID_) {
+        var state = this.threadStateByKPID_[kpid];
+        for (var i = 0; i < state.openSlices.length; i++) {
+          var slice = state.openSlices[i];
+          openTimestamps.push(slice.start);
+          for (var s = 0; s < slice.subSlices.length; s++) {
+            var subSlice = slice.subSlices[s];
+            openTimestamps.push(subSlice.start);
+            if (subSlice.duration)
+              openTimestamps.push(subSlice.end);
+          }
+        }
+      }
+
+      // Figure out the maximum value of model.maxTimestamp and
+      // Math.max(openTimestamps). Made complicated by the fact that the model
+      // timestamps might be undefined.
+      var realMaxTimestamp;
+      if (this.model_.maxTimestamp) {
+        realMaxTimestamp = Math.max(this.model_.maxTimestamp,
+                                    Math.max.apply(Math, openTimestamps));
+      } else {
+        realMaxTimestamp = Math.max.apply(Math, openTimestamps);
+      }
+
+      // Automatically close any slices are still open. These occur in a number
+      // of reasonable situations, e.g. deadlock. This pass ensures the open
+      // slices make it into the final model.
+      for (var kpid in this.threadStateByKPID_) {
+        var state = this.threadStateByKPID_[kpid];
+        while (state.openSlices.length > 0) {
+          var slice = state.openSlices.pop();
+          slice.duration = realMaxTimestamp - slice.start;
+          slice.didNotFinish = true;
+
+          // Store the slice on the correct subrow.
+          var thread = this.model_.getOrCreateProcess(slice.pid)
+                           .getOrCreateThread(slice.tid);
+          var subRowIndex = state.openSlices.length;
+          thread.getSubrow(subRowIndex).push(slice);
+
+          // Add the slice to the subSlices array of its parent.
+          if (state.openSlices.length) {
+            var parentSlice = state.openSlices[state.openSlices.length - 1];
+            parentSlice.subSlices.push(slice);
+          }
+        }
+      }
+    },
+
+    /**
+     * Helper that creates and adds samples to a TimelineCounter object based on
+     * 'C' phase events.
+     */
+    processCounter: function(name, ts, value, pid) {
+      var ctr = this.model_.getOrCreateProcess(pid)
+          .getOrCreateCounter('', name);
+
+      // Initialize the counter's series fields if needed.
+      //
+      if (ctr.numSeries == 0) {
+        ctr.seriesNames.push('state');
+        ctr.seriesColors.push(
+            tracing.getStringColorId(ctr.name + '.' + 'state'));
+      }
+
+      // Add the sample values.
+      ctr.timestamps.push(ts);
+      ctr.samples.push(value);
+    },
+
 
     /**
      * Walks the this.events_ structure and creates TimelineCpu objects.
@@ -615,15 +786,43 @@ cr.define('tracing', function() {
           case '0':  // NB: old-style trace markers; deprecated
           case 'tracing_mark_write':
             var event = traceEventClockSyncRE.exec(eventBase[5]);
-            if (!event) {
-              this.malformedEvent(eventName);
-              continue;
+            if (event)
+              this.clockSyncRecords_.push({
+                perfTS: ts,
+                parentTS: event[1] * 1000
+              });
+            else {
+              var tid = this.parsePid(eventBase[1]);
+              var tname = this.parseThreadName(eventBase[1]);
+              var kpid = tid;
+
+              if (!(kpid in this.threadStateByKPID_))
+                this.threadStateByKPID_[kpid] = new ThreadState();
+              var state = this.threadStateByKPID_[kpid];
+
+              var event = eventBase[5].split('|')
+              switch (event[0]) {
+                case 'B':
+                  var pid = parseInt(event[1]);
+                  var name = event[2];
+                  this.processBegin(state, tname, name, ts, pid, tid);
+                  break;
+                case 'E':
+                  this.processEnd(state, ts);
+                  break;
+                case 'C':
+                  var pid = parseInt(event[1]);
+                  var name = event[2];
+                  var value = parseInt(event[3]);
+                  this.processCounter(name, ts, value, pid);
+                  break;
+                default:
+                  this.malformedEvent(eventName);
+                  break;
+              }
             }
-            this.clockSyncRecords_.push({
-              perfTS: ts,
-              parentTS: event[1] * 1000
-            });
             break;
+
           default:
             console.log('unknown event ' + eventName);
             break;
