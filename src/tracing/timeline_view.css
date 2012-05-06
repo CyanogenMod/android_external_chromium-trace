@@ -10,7 +10,6 @@
 }
 
 .timeline-view > .control {
-  border-bottom: 1px solid #555;
   display: -webkit-box;
 }
 
@@ -31,6 +30,12 @@
 
 .timeline-view > .control > .spacer {
   -webkit-box-flex: 1;
+}
+
+.timeline-view > .timeline-viewport-track {
+  display: -webkit-box;
+  margin-top: 6px;
+  border-bottom: 1px solid #AAA;
 }
 
 .timeline-view > .timeline-container {

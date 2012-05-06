@@ -355,6 +355,7 @@ cr.define('tracing', function() {
 
       this.headingDiv_ = document.createElement('div');
       this.headingDiv_.className = 'timeline-canvas-based-track-title';
+      this.headingDiv_.onselectstart = function() { return false; };
       this.appendChild(this.headingDiv_);
 
       this.canvasContainer_ = document.createElement('div');

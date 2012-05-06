@@ -321,12 +321,15 @@ cr.define('tracing', function() {
 
       // create new timeline if needed
       if (this.timelineModel_.minTimestamp !== undefined) {
-        if (this.timeline_)
+        if (this.timeline_) {
+          this.timeline_.viewportTrack.detach();
           this.timeline_.detach();
+        }
         this.timeline_ = new tracing.Timeline();
         this.timeline_.model = this.timelineModel_;
         this.timeline_.focusElement =
             this.focusElement_ ? this.focusElement_ : this.parentElement;
+        this.insertBefore(this.timeline_.viewportTrack, this.timelineContainer_);
         this.timelineContainer_.appendChild(this.timeline_);
         this.timeline_.addEventListener('selectionChange',
                                         this.onSelectionChangedBoundToThis_);

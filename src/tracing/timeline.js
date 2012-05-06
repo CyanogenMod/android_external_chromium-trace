@@ -402,6 +402,7 @@ cr.define('tracing', function() {
       this.classList.add('timeline');
 
       this.viewport_ = new TimelineViewport(this);
+      this.viewportTrack = new tracing.TimelineViewportTrack();
 
       this.tracks_ = this.ownerDocument.createElement('div');
       this.appendChild(this.tracks_);
@@ -500,11 +501,9 @@ cr.define('tracing', function() {
         this.tracks_.children[i].detach();
       this.tracks_.textContent = '';
 
-      // Add the viewport track
-      var viewportTrack = new tracing.TimelineViewportTrack();
-      viewportTrack.headingWidth = maxHeadingWidth;
-      viewportTrack.viewport = this.viewport_;
-      this.tracks_.appendChild(viewportTrack);
+      // Set up the viewport track
+      this.viewportTrack.headingWidth = maxHeadingWidth;
+      this.viewportTrack.viewport = this.viewport_;
 
       // Get a sorted list of CPUs
       var cpus = model.getAllCpus();
