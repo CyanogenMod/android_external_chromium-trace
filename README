@@ -1,9 +1,14 @@
-The things in the www subdirectory were forked from the Chrome tracing tool.
-This should end up getting merged upstream at some point into either the
-Chromium code base or else a separate shared project.
+The src directory contains Chromium source from the following locations:
 
-The update.sh script should be used to package the CSS and Javascript files in
-the www directory into the style.css and script.js files.  These files are
+    http://src.chromium.org/chrome/trunk/src/chrome/browser/resources/shared/
+    http://src.chromium.org/chrome/trunk/src/chrome/browser/resources/tracing/
+
+The file src/UPSTREAM_REVISION contains the upstream revision number that was
+last pulled.  There may be local patches applied on top of the upstream source,
+but we should keep those to a minimum.
+
+The update.py script should be used to package the CSS and Javascript files in
+the src directory into the style.css and script.js files.  These files are
 being checked in, and get embedded in each trace HTML file the systrace.py
 generates.  Each time a file in the www directory gets updated, this script
 will need to be rerun, and the generated files must be committed along with the
