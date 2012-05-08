@@ -34,6 +34,8 @@ def main():
                     help='use a trace buffer size of N KB', metavar='N')
   parser.add_option('-f', '--cpu-freq', dest='trace_cpu_freq', default=False,
                     action='store_true', help='trace CPU frequency changes')
+  parser.add_option('-i', '--cpu-idle', dest='trace_cpu_idle', default=False,
+                    action='store_true', help='trace CPU idle events')
   parser.add_option('-l', '--cpu-load', dest='trace_cpu_load', default=False,
                     action='store_true', help='trace CPU load')
   parser.add_option('-s', '--no-cpu-sched', dest='trace_cpu_sched', default=True,
@@ -71,6 +73,8 @@ def main():
   atrace_args = ['adb', 'shell', 'atrace', '-z']
   if options.trace_cpu_freq:
     atrace_args.append('-f')
+  if options.trace_cpu_idle:
+    atrace_args.append('-i')
   if options.trace_cpu_load:
     atrace_args.append('-l')
   if options.trace_cpu_sched:
