@@ -3,6 +3,7 @@
 import httplib, urllib, subprocess, sys
 
 js_in_files = (
+  'init.js',
   'src/shared/js/cr.js',
   'src/shared/js/cr/event_target.js',
   'src/shared/js/cr/ui.js',

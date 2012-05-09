@@ -179,25 +179,6 @@ html_prefix = """<!DOCTYPE HTML>
 """
 
 html_suffix = """           dummy-0000  [000] 0.0: 0: trace_event_clock_sync: parent_ts=0.0\\n";
-  var timelineViewEl;
-  function onLoad() {
-    reload();
-  }
-  function reload() {
-    if (!linuxPerfData)
-      return;
-
-    var m = new tracing.TimelineModel();
-    m.importEvents("[]", true, [linuxPerfData]);
-
-    timelineViewEl = document.querySelector('.view');
-    cr.ui.decorate(timelineViewEl, tracing.TimelineView);
-    timelineViewEl.model = m;
-    timelineViewEl.tabIndex = 1;
-    timelineViewEl.timeline.focusElement = timelineViewEl;
-  }
-
-  document.addEventListener('DOMContentLoaded', onLoad);
   </script>
 </body>
 </html>
