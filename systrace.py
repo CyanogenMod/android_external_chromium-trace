@@ -59,7 +59,7 @@ def main():
       except KeyError:
         parser.error('unrecognized tag: %s\nknown tags are: %s' %
                      (tag, ', '.join(trace_tag_bits.iterkeys())))
-    atrace_args = ['adb', 'shell', 'setprop', 'atrace.tags.enableflags', hex(flags)]
+    atrace_args = ['adb', 'shell', 'setprop', 'debug.atrace.tags.enableflags', hex(flags)]
     try:
       subprocess.check_call(atrace_args)
     except subprocess.CalledProcessError, e:
