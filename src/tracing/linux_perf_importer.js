@@ -89,13 +89,13 @@ cr.define('tracing', function() {
   TestExports = {};
 
   // Matches the generic trace record:
-  //          <idle>-0     [001]  1.23: sched_switch
-  var lineRE = /^\s*(.+?)\s+\[(\d+)\]\s*(\d+\.\d+):\s+(\S+):\s(.*)$/;
+  //          <idle>-0     [001] .... 1.23: sched_switch
+  var lineRE = /^\s*(.+?)\s+\[(\d+)\]\s*([d.][N.][sh.][\d.])?\s*(\d+\.\d+):\s+(\S+):\s(.*)$/;
   TestExports.lineRE = lineRE;
 
   // Matches the sched_switch record
   var schedSwitchRE = new RegExp(
-      'prev_comm=(.+) prev_pid=(\\d+) prev_prio=(\\d+) prev_state=(\\S) ==> ' +
+      'prev_comm=(.+) prev_pid=(\\d+) prev_prio=(\\d+) prev_state=(\\S+) ==> ' +
       'next_comm=(.+) next_pid=(\\d+) next_prio=(\\d+)');
   TestExports.schedSwitchRE = schedSwitchRE;
 
@@ -295,7 +295,8 @@ cr.define('tracing', function() {
           if (prevSlice.args.stateWhenDescheduled == 'S') {
             slices.push(new tracing.TimelineSlice('Sleeping', sleepingId,
                 prevSlice.end, {}, midDuration));
-          } else if (prevSlice.args.stateWhenDescheduled == 'R') {
+          } else if (prevSlice.args.stateWhenDescheduled == 'R' ||
+                     prevSlice.args.stateWhenDescheduled == 'R+') {
             slices.push(new tracing.TimelineSlice('Runnable', runnableId,
                 prevSlice.end, {}, midDuration));
           } else if (prevSlice.args.stateWhenDescheduled == 'D') {
@@ -569,14 +570,19 @@ cr.define('tracing', function() {
           continue;
         }
 
-        var cpuState = this.getOrCreateCpuState(parseInt(eventBase[2]));
-        var ts = parseFloat(eventBase[3]) * 1000;
+        var taskId = eventBase[1];
+        var cpuNum = eventBase[2];
+        var taskInfo = eventBase[3];
+        var timestamp = eventBase[4];
+        var eventName = eventBase[5];
+        var eventInfo = eventBase[6];
 
-        var eventName = eventBase[4];
+        var cpuState = this.getOrCreateCpuState(parseInt(cpuNum));
+        var ts = parseFloat(timestamp) * 1000;
 
         switch (eventName) {
           case 'sched_switch':
-            var event = schedSwitchRE.exec(eventBase[5]);
+            var event = schedSwitchRE.exec(eventInfo);
             if (!event) {
               this.malformedEvent(eventName);
               continue;
@@ -590,7 +596,7 @@ cr.define('tracing', function() {
                 this, prevState, ts, nextPid, nextComm, nextPrio);
             break;
           case 'sched_wakeup':
-            var event = schedWakeupRE.exec(eventBase[5]);
+            var event = schedWakeupRE.exec(eventInfo);
             if (!event) {
               this.malformedEvent(eventName);
               continue;
@@ -602,7 +608,7 @@ cr.define('tracing', function() {
             this.markPidRunnable(ts, pid, comm, prio);
             break;
           case 'power_start':  // NB: old-style power event, deprecated
-            var event = /type=(\d+) state=(\d) cpu_id=(\d)+/.exec(eventBase[5]);
+            var event = /type=(\d+) state=(\d) cpu_id=(\d)+/.exec(eventInfo);
             if (!event) {
               this.malformedEvent(eventName);
               continue;
@@ -629,7 +635,7 @@ cr.define('tracing', function() {
             break;
           case 'power_frequency':  // NB: old-style power event, deprecated
             var event = /type=(\d+) state=(\d+) cpu_id=(\d)+/.exec(
-                eventBase[5]);
+                eventInfo);
             if (!event) {
               this.malformedEvent(eventName);
               continue;
@@ -649,7 +655,7 @@ cr.define('tracing', function() {
             powerCounter.samples.push(powerState);
             break;
           case 'cpu_frequency':
-            var event = /state=(\d+) cpu_id=(\d)+/.exec(eventBase[5]);
+            var event = /state=(\d+) cpu_id=(\d)+/.exec(eventInfo);
             if (!event) {
               this.malformedEvent(eventName);
               continue;
@@ -669,7 +675,7 @@ cr.define('tracing', function() {
             powerCounter.samples.push(powerState);
             break;
           case 'cpu_idle':
-            var event = /state=(\d+) cpu_id=(\d)+/.exec(eventBase[5]);
+            var event = /state=(\d+) cpu_id=(\d)+/.exec(eventInfo);
             if (!event) {
               this.malformedEvent(eventName);
               continue;
@@ -692,24 +698,24 @@ cr.define('tracing', function() {
             powerCounter.timestamps.push(ts);
             break;
           case 'workqueue_execute_start':
-            var event = workqueueExecuteStartRE.exec(eventBase[5]);
+            var event = workqueueExecuteStartRE.exec(eventInfo);
             if (!event) {
               this.malformedEvent(eventName);
               continue;
             }
 
-            var kthread = this.getOrCreateKernelThread(eventBase[1]);
+            var kthread = this.getOrCreateKernelThread(taskId);
             kthread.openSliceTS = ts;
             kthread.openSlice = event[2];
             break;
           case 'workqueue_execute_end':
-            var event = workqueueExecuteEndRE.exec(eventBase[5]);
+            var event = workqueueExecuteEndRE.exec(eventInfo);
             if (!event) {
               this.malformedEvent(eventName);
               continue;
             }
 
-            var kthread = this.getOrCreateKernelThread(eventBase[1]);
+            var kthread = this.getOrCreateKernelThread(taskId);
             if (kthread.openSlice) {
               var slice = new tracing.TimelineSlice(kthread.openSlice,
                   tracing.getStringColorId(kthread.openSlice),
@@ -721,8 +727,14 @@ cr.define('tracing', function() {
             }
             kthread.openSlice = undefined;
             break;
+          case 'workqueue_queue_work':
+            // ignored for now
+            break;
+          case 'workqueue_activate_work':
+            // ignored for now
+            break;
           case 'i915_gem_object_pwrite':
-            var event = /obj=(.+), offset=(\d+), len=(\d+)/.exec(eventBase[5]);
+            var event = /obj=(.+), offset=(\d+), len=(\d+)/.exec(eventInfo);
             if (!event) {
               this.malformedEvent(eventName);
               continue;
@@ -745,7 +757,7 @@ cr.define('tracing', function() {
             kthread.thread.subRows[0].push(slice);
             break;
           case 'i915_flip_request':
-            var event = /plane=(\d+), obj=(.+)/.exec(eventBase[5]);
+            var event = /plane=(\d+), obj=(.+)/.exec(eventInfo);
             if (!event) {
               this.malformedEvent(eventName);
               continue;
@@ -759,7 +771,7 @@ cr.define('tracing', function() {
             kthread.openSlice = 'flip:' + obj + '/' + plane;
             break;
           case 'i915_flip_complete':
-            var event = /plane=(\d+), obj=(.+)/.exec(eventBase[5]);
+            var event = /plane=(\d+), obj=(.+)/.exec(eventInfo);
             if (!event) {
               this.malformedEvent(eventName);
               continue;
@@ -785,22 +797,22 @@ cr.define('tracing', function() {
             break;
           case '0':  // NB: old-style trace markers; deprecated
           case 'tracing_mark_write':
-            var event = traceEventClockSyncRE.exec(eventBase[5]);
+            var event = traceEventClockSyncRE.exec(eventInfo);
             if (event)
               this.clockSyncRecords_.push({
                 perfTS: ts,
                 parentTS: event[1] * 1000
               });
             else {
-              var tid = this.parsePid(eventBase[1]);
-              var tname = this.parseThreadName(eventBase[1]);
+              var tid = this.parsePid(taskId);
+              var tname = this.parseThreadName(taskId);
               var kpid = tid;
 
               if (!(kpid in this.threadStateByKPID_))
                 this.threadStateByKPID_[kpid] = new ThreadState();
               var state = this.threadStateByKPID_[kpid];
 
-              var event = eventBase[5].split('|')
+              var event = eventInfo.split('|')
               switch (event[0]) {
                 case 'B':
                   var pid = parseInt(event[1]);
