@@ -22,6 +22,7 @@ trace_tag_bits = {
   'am':       1<<6,
   'sync':     1<<7,
   'audio':    1<<8,
+  'video':    1<<9,
 }
 
 def main():
