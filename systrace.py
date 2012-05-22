@@ -10,7 +10,7 @@ This is a tool for capturing a trace that includes data from both userland and
 the kernel.  It creates an HTML file for visualizing the trace.
 """
 
-import errno, optparse, os, select, subprocess, sys, time, zlib
+import errno, optparse, os, select, subprocess, sys, time, zlib, config
 
 # This list is based on the tags in frameworks/native/include/utils/Trace.h.
 trace_tag_bits = {
@@ -49,6 +49,9 @@ def main():
                     help='set the enabled trace tags and exit; set to a ' +
                     'comma separated list of: ' +
                     ', '.join(trace_tag_bits.iterkeys()))
+  parser.add_option('--link-assets', dest='link_assets', default=False,
+                    action='store_true', help='link to original CSS or JS resources '
+                    'instead of embedding them')
   options, args = parser.parse_args()
 
   if options.set_tags:
@@ -94,10 +97,15 @@ def main():
       parser.error('the trace buffer size must be a positive number')
 
   script_dir = os.path.dirname(os.path.abspath(sys.argv[0]))
-  css_filename = os.path.join(script_dir, 'style.css')
-  js_filename = os.path.join(script_dir, 'script.js')
-  css = open(css_filename).read()
-  js = open(js_filename).read()
+
+  if options.link_assets:
+    css = '\n'.join(linked_css_tag % (os.path.join(script_dir, f)) for f in config.css_in_files)
+    js = '\n'.join(linked_js_tag % (os.path.join(script_dir, f)) for f in config.js_in_files)
+  else:
+    css_filename = os.path.join(script_dir, config.css_out_file)
+    js_filename = os.path.join(script_dir, config.js_out_file)
+    css = compiled_css_tag % (open(css_filename).read())
+    js = compiled_js_tag % (open(js_filename).read())
 
   html_filename = options.output_file
   html_file = open(html_filename, 'w')
@@ -159,8 +167,8 @@ html_prefix = """<!DOCTYPE HTML>
 <html>
 <head i18n-values="dir:textdirection;">
 <title>Android System Trace</title>
-<style type="text/css">%s</style>
-<script language="javascript">%s</script>
+%s
+%s
 <style>
   .view {
     overflow: hidden;
@@ -184,6 +192,12 @@ html_suffix = """           dummy-0000  [000] 0.0: 0: trace_event_clock_sync: pa
 </body>
 </html>
 """
+
+compiled_css_tag = """<style type="text/css">%s</style>"""
+compiled_js_tag = """<script language="javascript">%s</script>"""
+
+linked_css_tag = """<link rel="stylesheet" href="%s"></link>"""
+linked_js_tag = """<script language="javascript" src="%s"></script>"""
 
 if __name__ == '__main__':
   main()

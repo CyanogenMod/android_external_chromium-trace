@@ -93,29 +93,10 @@ cr.define('tracing', function() {
   var lineRE = /^\s*(.+?)\s+\[(\d+)\]\s*([d.][N.][sh.][\d.])?\s*(\d+\.\d+):\s+(\S+):\s(.*)$/;
   TestExports.lineRE = lineRE;
 
-  // Matches the sched_switch record
-  var schedSwitchRE = new RegExp(
-      'prev_comm=(.+) prev_pid=(\\d+) prev_prio=(\\d+) prev_state=(\\S+) ==> ' +
-      'next_comm=(.+) next_pid=(\\d+) next_prio=(\\d+)');
-  TestExports.schedSwitchRE = schedSwitchRE;
-
-  // Matches the sched_wakeup record
-  var schedWakeupRE =
-      /comm=(.+) pid=(\d+) prio=(\d+) success=(\d+) target_cpu=(\d+)/;
-  TestExports.schedWakeupRE = schedWakeupRE;
-
   // Matches the trace_event_clock_sync record
   //  0: trace_event_clock_sync: parent_ts=19581477508
   var traceEventClockSyncRE = /trace_event_clock_sync: parent_ts=(\d+\.?\d*)/;
   TestExports.traceEventClockSyncRE = traceEventClockSyncRE;
-
-  // Matches the workqueue_execute_start record
-  //  workqueue_execute_start: work struct c7a8a89c: function MISRWrapper
-  var workqueueExecuteStartRE = /work struct (.+): function (\S+)/;
-
-  // Matches the workqueue_execute_start record
-  //  workqueue_execute_end: work struct c7a8a89c
-  var workqueueExecuteEndRE = /work struct (.+)/;
 
   /**
    * Guesses whether the provided events is a Linux perf string.
@@ -424,29 +405,76 @@ cr.define('tracing', function() {
     },
 
     /**
+     * Helper to open a kernel thread slice.
+     */
+    openSlice: function(kthread, name, ts) {
+      kthread.openSliceTS = ts;
+      kthread.openSlice = name;
+    },
+
+    /**
+     * Helper to close a kernel thread slice.
+     */
+    closeSlice: function(kthread, ts, data) {
+      if (kthread.openSlice) {
+        var slice = new tracing.TimelineSlice(kthread.openSlice,
+            tracing.getStringColorId(kthread.openSlice),
+            kthread.openSliceTS,
+            data,
+            ts - kthread.openSliceTS);
+        kthread.thread.subRows[0].push(slice);
+        kthread.openSlice = undefined;
+      }
+    },
+
+    /**
+     * Helper to get a ThreadState for a given taskId.
+     */
+    getThreadState: function(taskId) {
+      var kpid = this.parsePid(taskId);
+      return this.threadStateByKPID_[kpid];
+    },
+
+    /**
+     * Helper to get or create a ThreadState for a given taskId.
+     */
+    getOrCreateThreadState: function(taskId, pid) {
+      var kpid = this.parsePid(taskId);
+      var state = this.threadStateByKPID_[kpid];
+      if (!state) {
+        state = new ThreadState();
+        state.threadName = this.parseThreadName(taskId);
+        state.tid = kpid;
+        state.pid = pid;
+        state.thread = this.model_.getOrCreateProcess(pid).
+            getOrCreateThread(kpid);
+        if (!state.thread.name) {
+          state.thread.name = state.threadName;
+        }
+        this.threadStateByKPID_[kpid] = state;
+      }
+      return state;
+    },
+
+    /**
      * Helper to process a 'begin' event (e.g. initiate a slice).
-     * @param {ThreadState} state Thread state (holds slices).
      * @param {string} name The trace event name.
      * @param {number} ts The trace event begin timestamp.
      */
-    processBegin: function(state, tname, name, ts, pid, tid) {
+    processBegin: function(taskId, name, ts, pid) {
+      var state = this.getOrCreateThreadState(taskId, pid);
       var colorId = tracing.getStringColorId(name);
       var slice = new tracing.TimelineThreadSlice(name, colorId, ts, null);
-      // XXX: Should these be removed from the slice before putting it into the
-      // model?
-      slice.pid = pid;
-      slice.tid = tid;
-      slice.threadName = tname;
       state.openSlices.push(slice);
     },
 
     /**
      * Helper to process an 'end' event (e.g. close a slice).
-     * @param {ThreadState} state Thread state (holds slices).
      * @param {number} ts The trace event begin timestamp.
      */
-    processEnd: function(state, ts) {
-      if (state.openSlices.length == 0) {
+    processEnd: function(taskId, ts) {
+      var state = this.getThreadState(taskId);
+      if (!state || state.openSlices.length == 0) {
         // Ignore E events that are unmatched.
         return;
       }
@@ -454,13 +482,8 @@ cr.define('tracing', function() {
       slice.duration = ts - slice.start;
 
       // Store the slice on the correct subrow.
-      var thread = this.model_.getOrCreateProcess(slice.pid).
-          getOrCreateThread(slice.tid);
-      if (!thread.name)
-        thread.name = slice.threadName;
-      this.threadsByLinuxPid[slice.tid] = thread;
       var subRowIndex = state.openSlices.length;
-      thread.getSubrow(subRowIndex).push(slice);
+      state.thread.getSubrow(subRowIndex).push(slice);
 
       // Add the slice to the subSlices array of its parent.
       if (state.openSlices.length) {
@@ -522,10 +545,8 @@ cr.define('tracing', function() {
           slice.didNotFinish = true;
 
           // Store the slice on the correct subrow.
-          var thread = this.model_.getOrCreateProcess(slice.pid)
-                           .getOrCreateThread(slice.tid);
           var subRowIndex = state.openSlices.length;
-          thread.getSubrow(subRowIndex).push(slice);
+          state.thread.getSubrow(subRowIndex).push(slice);
 
           // Add the slice to the subSlices array of its parent.
           if (state.openSlices.length) {
@@ -557,7 +578,6 @@ cr.define('tracing', function() {
       ctr.samples.push(value);
     },
 
-
     /**
      * Walks the this.events_ structure and creates TimelineCpu objects.
      */
@@ -582,271 +602,267 @@ cr.define('tracing', function() {
         var eventName = eventBase[5];
         var eventInfo = eventBase[6];
 
-        var cpuState = this.getOrCreateCpuState(parseInt(cpuNum));
-        var ts = parseFloat(timestamp) * 1000;
-
-        switch (eventName) {
-          case 'sched_switch':
-            var event = schedSwitchRE.exec(eventInfo);
+        var eventDefinition = this.eventDefinitions[eventName];
+        if (eventDefinition) {
+          // Parse the event info.
+          var event;
+          if (eventDefinition.format) {
+            event = eventDefinition.format.exec(eventInfo);
             if (!event) {
               this.malformedEvent(eventName);
               continue;
             }
+          } else {
+            event = {};
+          }
 
-            var prevState = event[4];
-            var nextComm = event[5];
-            var nextPid = parseInt(event[6]);
-            var nextPrio = parseInt(event[7]);
-            cpuState.switchRunningLinuxPid(
-                this, prevState, ts, nextPid, nextComm, nextPrio);
-            break;
-          case 'sched_wakeup':
-            var event = schedWakeupRE.exec(eventInfo);
-            if (!event) {
-              this.malformedEvent(eventName);
-              continue;
-            }
+          // Add the basic event properties.
+          event.timestamp = parseFloat(timestamp) * 1000;
+          event.name = eventName;
+          event.info = eventInfo;
+          event.taskId = taskId;
+          event.cpuState = this.getOrCreateCpuState(parseInt(cpuNum));
 
-            var comm = event[1];
-            var pid = parseInt(event[2]);
-            var prio = parseInt(event[3]);
-            this.markPidRunnable(ts, pid, comm, prio);
-            break;
-          case 'power_start':  // NB: old-style power event, deprecated
-            var event = /type=(\d+) state=(\d) cpu_id=(\d)+/.exec(eventInfo);
-            if (!event) {
-              this.malformedEvent(eventName);
-              continue;
-            }
-
-            var targetCpuNumber = parseInt(event[3]);
-            var targetCpu = this.getOrCreateCpuState(targetCpuNumber);
-            var powerCounter;
-            if (event[1] == '1') {
-              powerCounter = targetCpu.cpu.getOrCreateCounter('', 'C-State');
-            } else {
-              this.importError('Don\'t understand power_start events of ' +
-                  'type ' + event[1]);
-              continue;
-            }
-            if (powerCounter.numSeries == 0) {
-              powerCounter.seriesNames.push('state');
-              powerCounter.seriesColors.push(
-                  tracing.getStringColorId(powerCounter.name + '.' + 'state'));
-            }
-            var powerState = parseInt(event[2]);
-            powerCounter.timestamps.push(ts);
-            powerCounter.samples.push(powerState);
-            break;
-          case 'power_frequency':  // NB: old-style power event, deprecated
-            var event = /type=(\d+) state=(\d+) cpu_id=(\d)+/.exec(
-                eventInfo);
-            if (!event) {
-              this.malformedEvent(eventName);
-              continue;
-            }
-
-            var targetCpuNumber = parseInt(event[3]);
-            var targetCpu = this.getOrCreateCpuState(targetCpuNumber);
-            var powerCounter =
-                targetCpu.cpu.getOrCreateCounter('', 'Power Frequency');
-            if (powerCounter.numSeries == 0) {
-              powerCounter.seriesNames.push('state');
-              powerCounter.seriesColors.push(
-                  tracing.getStringColorId(powerCounter.name + '.' + 'state'));
-            }
-            var powerState = parseInt(event[2]);
-            powerCounter.timestamps.push(ts);
-            powerCounter.samples.push(powerState);
-            break;
-          case 'cpu_frequency':
-            var event = /state=(\d+) cpu_id=(\d)+/.exec(eventInfo);
-            if (!event) {
-              this.malformedEvent(eventName);
-              continue;
-            }
-
-            var targetCpuNumber = parseInt(event[2]);
-            var targetCpu = this.getOrCreateCpuState(targetCpuNumber);
-            var powerCounter =
-                targetCpu.cpu.getOrCreateCounter('', 'Clock Frequency');
-            if (powerCounter.numSeries == 0) {
-              powerCounter.seriesNames.push('state');
-              powerCounter.seriesColors.push(
-                  tracing.getStringColorId(powerCounter.name + '.' + 'state'));
-            }
-            var powerState = parseInt(event[1]);
-            powerCounter.timestamps.push(ts);
-            powerCounter.samples.push(powerState);
-            break;
-          case 'cpu_idle':
-            var event = /state=(\d+) cpu_id=(\d)+/.exec(eventInfo);
-            if (!event) {
-              this.malformedEvent(eventName);
-              continue;
-            }
-
-            var targetCpuNumber = parseInt(event[2]);
-            var targetCpu = this.getOrCreateCpuState(targetCpuNumber);
-            var powerCounter = targetCpu.cpu.getOrCreateCounter('', 'C-State');
-            if (powerCounter.numSeries == 0) {
-              powerCounter.seriesNames.push('state');
-              powerCounter.seriesColors.push(
-                  tracing.getStringColorId(powerCounter.name));
-            }
-            var powerState = parseInt(event[1]);
-            // NB: 4294967295/-1 means an exit from the current state
-            if (powerState != 4294967295)
-              powerCounter.samples.push(powerState);
-            else
-              powerCounter.samples.push(0);
-            powerCounter.timestamps.push(ts);
-            break;
-          case 'workqueue_execute_start':
-            var event = workqueueExecuteStartRE.exec(eventInfo);
-            if (!event) {
-              this.malformedEvent(eventName);
-              continue;
-            }
-
-            var kthread = this.getOrCreateKernelThread(taskId);
-            kthread.openSliceTS = ts;
-            kthread.openSlice = event[2];
-            break;
-          case 'workqueue_execute_end':
-            var event = workqueueExecuteEndRE.exec(eventInfo);
-            if (!event) {
-              this.malformedEvent(eventName);
-              continue;
-            }
-
-            var kthread = this.getOrCreateKernelThread(taskId);
-            if (kthread.openSlice) {
-              var slice = new tracing.TimelineSlice(kthread.openSlice,
-                  tracing.getStringColorId(kthread.openSlice),
-                  kthread.openSliceTS,
-                  {},
-                  ts - kthread.openSliceTS);
-
-              kthread.thread.subRows[0].push(slice);
-            }
-            kthread.openSlice = undefined;
-            break;
-          case 'workqueue_queue_work':
-            // ignored for now
-            break;
-          case 'workqueue_activate_work':
-            // ignored for now
-            break;
-          case 'i915_gem_object_pwrite':
-            var event = /obj=(.+), offset=(\d+), len=(\d+)/.exec(eventInfo);
-            if (!event) {
-              this.malformedEvent(eventName);
-              continue;
-            }
-
-            var obj = event[1];
-            var offset = parseInt(event[2]);
-            var len = parseInt(event[3]);
-            var kthread = this.getOrCreateKernelThread('i915_gem', 0, 1);
-            kthread.openSlice = 'pwrite:' + obj;
-            var slice = new tracing.TimelineSlice(kthread.openSlice,
-                tracing.getStringColorId(kthread.openSlice),
-                ts,
-                {
-                  obj: obj,
-                  offset: offset,
-                  len: len
-                }, 0);
-
-            kthread.thread.subRows[0].push(slice);
-            break;
-          case 'i915_flip_request':
-            var event = /plane=(\d+), obj=(.+)/.exec(eventInfo);
-            if (!event) {
-              this.malformedEvent(eventName);
-              continue;
-            }
-
-            var plane = parseInt(event[1]);
-            var obj = event[2];
-            // use i915_obj_plane?
-            var kthread = this.getOrCreateKernelThread('i915_flip', 0, 2);
-            kthread.openSliceTS = ts;
-            kthread.openSlice = 'flip:' + obj + '/' + plane;
-            break;
-          case 'i915_flip_complete':
-            var event = /plane=(\d+), obj=(.+)/.exec(eventInfo);
-            if (!event) {
-              this.malformedEvent(eventName);
-              continue;
-            }
-
-            var plane = parseInt(event[1]);
-            var obj = event[2];
-            // use i915_obj_plane?
-            var kthread = this.getOrCreateKernelThread('i915_flip', 0, 2);
-            if (kthread.openSlice) {
-              var slice = new tracing.TimelineSlice(kthread.openSlice,
-                  tracing.getStringColorId(kthread.openSlice),
-                  kthread.openSliceTS,
-                  {
-                    obj: obj,
-                    plane: plane
-                  },
-                  ts - kthread.openSliceTS);
-
-              kthread.thread.subRows[0].push(slice);
-            }
-            kthread.openSlice = undefined;
-            break;
-          case '0':  // NB: old-style trace markers; deprecated
-          case 'tracing_mark_write':
-            var event = traceEventClockSyncRE.exec(eventInfo);
-            if (event)
-              this.clockSyncRecords_.push({
-                perfTS: ts,
-                parentTS: event[1] * 1000
-              });
-            else {
-              var tid = this.parsePid(taskId);
-              var tname = this.parseThreadName(taskId);
-              var kpid = tid;
-
-              if (!(kpid in this.threadStateByKPID_))
-                this.threadStateByKPID_[kpid] = new ThreadState();
-              var state = this.threadStateByKPID_[kpid];
-
-              var event = eventInfo.split('|')
-              switch (event[0]) {
-                case 'B':
-                  var pid = parseInt(event[1]);
-                  var name = event[2];
-                  this.processBegin(state, tname, name, ts, pid, tid);
-                  break;
-                case 'E':
-                  this.processEnd(state, ts);
-                  break;
-                case 'C':
-                  var pid = parseInt(event[1]);
-                  var name = event[2];
-                  var value = parseInt(event[3]);
-                  this.processCounter(name, ts, value, pid);
-                  break;
-                default:
-                  this.malformedEvent(eventName);
-                  break;
-              }
-            }
-            break;
-
-          default:
-            console.log('unknown event ' + eventName);
-            break;
+          // Invoke the handler.
+          if (eventDefinition.handler) {
+            eventDefinition.handler(this, event);
+          }
+        } else {
+          console.log('unknown event ' + eventName);
         }
       }
+    },
+
+    /**
+     * Table of supported events represented as an associative array indexed by event name.
+     * Each event definition has the following properties:
+     *
+     *   format:   A regular expression to parse the event info.
+     *             If omitted, the event information is not parsed but the other basic
+     *             properties are still provided to the event handler.
+     *   handler:  A handler function to invoke to handle the event.
+     *             If omitted, the event is parsed but not handled.
+     *
+     * The event object passed as a parameter to the handler has the matched groups from
+     * from the regular expression and in addition has the following properties:
+     *
+     *   timestamp: The uptime in milliseconds.
+     *   name:      The event name.
+     *   info:      The unparsed event info.
+     *   taskId:    The task ID.
+     *   cpuState:  The CPU state object for the CPU associated with the event.
+     */
+    eventDefinitions: {
+      'sched_switch': {
+        format: new RegExp(
+            'prev_comm=(.+) prev_pid=(\\d+) prev_prio=(\\d+) prev_state=(\\S+) ==> ' +
+            'next_comm=(.+) next_pid=(\\d+) next_prio=(\\d+)'),
+        handler: function(importer, event) {
+          var prevState = event[4];
+          var nextComm = event[5];
+          var nextPid = parseInt(event[6]);
+          var nextPrio = parseInt(event[7]);
+          event.cpuState.switchRunningLinuxPid(
+              importer, prevState, event.timestamp, nextPid, nextComm, nextPrio);
+        }
+      },
+
+      'sched_wakeup': {
+        format: /comm=(.+) pid=(\d+) prio=(\d+) success=(\d+) target_cpu=(\d+)/,
+        handler: function(importer, event) {
+          var comm = event[1];
+          var pid = parseInt(event[2]);
+          var prio = parseInt(event[3]);
+          importer.markPidRunnable(event.timestamp, pid, comm, prio);
+        }
+      },
+
+      'power_start': { // NB: old-style power event, deprecated
+        format: /type=(\d+) state=(\d) cpu_id=(\d)+/,
+        handler: function(importer, event) {
+          var targetCpuNumber = parseInt(event[3]);
+          var targetCpu = importer.getOrCreateCpuState(targetCpuNumber);
+          var powerCounter;
+          if (event[1] == '1') {
+            powerCounter = targetCpu.cpu.getOrCreateCounter('', 'C-State');
+          } else {
+            importer.importError('Don\'t understand power_start events of ' +
+                'type ' + event[1]);
+            return;
+          }
+          if (powerCounter.numSeries == 0) {
+            powerCounter.seriesNames.push('state');
+            powerCounter.seriesColors.push(
+                tracing.getStringColorId(powerCounter.name + '.' + 'state'));
+          }
+          var powerState = parseInt(event[2]);
+          powerCounter.timestamps.push(event.timestamp);
+          powerCounter.samples.push(powerState);
+        }
+      },
+
+      'power_frequency': { // NB: old-style power event, deprecated
+        format: /type=(\d+) state=(\d+) cpu_id=(\d)+/,
+        handler: function(importer, event) {
+          var targetCpuNumber = parseInt(event[3]);
+          var targetCpu = importer.getOrCreateCpuState(targetCpuNumber);
+          var powerCounter = targetCpu.cpu.getOrCreateCounter('', 'Power Frequency');
+          if (powerCounter.numSeries == 0) {
+            powerCounter.seriesNames.push('state');
+            powerCounter.seriesColors.push(
+                tracing.getStringColorId(powerCounter.name + '.' + 'state'));
+          }
+          var powerState = parseInt(event[2]);
+          powerCounter.timestamps.push(event.timestamp);
+          powerCounter.samples.push(powerState);
+        }
+      },
+
+      'cpu_frequency': {
+        format: /state=(\d+) cpu_id=(\d)+/,
+        handler: function(importer, event) {
+          var targetCpuNumber = parseInt(event[2]);
+          var targetCpu = importer.getOrCreateCpuState(targetCpuNumber);
+          var powerCounter = targetCpu.cpu.getOrCreateCounter('', 'Clock Frequency');
+          if (powerCounter.numSeries == 0) {
+            powerCounter.seriesNames.push('state');
+            powerCounter.seriesColors.push(
+                tracing.getStringColorId(powerCounter.name + '.' + 'state'));
+          }
+          var powerState = parseInt(event[1]);
+          powerCounter.timestamps.push(event.timestamp);
+          powerCounter.samples.push(powerState);
+        }
+      },
+
+      'cpu_idle': {
+        format: /state=(\d+) cpu_id=(\d)+/,
+        handler: function(importer, event) {
+          var targetCpuNumber = parseInt(event[2]);
+          var targetCpu = importer.getOrCreateCpuState(targetCpuNumber);
+          var powerCounter = targetCpu.cpu.getOrCreateCounter('', 'C-State');
+          if (powerCounter.numSeries == 0) {
+            powerCounter.seriesNames.push('state');
+            powerCounter.seriesColors.push(
+                tracing.getStringColorId(powerCounter.name));
+          }
+          var powerState = parseInt(event[1]);
+          // NB: 4294967295/-1 means an exit from the current state
+          if (powerState != 4294967295)
+            powerCounter.samples.push(powerState);
+          else
+            powerCounter.samples.push(0);
+          powerCounter.timestamps.push(event.timestamp);
+        }
+      },
+
+      'workqueue_execute_start': {
+        // workqueue_execute_start: work struct c7a8a89c: function MISRWrapper
+        format: /work struct (.+): function (\S+)/,
+        handler: function(importer, event) {
+          var kthread = importer.getOrCreateKernelThread(event.taskId);
+          importer.openSlice(kthread, event[2], event.timestamp);
+        }
+      },
+
+      'workqueue_execute_end': {
+        // workqueue_execute_end: work struct c7a8a89c
+        format: /work struct (.+)/,
+        handler: function(importer, event) {
+          var kthread = importer.getOrCreateKernelThread(event.taskId);
+          importer.closeSlice(kthread, event.timestamp, {});
+        }
+      },
+
+      'workqueue_queue_work': {
+        // ignored for now
+      },
+
+      'workqueue_activate_work': {
+        // ignored for now
+      },
+
+      'i915_gem_object_pwrite': {
+        format: /obj=(.+), offset=(\d+), len=(\d+)/,
+        handler: function(importer, event) {
+          var obj = event[1];
+          var offset = parseInt(event[2]);
+          var len = parseInt(event[3]);
+          var kthread = importer.getOrCreateKernelThread('i915_gem', 0, 1);
+          importer.openSlice(kthread, 'pwrite:' + obj, event.timestamp);
+          importer.closeSlice(kthread, event.timestamp, {
+                obj: obj,
+                offset: offset,
+                len: len
+              });
+        }
+      },
+
+      'i915_flip_request': {
+        format: /plane=(\d+), obj=(.+)/,
+        handler: function(importer, event) {
+          var plane = parseInt(event[1]);
+          var obj = event[2];
+          // use i915_obj_plane?
+          var kthread = importer.getOrCreateKernelThread('i915_flip', 0, 2);
+          importer.openSlice(kthread, 'flip:' + obj + '/' + plane, event.timestamp);
+        }
+      },
+
+      'i915_flip_complete': {
+        format: /plane=(\d+), obj=(.+)/,
+        handler: function(importer, event) {
+          var plane = parseInt(event[1]);
+          var obj = event[2];
+          // use i915_obj_plane?
+          var kthread = importer.getOrCreateKernelThread('i915_flip', 0, 2);
+          importer.closeSlice(kthread, event.timestamp, {
+                obj: obj,
+                plane: plane
+              });
+        }
+      },
+
+      'tracing_mark_write': {
+        handler: function(importer, event) {
+          var eventData = traceEventClockSyncRE.exec(event.info);
+          if (eventData) {
+            importer.clockSyncRecords_.push({
+              perfTS: event.timestamp,
+              parentTS: eventData[1] * 1000
+            });
+          } else {
+            var eventData = event.info.split('|')
+            switch (eventData[0]) {
+              case 'B':
+                var pid = parseInt(eventData[1]);
+                var name = eventData[2];
+                importer.processBegin(event.taskId, name, event.timestamp, pid);
+                break;
+              case 'E':
+                importer.processEnd(event.taskId, event.timestamp);
+                break;
+              case 'C':
+                var pid = parseInt(eventData[1]);
+                var name = eventData[2];
+                var value = parseInt(eventData[3]);
+                importer.processCounter(name, event.timestamp, value, pid);
+                break;
+              default:
+                importer.malformedEvent(event.name);
+                break;
+            }
+          }
+        }
+      },
     }
   };
+
+  // NB: old-style trace markers; deprecated
+  LinuxPerfImporter.prototype.eventDefinitions['0'] =
+      LinuxPerfImporter.prototype.eventDefinitions['tracing_mark_write'];
+
+  TestExports.eventDefinitions = LinuxPerfImporter.prototype.eventDefinitions;
 
   tracing.TimelineModel.registerImporter(LinuxPerfImporter);
 

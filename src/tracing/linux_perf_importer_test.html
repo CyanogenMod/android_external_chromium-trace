@@ -30,10 +30,11 @@ function testLineRE() {
   assertNotNull(x);
   assertEquals('<idle>-0', x[1]);
   assertEquals('001', x[2]);
-  assertEquals('4467.843475', x[3]);
-  assertEquals('sched_switch', x[4]);
+  assertEquals(undefined, x[3]);
+  assertEquals('4467.843475', x[4]);
+  assertEquals('sched_switch', x[5]);
   assertEquals('prev_comm=swapper prev_pid=0 prev_prio=120 prev_state=R ==> ' +
-      'next_comm=SurfaceFlinger next_pid=178 next_prio=112', x[5]);
+      'next_comm=SurfaceFlinger next_pid=178 next_prio=112', x[6]);
 
   var x = re.exec('Binder Thread #-647   [001]   260.464294: sched_switch: ' +
       'prev_comm=Binder Thread # prev_pid=647 prev_prio=120 prev_state=D ==> ' +
@@ -42,7 +43,7 @@ function testLineRE() {
 }
 
 function testSchedSwitchRE() {
-  var re = tracing._LinuxPerfImporterTestExports.schedSwitchRE;
+  var re = tracing._LinuxPerfImporterTestExports.eventDefinitions['sched_switch'].format;
   var x = re.exec('prev_comm=swapper prev_pid=0 prev_prio=120 prev_state=R ' +
       '==> next_comm=SurfaceFlinger next_pid=178 next_prio=112');
   assertNotNull(x);
@@ -68,7 +69,7 @@ function testSchedSwitchRE() {
 }
 
 function testSchedWakeupRE() {
-  var re = tracing._LinuxPerfImporterTestExports.schedWakeupRE;
+  var re = tracing._LinuxPerfImporterTestExports.eventDefinitions['sched_wakeup'].format;
   var x = re.exec(
       'comm=SensorService pid=207 prio=112 success=1 target_cpu=000');
   assertNotNull(x);
