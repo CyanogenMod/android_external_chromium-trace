@@ -33,6 +33,8 @@ def main():
                     help='trace for N seconds', metavar='N')
   parser.add_option('-b', '--buf-size', dest='trace_buf_size', type='int',
                     help='use a trace buffer size of N KB', metavar='N')
+  parser.add_option('-d', '--disk', dest='trace_disk', default=False,
+                    action='store_true', help='trace disk I/O')
   parser.add_option('-f', '--cpu-freq', dest='trace_cpu_freq', default=False,
                     action='store_true', help='trace CPU frequency changes')
   parser.add_option('-i', '--cpu-idle', dest='trace_cpu_idle', default=False,
@@ -75,6 +77,8 @@ def main():
     return
 
   atrace_args = ['adb', 'shell', 'atrace', '-z']
+  if options.trace_disk:
+    atrace_args.append('-d')
   if options.trace_cpu_freq:
     atrace_args.append('-f')
   if options.trace_cpu_idle:

@@ -782,6 +782,81 @@ cr.define('tracing', function() {
         // ignored for now
       },
 
+      'ext4_sync_file_enter': {
+        // ext4_sync_file_enter: dev 179,9 ino 114914 parent 114912 datasync 1
+        format: /dev (\d+,\d+) ino (\d+) parent (\d+) datasync (\d+)/,
+        handler: function(importer, event) {
+          var kthread = importer.getOrCreateKernelThread('ext4:' + event.taskId);
+          var datasync = event[4] == 1;
+          importer.openSlice(kthread, datasync ? 'fdatasync' : 'fsync', event.timestamp);
+        }
+      },
+
+      'ext4_sync_file_exit': {
+        // ext4_sync_file_exit: dev 179,9 ino 114912 ret 0
+        format: /dev (\d+,\d+) ino (\d+) ret (\d+)/,
+        handler: function(importer, event) {
+          var kthread = importer.getOrCreateKernelThread('ext4:' + event.taskId);
+          importer.closeSlice(kthread, event.timestamp, {
+                dev: event[1]
+              });
+        }
+      },
+
+      'block_rq_issue': {
+        // block_rq_issue: 179,0 WS 0 () 9182248 + 8 [mmcqd/0]
+        format: /(\d+,\d+) (F)?([DWRN])(F)?(A)?(S)?(M)? .*/,
+        handler: function(importer, event) {
+          var kthread = importer.getOrCreateKernelThread('block:' + event.taskId);
+          var action;
+          switch (event[3]) {
+            case 'D':
+              action = 'discard';
+              break;
+            case 'W':
+              action = 'write';
+              break;
+            case 'R':
+              action = 'read';
+              break;
+            case 'N':
+              action = 'none';
+              break;
+            default:
+              action = 'unknown';
+              break;
+          }
+
+          if (event[2]) {
+            action += ' flush';
+          }
+          if (event[4] == 'F') {
+            action += ' fua';
+          }
+          if (event[5] == 'A') {
+            action += ' ahead';
+          }
+          if (event[6] == 'S') {
+            action += ' sync';
+          }
+          if (event[7] == 'M') {
+            action += ' meta';
+          }
+          importer.openSlice(kthread, action, event.timestamp);
+        }
+      },
+
+      'block_rq_complete': {
+        // block_rq_complete: 179,0 WS () 9182248 + 8 [0]
+        format: /(\d+,\d+).*/,
+        handler: function(importer, event) {
+          var kthread = importer.getOrCreateKernelThread('block:' + event.taskId);
+          importer.closeSlice(kthread, event.timestamp, {
+                dev: event[1]
+              });
+        }
+      },
+
       'i915_gem_object_pwrite': {
         format: /obj=(.+), offset=(\d+), len=(\d+)/,
         handler: function(importer, event) {
