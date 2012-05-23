@@ -304,7 +304,7 @@ cr.define('tracing', function() {
                 prevSlice.end, {}, midDuration));
           } else if (prevSlice.args.stateWhenDescheduled == 'D|W') {
             slices.push(new tracing.TimelineSlice(
-              'Uninterruptable Sleep | WakeKill', ioWaitId,
+              'Uninterruptible Sleep | WakeKill', ioWaitId,
               prevSlice.end, {}, midDuration));
           } else {
             throw 'Unrecognized state: ' + prevSlice.args.stateWhenDescheduled;
@@ -448,6 +448,7 @@ cr.define('tracing', function() {
         state.pid = pid;
         state.thread = this.model_.getOrCreateProcess(pid).
             getOrCreateThread(kpid);
+        this.threadsByLinuxPid[kpid] = state.thread;
         if (!state.thread.name) {
           state.thread.name = state.threadName;
         }
