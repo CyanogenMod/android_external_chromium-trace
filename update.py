@@ -34,7 +34,7 @@ result = json.loads(data)
 if 'errors' in result:
   for e in result['errors']:
     filenum = int(e['file'][6:])
-    filename = js_in_files[filenum]
+    filename = config.js_in_files[filenum]
     lineno = e['lineno']
     charno = e['charno']
     err = e['error']
