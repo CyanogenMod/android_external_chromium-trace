@@ -186,7 +186,8 @@ cr.define('tracing', function() {
           pid: pid,
           thread: thread,
           openSlice: undefined,
-          openSliceTS: undefined
+          openSliceTS: undefined,
+          asyncSlices: {}
         };
         this.threadsByLinuxPid[pid] = thread;
       }
@@ -424,6 +425,32 @@ cr.define('tracing', function() {
             ts - kthread.openSliceTS);
         kthread.thread.subRows[0].push(slice);
         kthread.openSlice = undefined;
+      }
+    },
+
+    /**
+     * Helper to open an async slice.
+     */
+    openAsyncSlice: function(kthread, key, ts, name) {
+      var slice = new tracing.TimelineAsyncSlice(name,
+          tracing.getStringColorId(name), ts);
+      slice.startThread = kthread.thread;
+      kthread.asyncSlices[key] = slice;
+    },
+
+    /**
+     * Helper to close an async slice.
+     */
+    closeAsyncSlice: function(kthread, key, ts, data) {
+      var slice = kthread.asyncSlices[key];
+      if (slice) {
+        slice.duration = ts - slice.start;
+        slice.args = data;
+        slice.endThread = kthread.thread;
+        slice.subSlices = [ new tracing.TimelineSlice(slice.title,
+           slice.colorId, slice.start, slice.args, slice.duration) ];
+        kthread.thread.asyncSlices.push(slice);
+        delete kthread.asyncSlices[key];
       }
     },
 
@@ -788,8 +815,12 @@ cr.define('tracing', function() {
         format: /dev (\d+,\d+) ino (\d+) parent (\d+) datasync (\d+)/,
         handler: function(importer, event) {
           var kthread = importer.getOrCreateKernelThread('ext4:' + event.taskId);
+          var device = event[1];
+          var inode = event[2];
           var datasync = event[4] == 1;
-          importer.openSlice(kthread, datasync ? 'fdatasync' : 'fsync', event.timestamp);
+          var key = device + '-' + inode;
+          importer.openAsyncSlice(kthread, key, event.timestamp,
+              datasync ? 'fdatasync' : 'fsync');
         }
       },
 
@@ -798,17 +829,22 @@ cr.define('tracing', function() {
         format: /dev (\d+,\d+) ino (\d+) ret (\d+)/,
         handler: function(importer, event) {
           var kthread = importer.getOrCreateKernelThread('ext4:' + event.taskId);
-          importer.closeSlice(kthread, event.timestamp, {
-                dev: event[1]
+          var device = event[1];
+          var inode = event[2];
+          var error = parseInt(event[3]);
+          var key = device + '-' + inode;
+          importer.closeAsyncSlice(kthread, key, event.timestamp, {
+                device: device,
+                inode: inode,
+                error: error
               });
         }
       },
 
       'block_rq_issue': {
         // block_rq_issue: 179,0 WS 0 () 9182248 + 8 [mmcqd/0]
-        format: /(\d+,\d+) (F)?([DWRN])(F)?(A)?(S)?(M)? .*/,
+        format: /(\d+,\d+) (F)?([DWRN])(F)?(A)?(S)?(M)? \d+ \(.*\) (\d+) \+ (\d+) \[.*\]/,
         handler: function(importer, event) {
-          var kthread = importer.getOrCreateKernelThread('block:' + event.taskId);
           var action;
           switch (event[3]) {
             case 'D':
@@ -843,18 +879,31 @@ cr.define('tracing', function() {
           if (event[7] == 'M') {
             action += ' meta';
           }
-          importer.openSlice(kthread, action, event.timestamp);
+          var device = event[1]
+          var sector = parseInt(event[8])
+          var numSectors = parseInt(event[9])
+          var kthread = importer.getOrCreateKernelThread('block:' + event.taskId);
+          var key = device + '-' + sector + '-' + numSectors;
+          importer.openAsyncSlice(kthread, key, event.timestamp, action);
         }
       },
 
       'block_rq_complete': {
         // block_rq_complete: 179,0 WS () 9182248 + 8 [0]
-        format: /(\d+,\d+).*/,
+        format: /(\d+,\d+) (F)?([DWRN])(F)?(A)?(S)?(M)? \(.*\) (\d+) \+ (\d+) \[(.*)\]/,
         handler: function(importer, event) {
+          var device = event[1]
+          var sector = parseInt(event[8])
+          var numSectors = parseInt(event[9])
+          var error = parseInt(event[10])
           var kthread = importer.getOrCreateKernelThread('block:' + event.taskId);
-          importer.closeSlice(kthread, event.timestamp, {
-                dev: event[1]
-              });
+          var key = device + '-' + sector + '-' + numSectors;
+          importer.closeAsyncSlice(kthread, key, event.timestamp, {
+              device: device,
+              sector: sector,
+              numSectors: numSectors,
+              error: error
+          });
         }
       },
 
