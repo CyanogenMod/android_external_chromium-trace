@@ -34,7 +34,7 @@ def main():
   parser.add_option('-b', '--buf-size', dest='trace_buf_size', type='int',
                     help='use a trace buffer size of N KB', metavar='N')
   parser.add_option('-d', '--disk', dest='trace_disk', default=False,
-                    action='store_true', help='trace disk I/O')
+                    action='store_true', help='trace disk I/O (requires root)')
   parser.add_option('-f', '--cpu-freq', dest='trace_cpu_freq', default=False,
                     action='store_true', help='trace CPU frequency changes')
   parser.add_option('-i', '--cpu-idle', dest='trace_cpu_idle', default=False,
@@ -46,7 +46,8 @@ def main():
                     'scheduler (allows longer trace times by reducing data ' +
                     'rate into buffer)')
   parser.add_option('-w', '--workqueue', dest='trace_workqueue', default=False,
-                    action='store_true', help='trace the kernel workqueues')
+                    action='store_true', help='trace the kernel workqueues ' +
+                    '(requires root)')
   parser.add_option('--set-tags', dest='set_tags', action='store',
                     help='set the enabled trace tags and exit; set to a ' +
                     'comma separated list of: ' +
@@ -69,7 +70,7 @@ def main():
     try:
       subprocess.check_call(atrace_args)
     except subprocess.CalledProcessError, e:
-      print sys.stderr, 'unable to set tags: %s' % e
+      print >> sys.stderr, 'unable to set tags: %s' % e
     print '\nSet enabled tags to: %s\n' % ', '.join(tags)
     print ('You will likely need to restart the Android framework for this to ' +
           'take effect:\n\n    adb shell stop\n    adb shell ' +
@@ -112,8 +113,6 @@ def main():
     js = compiled_js_tag % (open(js_filename).read())
 
   html_filename = options.output_file
-  html_file = open(html_filename, 'w')
-  html_file.write(html_prefix % (css, js))
 
   trace_started = False
   leftovers = ''
@@ -142,6 +141,8 @@ def main():
             sys.stdout.write("downloading trace...")
             sys.stdout.flush()
             out = ''.join(lines[i+1:])
+            html_file = open(html_filename, 'w')
+            html_file.write(html_prefix % (css, js))
             trace_started = True
             break
           elif 'TRACE:'.startswith(line) and i == len(lines) - 1:
@@ -158,14 +159,17 @@ def main():
     if result is not None:
       break
   if result != 0:
-    print sys.stderr, 'adb returned error code %d' % result
-  else:
+    print >> sys.stderr, 'adb returned error code %d' % result
+  elif trace_started:
     html_out = dec.flush().replace('\n', '\\n\\\n').replace('\r', '')
     if len(html_out) > 0:
       html_file.write(html_out)
     html_file.write(html_suffix)
     html_file.close()
     print " done\n\n    wrote file://%s/%s\n" % (os.getcwd(), options.output_file)
+  else:
+    print >> sys.stderr, ('An error occured while capturing the trace.  Output ' +
+      'file was not written.')
 
 html_prefix = """<!DOCTYPE HTML>
 <html>
