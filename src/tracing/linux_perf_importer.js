@@ -706,7 +706,7 @@ cr.define('tracing', function() {
       },
 
       'power_start': { // NB: old-style power event, deprecated
-        format: /type=(\d+) state=(\d) cpu_id=(\d)+/,
+        format: /type=(\d+) state=(\d) cpu_id=(\d+)/,
         handler: function(importer, event) {
           var targetCpuNumber = parseInt(event[3]);
           var targetCpu = importer.getOrCreateCpuState(targetCpuNumber);
@@ -730,7 +730,7 @@ cr.define('tracing', function() {
       },
 
       'power_frequency': { // NB: old-style power event, deprecated
-        format: /type=(\d+) state=(\d+) cpu_id=(\d)+/,
+        format: /type=(\d+) state=(\d+) cpu_id=(\d+)/,
         handler: function(importer, event) {
           var targetCpuNumber = parseInt(event[3]);
           var targetCpu = importer.getOrCreateCpuState(targetCpuNumber);
@@ -747,7 +747,7 @@ cr.define('tracing', function() {
       },
 
       'cpu_frequency': {
-        format: /state=(\d+) cpu_id=(\d)+/,
+        format: /state=(\d+) cpu_id=(\d+)/,
         handler: function(importer, event) {
           var targetCpuNumber = parseInt(event[2]);
           var targetCpu = importer.getOrCreateCpuState(targetCpuNumber);
@@ -764,7 +764,7 @@ cr.define('tracing', function() {
       },
 
       'cpu_idle': {
-        format: /state=(\d+) cpu_id=(\d)+/,
+        format: /state=(\d+) cpu_id=(\d+)/,
         handler: function(importer, event) {
           var targetCpuNumber = parseInt(event[2]);
           var targetCpu = importer.getOrCreateCpuState(targetCpuNumber);
@@ -781,6 +781,111 @@ cr.define('tracing', function() {
           else
             powerCounter.samples.push(0);
           powerCounter.timestamps.push(event.timestamp);
+        }
+      },
+
+      'cpufreq_interactive_already': {
+        format: /cpu=(\d+) load=(\d+) cur=(\d+) targ=(\d+)/,
+        handler: function(importer, event) {
+          var targetCpuNumber = parseInt(event[1]);
+          var targetCpu = importer.getOrCreateCpuState(targetCpuNumber);
+          var loadCounter = targetCpu.cpu.getOrCreateCounter('', 'Load');
+          var curCounter = targetCpu.cpu.getOrCreateCounter('', 'Interactive Current Frequency');
+          var targCounter = targetCpu.cpu.getOrCreateCounter('', 'Interactive Target Frequency');
+          if (loadCounter.numSeries == 0) {
+            loadCounter.seriesNames.push('state');
+            loadCounter.seriesColors.push(
+                tracing.getStringColorId(loadCounter.name + '.' + 'state'));
+          }
+          if (curCounter.numSeries == 0) {
+            curCounter.seriesNames.push('state');
+            curCounter.seriesColors.push(
+                tracing.getStringColorId(curCounter.name + '.' + 'state'));
+          }
+          if (targCounter.numSeries == 0) {
+            targCounter.seriesNames.push('state');
+            targCounter.seriesColors.push(
+                tracing.getStringColorId(targCounter.name + '.' + 'state'));
+          }
+          var loadState = parseInt(event[2]);
+          var curState = parseInt(event[3]);
+          var targState = parseInt(event[4]);
+          loadCounter.timestamps.push(event.timestamp);
+          loadCounter.samples.push(loadState);
+          curCounter.timestamps.push(event.timestamp);
+          curCounter.samples.push(curState);
+          targCounter.timestamps.push(event.timestamp);
+          targCounter.samples.push(targState);
+        }
+      },
+
+      'cpufreq_interactive_notyet': {
+        format: /cpu=(\d+) load=(\d+) cur=(\d+) targ=(\d+)/,
+        handler: function(importer, event) {
+          var targetCpuNumber = parseInt(event[1]);
+          var targetCpu = importer.getOrCreateCpuState(targetCpuNumber);
+          var loadCounter = targetCpu.cpu.getOrCreateCounter('', 'Load');
+          var curCounter = targetCpu.cpu.getOrCreateCounter('', 'Interactive Current Frequency');
+          var targCounter = targetCpu.cpu.getOrCreateCounter('', 'Interactive Target Frequency');
+          if (loadCounter.numSeries == 0) {
+            loadCounter.seriesNames.push('state');
+            loadCounter.seriesColors.push(
+                tracing.getStringColorId(loadCounter.name + '.' + 'state'));
+          }
+          if (curCounter.numSeries == 0) {
+            curCounter.seriesNames.push('state');
+            curCounter.seriesColors.push(
+                tracing.getStringColorId(curCounter.name + '.' + 'state'));
+          }
+          if (targCounter.numSeries == 0) {
+            targCounter.seriesNames.push('state');
+            targCounter.seriesColors.push(
+                tracing.getStringColorId(targCounter.name + '.' + 'state'));
+          }
+          var loadState = parseInt(event[2]);
+          var curState = parseInt(event[3]);
+          var targState = parseInt(event[4]);
+          loadCounter.timestamps.push(event.timestamp);
+          loadCounter.samples.push(loadState);
+          curCounter.timestamps.push(event.timestamp);
+          curCounter.samples.push(curState);
+          targCounter.timestamps.push(event.timestamp);
+          targCounter.samples.push(targState);
+        }
+      },
+
+      'cpufreq_interactive_target': {
+        format: /cpu=(\d+) load=(\d+) cur=(\d+) targ=(\d+)/,
+        handler: function(importer, event) {
+          var targetCpuNumber = parseInt(event[1]);
+          var targetCpu = importer.getOrCreateCpuState(targetCpuNumber);
+          var loadCounter = targetCpu.cpu.getOrCreateCounter('', 'Load');
+          var curCounter = targetCpu.cpu.getOrCreateCounter('', 'Interactive Current Frequency');
+          var targCounter = targetCpu.cpu.getOrCreateCounter('', 'Interactive Target Frequency');
+          if (loadCounter.numSeries == 0) {
+            loadCounter.seriesNames.push('state');
+            loadCounter.seriesColors.push(
+                tracing.getStringColorId(loadCounter.name + '.' + 'state'));
+          }
+          if (curCounter.numSeries == 0) {
+            curCounter.seriesNames.push('state');
+            curCounter.seriesColors.push(
+                tracing.getStringColorId(curCounter.name + '.' + 'state'));
+          }
+          if (targCounter.numSeries == 0) {
+            targCounter.seriesNames.push('state');
+            targCounter.seriesColors.push(
+                tracing.getStringColorId(targCounter.name + '.' + 'state'));
+          }
+          var loadState = parseInt(event[2]);
+          var curState = parseInt(event[3]);
+          var targState = parseInt(event[4]);
+          loadCounter.timestamps.push(event.timestamp);
+          loadCounter.samples.push(loadState);
+          curCounter.timestamps.push(event.timestamp);
+          curCounter.samples.push(curState);
+          targCounter.timestamps.push(event.timestamp);
+          targCounter.samples.push(targState);
         }
       },
 
