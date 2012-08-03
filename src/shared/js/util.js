@@ -7,7 +7,7 @@
  * @type {!Object}
  * @const
  */
-var global = this;
+//var global = this;
 
 /**
  * Alias for document.getElementById.
