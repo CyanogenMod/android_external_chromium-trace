@@ -26,6 +26,11 @@ trace_tag_bits = {
   'camera':   1<<10,
 }
 
+def add_adb_serial(command, serial):
+  if serial != None:
+    command.insert(1, serial)
+    command.insert(1, '-s')
+
 def main():
   parser = optparse.OptionParser()
   parser.add_option('-o', dest='output_file', help='write HTML to FILE',
@@ -56,6 +61,8 @@ def main():
   parser.add_option('--link-assets', dest='link_assets', default=False,
                     action='store_true', help='link to original CSS or JS resources '
                     'instead of embedding them')
+  parser.add_option('-e', '--serial', dest='device_serial', type='string',
+                    help='adb device serial number')
   options, args = parser.parse_args()
 
   if options.set_tags:
@@ -68,6 +75,7 @@ def main():
         parser.error('unrecognized tag: %s\nknown tags are: %s' %
                      (tag, ', '.join(trace_tag_bits.iterkeys())))
     atrace_args = ['adb', 'shell', 'setprop', 'debug.atrace.tags.enableflags', hex(flags)]
+    add_adb_serial(atrace_args, options.device_serial)
     try:
       subprocess.check_call(atrace_args)
     except subprocess.CalledProcessError, e:
@@ -79,6 +87,8 @@ def main():
     return
 
   atrace_args = ['adb', 'shell', 'atrace', '-z']
+  add_adb_serial(atrace_args, options.device_serial)
+
   if options.trace_disk:
     atrace_args.append('-d')
   if options.trace_cpu_freq:
