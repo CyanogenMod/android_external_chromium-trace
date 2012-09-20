@@ -10,7 +10,7 @@ This is a tool for capturing a trace that includes data from both userland and
 the kernel.  It creates an HTML file for visualizing the trace.
 """
 
-import errno, optparse, os, select, subprocess, sys, time, zlib, config
+import errno, optparse, os, select, subprocess, sys, time, zlib
 
 # This list is based on the tags in frameworks/native/include/utils/Trace.h.
 trace_tag_bits = {
@@ -25,6 +25,9 @@ trace_tag_bits = {
   'video':    1<<9,
   'camera':   1<<10,
 }
+
+flattened_css_file = 'style.css'
+flattened_js_file = 'script.js'
 
 def add_adb_serial(command, serial):
   if serial != None:
@@ -61,6 +64,8 @@ def main():
   parser.add_option('--link-assets', dest='link_assets', default=False,
                     action='store_true', help='link to original CSS or JS resources '
                     'instead of embedding them')
+  parser.add_option('--asset-dir', dest='asset_dir', default='trace-viewer',
+                    type='string', help='')
   parser.add_option('-e', '--serial', dest='device_serial', type='string',
                     help='adb device serial number')
   options, args = parser.parse_args()
@@ -115,11 +120,17 @@ def main():
   script_dir = os.path.dirname(os.path.abspath(sys.argv[0]))
 
   if options.link_assets:
-    css = '\n'.join(linked_css_tag % (os.path.join(script_dir, f)) for f in config.css_in_files)
-    js = '\n'.join(linked_js_tag % (os.path.join(script_dir, f)) for f in config.js_in_files)
+    src_dir = os.path.join(script_dir, options.asset_dir, 'src')
+    build_dir = os.path.join(script_dir, options.asset_dir, 'build')
+
+    js_files, js_flattenizer, css_files = get_assets(src_dir, build_dir)
+
+    css = '\n'.join(linked_css_tag % (os.path.join(src_dir, f)) for f in css_files)
+    js = '<script language="javascript">\n%s</script>\n' % js_flattenizer
+    js += '\n'.join(linked_js_tag % (os.path.join(src_dir, f)) for f in js_files)
   else:
-    css_filename = os.path.join(script_dir, config.css_out_file)
-    js_filename = os.path.join(script_dir, config.js_out_file)
+    css_filename = os.path.join(script_dir, flattened_css_file)
+    js_filename = os.path.join(script_dir, flattened_js_file)
     css = compiled_css_tag % (open(css_filename).read())
     js = compiled_js_tag % (open(js_filename).read())
 
@@ -182,12 +193,46 @@ def main():
     print >> sys.stderr, ('An error occured while capturing the trace.  Output ' +
       'file was not written.')
 
+def get_assets(src_dir, build_dir):
+  sys.path.append(build_dir)
+  gen = __import__('generate_standalone_timeline_view', {}, {})
+  parse_deps = __import__('parse_deps', {}, {})
+  filenames = gen._get_input_filenames()
+  load_sequence = parse_deps.calc_load_sequence(filenames)
+
+  js_files = []
+  js_flattenizer = "window.FLATTENED = {};\n"
+  css_files = []
+
+  for module in load_sequence:
+    js_files.append(os.path.relpath(module.filename, src_dir))
+    js_flattenizer += "window.FLATTENED['%s'] = true;\n" % module.name
+    for style_sheet in module.style_sheets:
+      css_files.append(os.path.relpath(style_sheet.filename, src_dir))
+
+  sys.path.pop()
+
+  return (js_files, js_flattenizer, css_files)
+
 html_prefix = """<!DOCTYPE HTML>
 <html>
 <head i18n-values="dir:textdirection;">
 <title>Android System Trace</title>
 %s
 %s
+<script language="javascript">
+document.addEventListener('DOMContentLoaded', function() {
+  if (!linuxPerfData)
+    return;
+
+  var m = new tracing.TimelineModel(linuxPerfData);
+  var timelineViewEl = document.querySelector('.view');
+  base.ui.decorate(timelineViewEl, tracing.TimelineView);
+  timelineViewEl.model = m;
+  timelineViewEl.tabIndex = 1;
+  timelineViewEl.timeline.focusElement = timelineViewEl;
+});
+</script>
 <style>
   .view {
     overflow: hidden;
@@ -202,12 +247,14 @@ html_prefix = """<!DOCTYPE HTML>
 <body>
   <div class="view">
   </div>
+<!-- BEGIN TRACE -->
   <script>
   var linuxPerfData = "\\
 """
 
-html_suffix = """           dummy-0000  [000] 0.0: 0: trace_event_clock_sync: parent_ts=0.0\\n";
+html_suffix = """\\n";
   </script>
+<!-- END TRACE -->
 </body>
 </html>
 """

@@ -1,16 +1,45 @@
 #!/usr/bin/python2.6
 
-import config, httplib, json, urllib, subprocess, sys
+import httplib, json, os, urllib, shutil, subprocess, sys
 
-# Read all the Javascript files.
-js_code = [('js_code', open(f).read()) for f in config.js_in_files]
+minified_css_file = 'style.css'
+minified_js_file = 'script.js'
 
-# Read all the CSS files and concatenate them.
-css_code = ''.join(open(f).read() for f in config.css_in_files)
+upstream_svn = 'http://trace-viewer.googlecode.com/svn/trunk/'
+
+script_dir = os.path.dirname(os.path.abspath(sys.argv[0]))
+trace_viewer_dir = os.path.join(script_dir, 'trace-viewer')
+
+# Remove the old source
+shutil.rmtree(trace_viewer_dir, True)
+
+# Pull the latest source from the upstream svn
+svn_co_args = ['svn', 'co', upstream_svn, trace_viewer_dir]
+p = subprocess.Popen(svn_co_args, stdout=subprocess.PIPE)
+svn_output = ''
+while p.poll() is None:
+  svn_output += p.stdout.read()
+if p.returncode != 0:
+  print 'Failed to checkout source from upstream svn.'
+  sys.exit(1)
+
+# Update the UPSTREAM_REVISION file
+rev_str = svn_output.split('\n')[-2]
+if not rev_str.startswith('Checked out revision '):
+  print 'Unrecognized revision string: %q' % rev_str
+open('UPSTREAM_REVISION', 'wt').write(rev_str[21:-1] + '\n')
+
+# Generate the flattened JS and CSS
+build_dir = os.path.join(trace_viewer_dir, 'build')
+sys.path.append(build_dir)
+gen = __import__('generate_standalone_timeline_view', {}, {})
+js_code = gen.generate_js()
+css_code = gen.generate_css()
 
 # Define the parameters for the POST request and encode them in
 # a URL-safe format.
-params = urllib.urlencode(js_code + [
+params = urllib.urlencode([
+  ('js_code', js_code),
   ('language', 'ECMASCRIPT5'),
   ('compilation_level', 'SIMPLE_OPTIMIZATIONS'),
   ('output_format', 'json'),
@@ -32,24 +61,26 @@ if response.status != 200:
 
 result = json.loads(data)
 if 'errors' in result:
+  print 'Encountered error minifying Javascript.  Writing intermediate code to flat_script.js'
+  open('flat_script.js', 'wt').write(js_code)
   for e in result['errors']:
     filenum = int(e['file'][6:])
-    filename = config.js_in_files[filenum]
+    filename = 'flat_script.js'
     lineno = e['lineno']
     charno = e['charno']
     err = e['error']
     print '%s:%d:%d: %s' % (filename, lineno, charno, err)
-  print 'Failed to generate %s.' % config.js_out_file
+  print 'Failed to generate %s.' % minified_js_file
   sys.exit(1)
 
-open(config.js_out_file, 'wt').write(result['compiledCode'] + '\n')
-print 'Generated %s' % config.js_out_file
+open(minified_js_file, 'wt').write(result['compiledCode'] + '\n')
+print 'Generated %s' % minified_js_file
 
-yuic_args = ['yui-compressor', '--type', 'css', '-o', config.css_out_file]
+yuic_args = ['yui-compressor', '--type', 'css', '-o', minified_css_file]
 p = subprocess.Popen(yuic_args, stdin=subprocess.PIPE)
 p.communicate(input=css_code)
 if p.wait() != 0:
-  print 'Failed to generate %s.' % config.css_out_file
+  print 'Failed to generate %s.' % minified_css_file
   sys.exit(1)
 
-print 'Generated %s' % config.css_out_file
+print 'Generated %s' % minified_css_file
