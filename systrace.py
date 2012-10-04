@@ -54,6 +54,9 @@ def main():
                     action='store_false', help='inhibit tracing CPU ' +
                     'scheduler (allows longer trace times by reducing data ' +
                     'rate into buffer)')
+  parser.add_option('-u', '--bus-utilization', dest='trace_bus_utilization',
+                    default=False, action='store_true',
+                    help='trace bus utilization (requires root)')
   parser.add_option('-w', '--workqueue', dest='trace_workqueue', default=False,
                     action='store_true', help='trace the kernel workqueues ' +
                     '(requires root)')
@@ -104,6 +107,8 @@ def main():
     atrace_args.append('-l')
   if options.trace_cpu_sched:
     atrace_args.append('-s')
+  if options.trace_bus_utilization:
+    atrace_args.append('-u')
   if options.trace_workqueue:
     atrace_args.append('-w')
   if options.trace_time is not None:
