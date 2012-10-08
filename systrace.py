@@ -67,6 +67,8 @@ def main():
   parser.add_option('--link-assets', dest='link_assets', default=False,
                     action='store_true', help='link to original CSS or JS resources '
                     'instead of embedding them')
+  parser.add_option('--from-file', dest='from_file', action='store',
+                    help='read the trace from a file rather than running a live trace')
   parser.add_option('--asset-dir', dest='asset_dir', default='trace-viewer',
                     type='string', help='')
   parser.add_option('-e', '--serial', dest='device_serial', type='string',
@@ -122,6 +124,9 @@ def main():
     else:
       parser.error('the trace buffer size must be a positive number')
 
+  if options.from_file is not None:
+    atrace_args = ['cat', options.from_file]
+
   script_dir = os.path.dirname(os.path.abspath(sys.argv[0]))
 
   if options.link_assets:
@@ -154,7 +159,8 @@ def main():
       sys.stderr.flush()
     if adb.stdout in ready[0]:
       out = leftovers + os.read(adb.stdout.fileno(), 4096)
-      out = out.replace('\r\n', '\n')
+      if options.from_file is None:
+        out = out.replace('\r\n', '\n')
       if out.endswith('\r'):
         out = out[:-1]
         leftovers = '\r'
