@@ -12,20 +12,6 @@ the kernel.  It creates an HTML file for visualizing the trace.
 
 import errno, optparse, os, select, subprocess, sys, time, zlib
 
-# This list is based on the tags in frameworks/native/include/utils/Trace.h.
-trace_tag_bits = {
-  'gfx':      1<<1,
-  'input':    1<<2,
-  'view':     1<<3,
-  'webview':  1<<4,
-  'wm':       1<<5,
-  'am':       1<<6,
-  'sync':     1<<7,
-  'audio':    1<<8,
-  'video':    1<<9,
-  'camera':   1<<10,
-}
-
 flattened_css_file = 'style.css'
 flattened_js_file = 'script.js'
 
@@ -35,35 +21,18 @@ def add_adb_serial(command, serial):
     command.insert(1, '-s')
 
 def main():
-  parser = optparse.OptionParser()
+  usage = "Usage: %prog [options] [category1 [category2 ...]]"
+  desc = "Example: %prog -b 32768 -t 15 gfx input view sched freq"
+  parser = optparse.OptionParser(usage=usage, description=desc)
   parser.add_option('-o', dest='output_file', help='write HTML to FILE',
                     default='trace.html', metavar='FILE')
   parser.add_option('-t', '--time', dest='trace_time', type='int',
                     help='trace for N seconds', metavar='N')
   parser.add_option('-b', '--buf-size', dest='trace_buf_size', type='int',
                     help='use a trace buffer size of N KB', metavar='N')
-  parser.add_option('-d', '--disk', dest='trace_disk', default=False,
-                    action='store_true', help='trace disk I/O (requires root)')
-  parser.add_option('-f', '--cpu-freq', dest='trace_cpu_freq', default=False,
-                    action='store_true', help='trace CPU frequency changes')
-  parser.add_option('-i', '--cpu-idle', dest='trace_cpu_idle', default=False,
-                    action='store_true', help='trace CPU idle events')
-  parser.add_option('-l', '--cpu-load', dest='trace_cpu_load', default=False,
-                    action='store_true', help='trace CPU load')
-  parser.add_option('-s', '--no-cpu-sched', dest='trace_cpu_sched', default=True,
-                    action='store_false', help='inhibit tracing CPU ' +
-                    'scheduler (allows longer trace times by reducing data ' +
-                    'rate into buffer)')
-  parser.add_option('-u', '--bus-utilization', dest='trace_bus_utilization',
-                    default=False, action='store_true',
-                    help='trace bus utilization (requires root)')
-  parser.add_option('-w', '--workqueue', dest='trace_workqueue', default=False,
-                    action='store_true', help='trace the kernel workqueues ' +
-                    '(requires root)')
-  parser.add_option('--set-tags', dest='set_tags', action='store',
-                    help='set the enabled trace tags and exit; set to a ' +
-                    'comma separated list of: ' +
-                    ', '.join(trace_tag_bits.iterkeys()))
+  parser.add_option('-l', '--list-categories', dest='list_categories', default=False,
+                    action='store_true', help='list the available categories and exit')
+
   parser.add_option('--link-assets', dest='link_assets', default=False,
                     action='store_true', help='link to original CSS or JS resources '
                     'instead of embedding them')
@@ -73,59 +42,34 @@ def main():
                     type='string', help='')
   parser.add_option('-e', '--serial', dest='device_serial', type='string',
                     help='adb device serial number')
+
   options, args = parser.parse_args()
 
-  if options.set_tags:
-    flags = 0
-    tags = options.set_tags.split(',')
-    for tag in tags:
-      try:
-        flags |= trace_tag_bits[tag]
-      except KeyError:
-        parser.error('unrecognized tag: %s\nknown tags are: %s' %
-                     (tag, ', '.join(trace_tag_bits.iterkeys())))
-    atrace_args = ['adb', 'shell', 'setprop', 'debug.atrace.tags.enableflags', hex(flags)]
-    add_adb_serial(atrace_args, options.device_serial)
-    try:
-      subprocess.check_call(atrace_args)
-    except subprocess.CalledProcessError, e:
-      print >> sys.stderr, 'unable to set tags: %s' % e
-    print '\nSet enabled tags to: %s\n' % ', '.join(tags)
-    print ('You will likely need to restart the Android framework for this to ' +
-          'take effect:\n\n    adb shell stop\n    adb shell ' +
-          'start\n')
-    return
-
-  atrace_args = ['adb', 'shell', 'atrace', '-z']
-  add_adb_serial(atrace_args, options.device_serial)
-
-  if options.trace_disk:
-    atrace_args.append('-d')
-  if options.trace_cpu_freq:
-    atrace_args.append('-f')
-  if options.trace_cpu_idle:
-    atrace_args.append('-i')
-  if options.trace_cpu_load:
-    atrace_args.append('-l')
-  if options.trace_cpu_sched:
-    atrace_args.append('-s')
-  if options.trace_bus_utilization:
-    atrace_args.append('-u')
-  if options.trace_workqueue:
-    atrace_args.append('-w')
-  if options.trace_time is not None:
-    if options.trace_time > 0:
-      atrace_args.extend(['-t', str(options.trace_time)])
-    else:
-      parser.error('the trace time must be a positive number')
-  if options.trace_buf_size is not None:
-    if options.trace_buf_size > 0:
-      atrace_args.extend(['-b', str(options.trace_buf_size)])
-    else:
-      parser.error('the trace buffer size must be a positive number')
-
-  if options.from_file is not None:
+  if options.list_categories:
+    atrace_args = ['adb', 'shell', 'atrace', '--list_categories']
+    expect_trace = False
+  elif options.from_file is not None:
     atrace_args = ['cat', options.from_file]
+    expect_trace = True
+  else:
+    atrace_args = ['adb', 'shell', 'atrace', '-z']
+    expect_trace = True
+
+    if options.trace_time is not None:
+      if options.trace_time > 0:
+        atrace_args.extend(['-t', str(options.trace_time)])
+      else:
+        parser.error('the trace time must be a positive number')
+    if options.trace_buf_size is not None:
+      if options.trace_buf_size > 0:
+        atrace_args.extend(['-b', str(options.trace_buf_size)])
+      else:
+        parser.error('the trace buffer size must be a positive number')
+
+    atrace_args.extend(args)
+
+  if atrace_args[0] == 'adb':
+    add_adb_serial(atrace_args, options.device_serial)
 
   script_dir = os.path.dirname(os.path.abspath(sys.argv[0]))
 
@@ -200,7 +144,7 @@ def main():
     html_file.write(html_suffix)
     html_file.close()
     print " done\n\n    wrote file://%s/%s\n" % (os.getcwd(), options.output_file)
-  else:
+  elif expect_trace:
     print >> sys.stderr, ('An error occured while capturing the trace.  Output ' +
       'file was not written.')
 
