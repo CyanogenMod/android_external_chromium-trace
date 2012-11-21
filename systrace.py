@@ -30,6 +30,8 @@ def main():
                     help='trace for N seconds', metavar='N')
   parser.add_option('-b', '--buf-size', dest='trace_buf_size', type='int',
                     help='use a trace buffer size of N KB', metavar='N')
+  parser.add_option('-k', '--ktrace', dest='kfuncs', action='store',
+                    help='specify a comma-separated list of kernel functions to trace')
   parser.add_option('-l', '--list-categories', dest='list_categories', default=False,
                     action='store_true', help='list the available categories and exit')
   parser.add_option('-a', '--app', dest='app_name', default=None, type='string',
@@ -72,6 +74,9 @@ def main():
 
     if options.app_name is not None:
       atrace_args.extend(['-a', options.app_name])
+
+    if options.kfuncs is not None:
+      atrace_args.extend(['-k', options.kfuncs])
 
     atrace_args.extend(args)
 
