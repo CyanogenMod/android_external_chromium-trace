@@ -90,69 +90,98 @@ def main():
 
   html_filename = options.output_file
 
-  trace_started = False
-  leftovers = ''
   adb = subprocess.Popen(atrace_args, stdout=subprocess.PIPE,
                          stderr=subprocess.PIPE)
-  dec = zlib.decompressobj()
-  while True:
+
+  result = None
+  data = []
+
+  # Read the text portion of the output and watch for the 'TRACE:' marker that
+  # indicates the start of the trace data.
+  while result is None:
     ready = select.select([adb.stdout, adb.stderr], [], [adb.stdout, adb.stderr])
     if adb.stderr in ready[0]:
       err = os.read(adb.stderr.fileno(), 4096)
       sys.stderr.write(err)
       sys.stderr.flush()
     if adb.stdout in ready[0]:
-      out = leftovers + os.read(adb.stdout.fileno(), 4096)
-      out = out.replace('\r\n', '\n')
-      if out.endswith('\r'):
-        out = out[:-1]
-        leftovers = '\r'
-      else:
-        leftovers = ''
-      if not trace_started:
-        lines = out.splitlines(True)
-        out = ''
-        for i, line in enumerate(lines):
-          if line == 'TRACE:\n':
-            sys.stdout.write("downloading trace...")
-            sys.stdout.flush()
-            out = ''.join(lines[i+1:])
-            html_file = open(html_filename, 'w')
-            html_file.write(html_prefix % (css, js))
-            trace_started = True
-            break
-          elif 'TRACE:'.startswith(line) and i == len(lines) - 1:
-            leftovers = line + leftovers
-          else:
-            sys.stdout.write(line)
-            sys.stdout.flush()
-      if len(out) > 0:
-        out = dec.decompress(out)
-      html_out = out.replace('\n', '\\n\\\n')
-      if len(html_out) > 0:
-        html_file.write(html_out)
+      out = os.read(adb.stdout.fileno(), 4096)
+      parts = out.split('\nTRACE:', 1)
+
+      txt = parts[0].replace('\r', '')
+      if len(parts) == 2:
+        # The '\nTRACE:' match stole the last newline from the text, so add it
+        # back here.
+        txt += '\n'
+      sys.stdout.write(txt)
+      sys.stdout.flush()
+
+      if len(parts) == 2:
+        data.append(parts[1])
+        sys.stdout.write("downloading trace...")
+        sys.stdout.flush()
+        break
+
     result = adb.poll()
-    if result is not None:
-      break
-  if result != 0:
-    print >> sys.stderr, 'adb returned error code %d' % result
-  elif trace_started:
-    html_out = dec.flush().replace('\n', '\\n\\\n').replace('\r', '')
-    if len(html_out) > 0:
+
+  # Read and buffer the data portion of the output.
+  while result is None:
+    ready = select.select([adb.stdout, adb.stderr], [], [adb.stdout, adb.stderr])
+    if adb.stderr in ready[0]:
+      err = os.read(adb.stderr.fileno(), 4096)
+      sys.stderr.write(err)
+      sys.stderr.flush()
+    if adb.stdout in ready[0]:
+      out = os.read(adb.stdout.fileno(), 4096)
+      data.append(out)
+
+    result = adb.poll()
+
+  if result == 0:
+    if expect_trace:
+      data = ''.join(data)
+
+      # Collapse CRLFs that are added by adb shell.
+      if data.startswith('\r\n'):
+        data = data.replace('\r\n', '\n')
+
+      # Skip the initial newline.
+      data = data[1:]
+
+      if not data:
+        print >> sys.stderr, ('No data was captured.  Output file was not ' +
+          'written.')
+        sys.exit(1)
+      else:
+        # Indicate to the user that the data download is complete.
+        print " done\n"
+
+      html_file = open(html_filename, 'w')
+      html_file.write(html_prefix % (css, js))
+
+      size = 4096
+      dec = zlib.decompressobj()
+      for chunk in (data[i:i+size] for i in xrange(0, len(data), size)):
+        decoded_chunk = dec.decompress(chunk)
+        html_chunk = decoded_chunk.replace('\n', '\\n\\\n')
+        html_file.write(html_chunk)
+
+      html_out = dec.flush().replace('\n', '\\n\\\n')
       html_file.write(html_out)
-    html_file.write(html_suffix)
-    html_file.close()
-    print " done\n\n    wrote file://%s/%s\n" % (os.getcwd(), options.output_file)
-  elif expect_trace:
-    print >> sys.stderr, ('An error occured while capturing the trace.  Output ' +
-      'file was not written.')
+      html_file.write(html_suffix)
+      html_file.close()
+      print "\n    wrote file://%s/%s\n" % (os.getcwd(), options.output_file)
+
+  else: # i.e. result != 0
+    print >> sys.stderr, 'adb returned error code %d' % result
+    sys.exit(1)
 
 def get_assets(src_dir, build_dir):
   sys.path.append(build_dir)
   gen = __import__('generate_standalone_timeline_view', {}, {})
   parse_deps = __import__('parse_deps', {}, {})
   filenames = gen._get_input_filenames()
-  load_sequence = parse_deps.calc_load_sequence(filenames)
+  load_sequence = parse_deps.calc_load_sequence(filenames, src_dir)
 
   js_files = []
   js_flattenizer = "window.FLATTENED = {};\n"
