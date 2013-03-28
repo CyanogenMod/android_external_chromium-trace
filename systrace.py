@@ -32,6 +32,9 @@ def main():
                     help='use a trace buffer size of N KB', metavar='N')
   parser.add_option('-l', '--list-categories', dest='list_categories', default=False,
                     action='store_true', help='list the available categories and exit')
+  parser.add_option('-a', '--app', dest='app_name', default=None, type='string',
+                    action='store', help='enable application-level tracing for comma-separated ' +
+                    'list of app cmdlines')
 
   parser.add_option('--link-assets', dest='link_assets', default=False,
                     action='store_true', help='link to original CSS or JS resources '
@@ -60,11 +63,15 @@ def main():
         atrace_args.extend(['-t', str(options.trace_time)])
       else:
         parser.error('the trace time must be a positive number')
+
     if options.trace_buf_size is not None:
       if options.trace_buf_size > 0:
         atrace_args.extend(['-b', str(options.trace_buf_size)])
       else:
         parser.error('the trace buffer size must be a positive number')
+
+    if options.app_name is not None:
+      atrace_args.extend(['-a', options.app_name])
 
     atrace_args.extend(args)
 
@@ -200,6 +207,7 @@ def get_assets(src_dir, build_dir):
 html_prefix = """<!DOCTYPE HTML>
 <html>
 <head i18n-values="dir:textdirection;">
+<meta charset="utf-8"/>
 <title>Android System Trace</title>
 %s
 %s
