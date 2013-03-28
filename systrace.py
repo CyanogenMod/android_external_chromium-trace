@@ -208,9 +208,9 @@ document.addEventListener('DOMContentLoaded', function() {
   if (!linuxPerfData)
     return;
 
-  var m = new tracing.TimelineModel(linuxPerfData);
+  var m = new tracing.Model(linuxPerfData);
   var timelineViewEl = document.querySelector('.view');
-  base.ui.decorate(timelineViewEl, tracing.TimelineView);
+  tracing.ui.decorate(timelineViewEl, tracing.TimelineView);
   timelineViewEl.model = m;
   timelineViewEl.tabIndex = 1;
   timelineViewEl.timeline.focusElement = timelineViewEl;

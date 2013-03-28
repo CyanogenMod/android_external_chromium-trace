@@ -8,209 +8,317 @@
  *        Do not edit directly.
  */
 base.addModuleDependency(
-    'timeline_selection',
+    'analysis.single_slice_selection_analysis',
+    'ui');
+base.addModuleDependency(
+    'analysis.single_slice_selection_analysis',
+    'analysis.util');
+base.addModuleDependency(
+    'analysis.slice_group_selection_analysis',
+    'ui');
+base.addModuleDependency(
+    'analysis.slice_group_selection_analysis',
+    'analysis.util');
+base.addModuleDependency(
+    'analysis.slice_selection_analysis',
+    'analysis.single_slice_selection_analysis');
+base.addModuleDependency(
+    'analysis.slice_selection_analysis',
+    'analysis.slice_group_selection_analysis');
+base.addModuleDependency(
+    'analysis.single_counter_selection_analysis',
+    'ui');
+base.addModuleDependency(
+    'analysis.single_counter_selection_analysis',
+    'analysis.util');
+base.addModuleDependency(
+    'analysis.counter_selection_analysis',
+    'ui');
+base.addModuleDependency(
+    'analysis.counter_selection_analysis',
+    'analysis.single_counter_selection_analysis');
+base.addModuleDependency(
+    'analysis.selection_analysis',
+    'analysis.slice_selection_analysis');
+base.addModuleDependency(
+    'analysis.selection_analysis',
+    'analysis.counter_selection_analysis');
+base.addModuleDependency(
+    'analysis.selection_analysis',
+    'ui');
+base.addModuleStylesheet(
+    'analysis.selection_analysis',
+    'analysis.selection_analysis');
+base.addModuleDependency(
+    'slice_group',
+    'range');
+base.addModuleDependency(
+    'slice_group',
+    'slice');
+base.addModuleDependency(
+    'slice_group',
+    'color_scheme');
+base.addModuleDependency(
+    'slice_group',
+    'filter');
+base.addModuleDependency(
+    'async_slice_group',
+    'range');
+base.addModuleDependency(
+    'async_slice_group',
+    'slice');
+base.addModuleDependency(
+    'thread',
+    'range');
+base.addModuleDependency(
+    'thread',
+    'guid');
+base.addModuleDependency(
+    'thread',
+    'slice');
+base.addModuleDependency(
+    'thread',
+    'slice_group');
+base.addModuleDependency(
+    'thread',
+    'async_slice_group');
+base.addModuleDependency(
+    'thread',
+    'sample');
+base.addModuleDependency(
+    'counter',
+    'guid');
+base.addModuleDependency(
+    'counter',
+    'range');
+base.addModuleDependency(
+    'process_base',
+    'range');
+base.addModuleDependency(
+    'process_base',
+    'guid');
+base.addModuleDependency(
+    'process_base',
+    'thread');
+base.addModuleDependency(
+    'process_base',
+    'counter');
+base.addModuleDependency(
+    'process',
+    'process_base');
+base.addModuleDependency(
+    'kernel',
+    'process_base');
+base.addModuleDependency(
+    'cpu',
+    'range');
+base.addModuleDependency(
+    'cpu',
+    'slice');
+base.addModuleDependency(
+    'cpu',
+    'counter');
+base.addModuleDependency(
+    'model',
+    'range');
+base.addModuleDependency(
+    'model',
     'event_target');
+base.addModuleDependency(
+    'model',
+    'process');
+base.addModuleDependency(
+    'model',
+    'kernel');
+base.addModuleDependency(
+    'model',
+    'cpu');
+base.addModuleDependency(
+    'model',
+    'filter');
+base.addModuleDependency(
+    'selection',
+    'range');
+base.addModuleDependency(
+    'selection',
+    'event_target');
+base.addModuleDependency(
+    'tracks.track',
+    'ui');
+base.addModuleStylesheet(
+    'tracks.track',
+    'tracks.track');
+base.addModuleDependency(
+    'tracks.container_track',
+    'tracks.track');
+base.addModuleDependency(
+    'tracks.container_track',
+    'filter');
+base.addModuleDependency(
+    'tracks.container_track',
+    'ui');
+base.addModuleDependency(
+    'tracks.canvas_based_track',
+    'tracks.track');
+base.addModuleDependency(
+    'tracks.canvas_based_track',
+    'fast_rect_renderer');
+base.addModuleDependency(
+    'tracks.canvas_based_track',
+    'color_scheme');
+base.addModuleDependency(
+    'tracks.canvas_based_track',
+    'ui');
+base.addModuleStylesheet(
+    'tracks.canvas_based_track',
+    'tracks.canvas_based_track');
+base.addModuleDependency(
+    'tracks.slice_track',
+    'tracks.canvas_based_track');
+base.addModuleDependency(
+    'tracks.slice_track',
+    'sorted_array_utils');
+base.addModuleDependency(
+    'tracks.slice_track',
+    'fast_rect_renderer');
+base.addModuleDependency(
+    'tracks.slice_track',
+    'color_scheme');
+base.addModuleDependency(
+    'tracks.slice_track',
+    'ui');
+base.addModuleStylesheet(
+    'tracks.slice_track',
+    'tracks.slice_track');
+base.addModuleDependency(
+    'tracks.slice_group_track',
+    'tracks.container_track');
+base.addModuleDependency(
+    'tracks.slice_group_track',
+    'sorted_array_utils');
+base.addModuleDependency(
+    'tracks.slice_group_track',
+    'ui');
+base.addModuleDependency(
+    'tracks.async_slice_group_track',
+    'tracks.slice_group_track');
+base.addModuleDependency(
+    'tracks.async_slice_group_track',
+    'ui');
+base.addModuleDependency(
+    'tracks.thread_track',
+    'tracks.container_track');
+base.addModuleDependency(
+    'tracks.thread_track',
+    'tracks.slice_track');
+base.addModuleDependency(
+    'tracks.thread_track',
+    'tracks.slice_group_track');
+base.addModuleDependency(
+    'tracks.thread_track',
+    'tracks.async_slice_group_track');
+base.addModuleDependency(
+    'tracks.thread_track',
+    'filter');
+base.addModuleDependency(
+    'tracks.thread_track',
+    'ui');
+base.addModuleStylesheet(
+    'tracks.thread_track',
+    'tracks.thread_track');
+base.addModuleDependency(
+    'tracks.counter_track',
+    'tracks.canvas_based_track');
+base.addModuleDependency(
+    'tracks.counter_track',
+    'color_scheme');
+base.addModuleDependency(
+    'tracks.counter_track',
+    'ui');
+base.addModuleStylesheet(
+    'tracks.counter_track',
+    'tracks.counter_track');
+base.addModuleDependency(
+    'analysis.test.analysis_test_support',
+    'test_utils');
+base.addModuleDependency(
+    'analysis.test.analysis_test_support',
+    'model');
+base.addModuleDependency(
+    'analysis.test.analysis_test_support',
+    'selection');
+base.addModuleDependency(
+    'analysis.test.analysis_test_support',
+    'tracks.thread_track');
+base.addModuleDependency(
+    'analysis.test.analysis_test_support',
+    'tracks.counter_track');
+base.addModuleDependency(
+    'importer.timeline_stream_importer',
+    'model');
+base.addModuleDependency(
+    'importer.timeline_stream_importer',
+    'slice');
 base.addModuleDependency(
     'timeline_viewport',
     'event_target');
 base.addModuleDependency(
-    'tracks.timeline_track',
+    'tracks.cpu_track',
+    'tracks.container_track');
+base.addModuleDependency(
+    'tracks.cpu_track',
+    'tracks.slice_track');
+base.addModuleDependency(
+    'tracks.cpu_track',
+    'filter');
+base.addModuleDependency(
+    'tracks.cpu_track',
+    'model');
+base.addModuleDependency(
+    'tracks.cpu_track',
+    'ui');
+base.addModuleDependency(
+    'tracks.process_track',
+    'tracks.container_track');
+base.addModuleDependency(
+    'tracks.process_track',
+    'tracks.counter_track');
+base.addModuleDependency(
+    'tracks.process_track',
+    'tracks.thread_track');
+base.addModuleDependency(
+    'tracks.process_track',
+    'filter');
+base.addModuleDependency(
+    'tracks.process_track',
+    'ui');
+base.addModuleDependency(
+    'tracks.model_track',
+    'tracks.container_track');
+base.addModuleDependency(
+    'tracks.model_track',
+    'tracks.cpu_track');
+base.addModuleDependency(
+    'tracks.model_track',
+    'tracks.process_track');
+base.addModuleDependency(
+    'tracks.model_track',
     'ui');
 base.addModuleStylesheet(
-    'tracks.timeline_track',
-    'tracks.timeline_track');
+    'tracks.model_track',
+    'tracks.model_track');
 base.addModuleDependency(
-    'tracks.timeline_container_track',
-    'tracks.timeline_track');
+    'tracks.viewport_track',
+    'tracks.track');
 base.addModuleDependency(
-    'tracks.timeline_container_track',
-    'timeline_filter');
+    'tracks.viewport_track',
+    'tracks.canvas_based_track');
 base.addModuleDependency(
-    'tracks.timeline_container_track',
-    'ui');
-base.addModuleDependency(
-    'tracks.timeline_canvas_based_track',
-    'tracks.timeline_track');
-base.addModuleDependency(
-    'tracks.timeline_canvas_based_track',
-    'fast_rect_renderer');
-base.addModuleDependency(
-    'tracks.timeline_canvas_based_track',
-    'timeline_color_scheme');
-base.addModuleDependency(
-    'tracks.timeline_canvas_based_track',
+    'tracks.viewport_track',
     'ui');
 base.addModuleStylesheet(
-    'tracks.timeline_canvas_based_track',
-    'tracks.timeline_canvas_based_track');
-base.addModuleDependency(
-    'tracks.timeline_slice_track',
-    'tracks.timeline_canvas_based_track');
-base.addModuleDependency(
-    'tracks.timeline_slice_track',
-    'sorted_array_utils');
-base.addModuleDependency(
-    'tracks.timeline_slice_track',
-    'fast_rect_renderer');
-base.addModuleDependency(
-    'tracks.timeline_slice_track',
-    'timeline_color_scheme');
-base.addModuleDependency(
-    'tracks.timeline_slice_track',
-    'ui');
-base.addModuleStylesheet(
-    'tracks.timeline_slice_track',
-    'tracks.timeline_slice_track');
-base.addModuleDependency(
-    'timeline_slice_group',
-    'timeline_slice');
-base.addModuleDependency(
-    'timeline_slice_group',
-    'timeline_color_scheme');
-base.addModuleDependency(
-    'timeline_slice_group',
-    'timeline_filter');
-base.addModuleDependency(
-    'timeline_async_slice_group',
-    'timeline_slice');
-base.addModuleDependency(
-    'timeline_thread',
-    'timeline_slice');
-base.addModuleDependency(
-    'timeline_thread',
-    'timeline_slice_group');
-base.addModuleDependency(
-    'timeline_thread',
-    'timeline_async_slice_group');
-base.addModuleDependency(
-    'timeline_process',
-    'timeline_thread');
-base.addModuleDependency(
-    'timeline_process',
-    'timeline_counter');
-base.addModuleDependency(
-    'timeline_cpu',
-    'timeline_slice');
-base.addModuleDependency(
-    'timeline_cpu',
-    'timeline_counter');
-base.addModuleDependency(
-    'timeline_model',
-    'event_target');
-base.addModuleDependency(
-    'timeline_model',
-    'timeline_process');
-base.addModuleDependency(
-    'timeline_model',
-    'timeline_cpu');
-base.addModuleDependency(
-    'timeline_model',
-    'timeline_filter');
-base.addModuleDependency(
-    'tracks.timeline_cpu_track',
-    'tracks.timeline_container_track');
-base.addModuleDependency(
-    'tracks.timeline_cpu_track',
-    'tracks.timeline_slice_track');
-base.addModuleDependency(
-    'tracks.timeline_cpu_track',
-    'timeline_filter');
-base.addModuleDependency(
-    'tracks.timeline_cpu_track',
-    'timeline_model');
-base.addModuleDependency(
-    'tracks.timeline_cpu_track',
-    'ui');
-base.addModuleDependency(
-    'tracks.timeline_counter_track',
-    'tracks.timeline_canvas_based_track');
-base.addModuleDependency(
-    'tracks.timeline_counter_track',
-    'timeline_color_scheme');
-base.addModuleDependency(
-    'tracks.timeline_counter_track',
-    'ui');
-base.addModuleStylesheet(
-    'tracks.timeline_counter_track',
-    'tracks.timeline_counter_track');
-base.addModuleDependency(
-    'tracks.timeline_slice_group_track',
-    'tracks.timeline_container_track');
-base.addModuleDependency(
-    'tracks.timeline_slice_group_track',
-    'sorted_array_utils');
-base.addModuleDependency(
-    'tracks.timeline_slice_group_track',
-    'ui');
-base.addModuleDependency(
-    'tracks.timeline_async_slice_group_track',
-    'tracks.timeline_slice_group_track');
-base.addModuleDependency(
-    'tracks.timeline_async_slice_group_track',
-    'ui');
-base.addModuleDependency(
-    'tracks.timeline_thread_track',
-    'tracks.timeline_container_track');
-base.addModuleDependency(
-    'tracks.timeline_thread_track',
-    'tracks.timeline_slice_track');
-base.addModuleDependency(
-    'tracks.timeline_thread_track',
-    'tracks.timeline_slice_group_track');
-base.addModuleDependency(
-    'tracks.timeline_thread_track',
-    'tracks.timeline_async_slice_group_track');
-base.addModuleDependency(
-    'tracks.timeline_thread_track',
-    'timeline_filter');
-base.addModuleDependency(
-    'tracks.timeline_thread_track',
-    'ui');
-base.addModuleStylesheet(
-    'tracks.timeline_thread_track',
-    'tracks.timeline_thread_track');
-base.addModuleDependency(
-    'tracks.timeline_process_track',
-    'tracks.timeline_container_track');
-base.addModuleDependency(
-    'tracks.timeline_process_track',
-    'tracks.timeline_counter_track');
-base.addModuleDependency(
-    'tracks.timeline_process_track',
-    'tracks.timeline_thread_track');
-base.addModuleDependency(
-    'tracks.timeline_process_track',
-    'timeline_filter');
-base.addModuleDependency(
-    'tracks.timeline_process_track',
-    'ui');
-base.addModuleDependency(
-    'tracks.timeline_model_track',
-    'tracks.timeline_container_track');
-base.addModuleDependency(
-    'tracks.timeline_model_track',
-    'tracks.timeline_cpu_track');
-base.addModuleDependency(
-    'tracks.timeline_model_track',
-    'tracks.timeline_process_track');
-base.addModuleDependency(
-    'tracks.timeline_model_track',
-    'ui');
-base.addModuleStylesheet(
-    'tracks.timeline_model_track',
-    'tracks.timeline_model_track');
-base.addModuleDependency(
-    'tracks.timeline_viewport_track',
-    'tracks.timeline_track');
-base.addModuleDependency(
-    'tracks.timeline_viewport_track',
-    'tracks.timeline_canvas_based_track');
-base.addModuleDependency(
-    'tracks.timeline_viewport_track',
-    'ui');
-base.addModuleStylesheet(
-    'tracks.timeline_viewport_track',
-    'tracks.timeline_viewport_track');
+    'tracks.viewport_track',
+    'tracks.viewport_track');
 base.addModuleDependency(
     'timeline',
     'event_target');
@@ -219,19 +327,19 @@ base.addModuleDependency(
     'measuring_stick');
 base.addModuleDependency(
     'timeline',
-    'timeline_filter');
+    'filter');
 base.addModuleDependency(
     'timeline',
-    'timeline_selection');
+    'selection');
 base.addModuleDependency(
     'timeline',
     'timeline_viewport');
 base.addModuleDependency(
     'timeline',
-    'tracks.timeline_model_track');
+    'tracks.model_track');
 base.addModuleDependency(
     'timeline',
-    'tracks.timeline_viewport_track');
+    'tracks.viewport_track');
 base.addModuleDependency(
     'timeline',
     'ui');
@@ -239,11 +347,14 @@ base.addModuleStylesheet(
     'timeline',
     'timeline');
 base.addModuleDependency(
-    'timeline_analysis',
+    'timeline_analysis_view',
+    'analysis.util');
+base.addModuleDependency(
+    'timeline_analysis_view',
     'ui');
 base.addModuleStylesheet(
-    'timeline_analysis',
-    'timeline_analysis');
+    'timeline_analysis_view',
+    'timeline_analysis_view');
 base.addModuleDependency(
     'overlay',
     'ui');
@@ -254,128 +365,149 @@ base.addModuleStylesheet(
     'overlay',
     'overlay');
 base.addModuleDependency(
-    'timeline_category_filter_dialog',
-    'timeline_filter');
+    'category_filter_dialog',
+    'filter');
 base.addModuleDependency(
-    'timeline_category_filter_dialog',
+    'category_filter_dialog',
     'overlay');
 base.addModuleDependency(
-    'timeline_find_control',
+    'find_control',
     'timeline');
 base.addModuleDependency(
-    'timeline_find_control',
-    'timeline_filter');
+    'find_control',
+    'filter');
 base.addModuleDependency(
-    'timeline_find_control',
+    'find_control',
     'overlay');
 base.addModuleDependency(
-    'trace_event_importer',
-    'timeline_model');
+    'importer.trace_event_importer',
+    'model');
 base.addModuleDependency(
-    'trace_event_importer',
-    'timeline_color_scheme');
+    'importer.trace_event_importer',
+    'color_scheme');
 base.addModuleDependency(
-    'linux_perf_bus_parser',
-    'linux_perf_parser');
+    'importer.linux_perf.bus_parser',
+    'importer.linux_perf.parser');
 base.addModuleDependency(
-    'linux_perf_clock_parser',
-    'linux_perf_parser');
+    'importer.linux_perf.clock_parser',
+    'importer.linux_perf.parser');
 base.addModuleDependency(
-    'linux_perf_cpufreq_parser',
-    'linux_perf_parser');
+    'importer.linux_perf.cpufreq_parser',
+    'importer.linux_perf.parser');
 base.addModuleDependency(
-    'linux_perf_drm_parser',
-    'linux_perf_parser');
+    'importer.linux_perf.drm_parser',
+    'importer.linux_perf.parser');
 base.addModuleDependency(
-    'linux_perf_exynos_parser',
-    'linux_perf_parser');
+    'importer.linux_perf.exynos_parser',
+    'importer.linux_perf.parser');
 base.addModuleDependency(
-    'linux_perf_gesture_parser',
-    'linux_perf_parser');
+    'importer.linux_perf.gesture_parser',
+    'importer.linux_perf.parser');
 base.addModuleDependency(
-    'linux_perf_i915_parser',
-    'linux_perf_parser');
+    'importer.linux_perf.i915_parser',
+    'importer.linux_perf.parser');
 base.addModuleDependency(
-    'linux_perf_mali_parser',
-    'linux_perf_parser');
+    'importer.linux_perf.mali_parser',
+    'importer.linux_perf.parser');
 base.addModuleDependency(
-    'linux_perf_power_parser',
-    'linux_perf_parser');
+    'importer.linux_perf.power_parser',
+    'importer.linux_perf.parser');
 base.addModuleDependency(
-    'linux_perf_sched_parser',
-    'linux_perf_parser');
+    'importer.linux_perf.sched_parser',
+    'importer.linux_perf.parser');
 base.addModuleDependency(
-    'linux_perf_workqueue_parser',
-    'linux_perf_parser');
+    'importer.linux_perf.workqueue_parser',
+    'importer.linux_perf.parser');
 base.addModuleDependency(
-    'linux_perf_android_parser',
-    'linux_perf_parser');
+    'importer.linux_perf.android_parser',
+    'importer.linux_perf.parser');
 base.addModuleDependency(
-    'linux_perf_importer',
-    'timeline_model');
+    'importer.linux_perf_importer',
+    'model');
 base.addModuleDependency(
-    'linux_perf_importer',
-    'timeline_color_scheme');
+    'importer.linux_perf_importer',
+    'color_scheme');
 base.addModuleDependency(
-    'linux_perf_importer',
-    'linux_perf_bus_parser');
+    'importer.linux_perf_importer',
+    'importer.linux_perf.bus_parser');
 base.addModuleDependency(
-    'linux_perf_importer',
-    'linux_perf_clock_parser');
+    'importer.linux_perf_importer',
+    'importer.linux_perf.clock_parser');
 base.addModuleDependency(
-    'linux_perf_importer',
-    'linux_perf_cpufreq_parser');
+    'importer.linux_perf_importer',
+    'importer.linux_perf.cpufreq_parser');
 base.addModuleDependency(
-    'linux_perf_importer',
-    'linux_perf_drm_parser');
+    'importer.linux_perf_importer',
+    'importer.linux_perf.drm_parser');
 base.addModuleDependency(
-    'linux_perf_importer',
-    'linux_perf_exynos_parser');
+    'importer.linux_perf_importer',
+    'importer.linux_perf.exynos_parser');
 base.addModuleDependency(
-    'linux_perf_importer',
-    'linux_perf_gesture_parser');
+    'importer.linux_perf_importer',
+    'importer.linux_perf.gesture_parser');
 base.addModuleDependency(
-    'linux_perf_importer',
-    'linux_perf_i915_parser');
+    'importer.linux_perf_importer',
+    'importer.linux_perf.i915_parser');
 base.addModuleDependency(
-    'linux_perf_importer',
-    'linux_perf_mali_parser');
+    'importer.linux_perf_importer',
+    'importer.linux_perf.mali_parser');
 base.addModuleDependency(
-    'linux_perf_importer',
-    'linux_perf_power_parser');
+    'importer.linux_perf_importer',
+    'importer.linux_perf.power_parser');
 base.addModuleDependency(
-    'linux_perf_importer',
-    'linux_perf_sched_parser');
+    'importer.linux_perf_importer',
+    'importer.linux_perf.sched_parser');
 base.addModuleDependency(
-    'linux_perf_importer',
-    'linux_perf_workqueue_parser');
+    'importer.linux_perf_importer',
+    'importer.linux_perf.workqueue_parser');
 base.addModuleDependency(
-    'linux_perf_importer',
-    'linux_perf_android_parser');
+    'importer.linux_perf_importer',
+    'importer.linux_perf.android_parser');
+base.addModuleDependency(
+    'importer.v8.codemap',
+    'importer.v8.splaytree');
+base.addModuleDependency(
+    'importer.v8_log_importer',
+    'model');
+base.addModuleDependency(
+    'importer.v8_log_importer',
+    'slice');
+base.addModuleDependency(
+    'importer.v8_log_importer',
+    'color_scheme');
+base.addModuleDependency(
+    'importer.v8_log_importer',
+    'importer.v8.log_reader');
+base.addModuleDependency(
+    'importer.v8_log_importer',
+    'importer.v8.codemap');
 base.addModuleDependency(
     'timeline_view',
     'timeline');
 base.addModuleDependency(
     'timeline_view',
-    'timeline_analysis');
+    'timeline_analysis_view');
 base.addModuleDependency(
     'timeline_view',
-    'timeline_category_filter_dialog');
+    'category_filter_dialog');
 base.addModuleDependency(
     'timeline_view',
-    'timeline_filter');
+    'filter');
 base.addModuleDependency(
     'timeline_view',
-    'timeline_find_control');
+    'find_control');
 base.addModuleDependency(
     'timeline_view',
     'overlay');
 base.addModuleDependency(
     'timeline_view',
-    'trace_event_importer');
+    'importer.trace_event_importer');
 base.addModuleDependency(
     'timeline_view',
-    'linux_perf_importer');
+    'importer.linux_perf_importer');
+base.addModuleDependency(
+    'timeline_view',
+    'importer.v8_log_importer');
 base.addModuleDependency(
     'timeline_view',
     'settings');
@@ -397,12 +529,6 @@ base.addModuleDependency(
 base.addModuleStylesheet(
     'profiling_view',
     'profiling_view');
-base.addModuleDependency(
-    'timeline_stream_importer',
-    'timeline_model');
-base.addModuleDependency(
-    'timeline_stream_importer',
-    'timeline_slice');
 base.addModuleStylesheet(
     'unittest',
     'unittest');

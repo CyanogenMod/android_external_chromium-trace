@@ -6,11 +6,11 @@ function reload() {
   if (!linuxPerfData)
     return;
 
-  var m = new tracing.TimelineModel();
+  var m = new tracing.Model();
   m.importEvents("[]", true, [linuxPerfData]);
 
   var timelineViewEl = document.querySelector('.view');
-  cr.ui.decorate(timelineViewEl, tracing.TimelineView);
+  tracing.ui.decorate(timelineViewEl, tracing.TimelineView);
   timelineViewEl.model = m;
   timelineViewEl.tabIndex = 1;
   timelineViewEl.timeline.focusElement = timelineViewEl;

@@ -5,10 +5,10 @@
 'use strict';
 
 /**
- * @fileoverview Interactive visualizaiton of TimelineModel objects
- * based loosely on gantt charts. Each thread in the TimelineModel is given a
- * set of TimelineTracks, one per subrow in the thread. The Timeline class
- * acts as a controller, creating the individual tracks, while TimelineTracks
+ * @fileoverview Interactive visualizaiton of Model objects
+ * based loosely on gantt charts. Each thread in the Model is given a
+ * set of Tracks, one per subrow in the thread. The Timeline class
+ * acts as a controller, creating the individual tracks, while Tracks
  * do actual drawing.
  *
  * Visually, the Timeline produces (prettier) visualizations like the following:
@@ -20,17 +20,17 @@
 base.requireStylesheet('timeline');
 base.require('event_target');
 base.require('measuring_stick');
-base.require('timeline_filter');
-base.require('timeline_selection');
+base.require('filter');
+base.require('selection');
 base.require('timeline_viewport');
-base.require('tracks.timeline_model_track');
-base.require('tracks.timeline_viewport_track');
+base.require('tracks.model_track');
+base.require('tracks.viewport_track');
 base.require('ui');
 
 base.exportTo('tracing', function() {
 
-  var TimelineSelection = tracing.TimelineSelection;
-  var TimelineViewport = tracing.TimelineViewport;
+  var Selection = tracing.Selection;
+  var Viewport = tracing.TimelineViewport;
 
   function intersectRect_(r1, r2) {
     var results = new Object;
@@ -48,15 +48,15 @@ base.exportTo('tracing', function() {
   }
 
   /**
-   * Renders a TimelineModel into a div element, making one
-   * TimelineTrack for each subrow in each thread of the model, managing
+   * Renders a Model into a div element, making one
+   * Track for each subrow in each thread of the model, managing
    * overall track layout, and handling user interaction with the
    * viewport.
    *
    * @constructor
    * @extends {HTMLDivElement}
    */
-  var Timeline = base.ui.define('div');
+  var Timeline = tracing.ui.define('div');
 
   Timeline.prototype = {
     __proto__: HTMLDivElement.prototype,
@@ -66,24 +66,24 @@ base.exportTo('tracing', function() {
     decorate: function() {
       this.classList.add('timeline');
 
-      this.categoryFilter_ = new tracing.TimelineCategoryFilter();
+      this.categoryFilter_ = new tracing.CategoryFilter();
 
-      this.viewport_ = new TimelineViewport(this);
+      this.viewport_ = new Viewport(this);
 
       // Add the viewport track.
-      this.viewportTrack_ = new tracks.TimelineViewportTrack();
+      this.viewportTrack_ = new tracing.tracks.ViewportTrack();
       this.viewportTrack_.viewport = this.viewport_;
       this.appendChild(this.viewportTrack_);
 
       this.modelTrackContainer_ = document.createElement('div');
-      this.modelTrackContainer_.className = 'timeline-model-track-container';
+      this.modelTrackContainer_.className = 'model-track-container';
       this.appendChild(this.modelTrackContainer_);
 
-      this.modelTrack_ = new tracks.TimelineModelTrack();
+      this.modelTrack_ = new tracing.tracks.ModelTrack();
       this.modelTrackContainer_.appendChild(this.modelTrack_);
 
       this.dragBox_ = this.ownerDocument.createElement('div');
-      this.dragBox_.className = 'timeline-drag-box';
+      this.dragBox_.className = 'drag-box';
       this.appendChild(this.dragBox_);
       this.hideDragBox_();
 
@@ -100,7 +100,7 @@ base.exportTo('tracing', function() {
       this.lastMouseViewPos_ = {x: 0, y: 0};
       this.maxHeadingWidth_ = 0;
 
-      this.selection_ = new TimelineSelection();
+      this.selection_ = new Selection();
     },
 
     /**
@@ -169,17 +169,17 @@ base.exportTo('tracing', function() {
     setInitialViewport_: function() {
       var w = this.firstCanvas.width;
       var boost =
-          (this.model_.maxTimestamp - this.model_.minTimestamp) * 0.15;
-      this.viewport_.xSetWorldRange(this.model_.minTimestamp - boost,
-                                    this.model_.maxTimestamp + boost,
+          (this.model_.bounds.max - this.model_.bounds.min) * 0.15;
+      this.viewport_.xSetWorldBounds(this.model_.bounds.min - boost,
+                                    this.model_.bounds.max + boost,
                                     w);
     },
 
     /**
-     * @param {TimelineFilter} filter The filter to use for finding matches.
-     * @param {TimelineSelection} selection The selection to add matches to.
+     * @param {Filter} filter The filter to use for finding matches.
+     * @param {Selection} selection The selection to add matches to.
      * @return {Array} An array of objects that match the provided
-     * TimelineTitleFilter.
+     * TitleFilter.
      */
     addAllObjectsMatchingFilterToSelection: function(filter, selection) {
       this.modelTrack_.addAllObjectsMatchingFilterToSelection(filter,
@@ -208,7 +208,7 @@ base.exportTo('tracing', function() {
     get listenToKeys_() {
       if (!this.viewport_.isAttachedToDocument_)
         return false;
-      if (this.activeElement instanceof tracing.TimelineFindControl)
+      if (this.activeElement instanceof tracing.FindControl)
         return false;
       if (!this.focusElement_)
         return true;
@@ -352,7 +352,8 @@ base.exportTo('tracing', function() {
         return;
       var vp = this.viewport_;
       var viewWidth = this.firstCanvas.clientWidth;
-      var curMouseV = this.lastMouseViewPos_.x;
+      var pixelRatio = window.devicePixelRatio || 1;
+      var curMouseV = this.lastMouseViewPos_.x * pixelRatio;
       var curCenterW = vp.xViewToWorld(curMouseV);
       vp.scaleX = vp.scaleX * scale;
       vp.xPanWorldPosToViewPos(curCenterW, curMouseV, viewWidth);
@@ -364,12 +365,12 @@ base.exportTo('tracing', function() {
     zoomToSelection_: function() {
       if (!this.selection)
         return;
-      var range = this.selection.range;
-      var worldCenter = range.min + (range.max - range.min) * 0.5;
-      var worldRange = (range.max - range.min) * 0.5;
-      var boost = worldRange * 0.15;
-      this.viewport_.xSetWorldRange(worldCenter - worldRange - boost,
-                                    worldCenter + worldRange + boost,
+      var bounds = this.selection.bounds;
+      var worldCenter = bounds.min + (bounds.max - bounds.min) * 0.5;
+      var worldBounds = (bounds.max - bounds.min) * 0.5;
+      var boost = worldBounds * 0.15;
+      this.viewport_.xSetWorldBounds(worldCenter - worldBounds - boost,
+                                    worldCenter + worldBounds + boost,
                                     this.firstCanvas.width);
     },
 
@@ -411,8 +412,8 @@ base.exportTo('tracing', function() {
     },
 
     set selection(selection) {
-      if (!(selection instanceof TimelineSelection))
-        throw new Error('Expected TimelineSelection');
+      if (!(selection instanceof Selection))
+        throw new Error('Expected Selection');
 
       // Clear old selection.
       var i;
@@ -428,21 +429,21 @@ base.exportTo('tracing', function() {
     },
 
     setSelectionAndMakeVisible: function(selection, zoomAllowed) {
-      if (!(selection instanceof TimelineSelection))
-        throw new Error('Expected TimelineSelection');
+      if (!(selection instanceof Selection))
+        throw new Error('Expected Selection');
       this.selection = selection;
-      var range = this.selection.range;
-      var size = this.viewport_.xWorldVectorToView(range.max - range.min);
+      var bounds = this.selection.bounds;
+      var size = this.viewport_.xWorldVectorToView(bounds.max - bounds.min);
       if (zoomAllowed && size < 50) {
-        var worldCenter = range.min + (range.max - range.min) * 0.5;
-        var worldRange = (range.max - range.min) * 5;
-        this.viewport_.xSetWorldRange(worldCenter - worldRange * 0.5,
-                                      worldCenter + worldRange * 0.5,
+        var worldCenter = bounds.min + (bounds.max - bounds.min) * 0.5;
+        var worldBounds = (bounds.max - bounds.min) * 5;
+        this.viewport_.xSetWorldBounds(worldCenter - worldBounds * 0.5,
+                                      worldCenter + worldBounds * 0.5,
                                       this.firstCanvas.width);
         return;
       }
 
-      this.viewport_.xPanWorldRangeIntoView(range.min, range.max,
+      this.viewport_.xPanWorldBoundsIntoView(bounds.min, bounds.max,
                                             this.firstCanvas.width);
     },
 
@@ -497,9 +498,12 @@ base.exportTo('tracing', function() {
       this.dragBox_.style.top = finalDragBox.top + 'px';
       this.dragBox_.style.height = finalDragBox.height + 'px';
 
+      var pixelRatio = window.devicePixelRatio || 1;
       var canv = this.firstCanvas;
-      var loWX = this.viewport_.xViewToWorld(loX - canv.offsetLeft);
-      var hiWX = this.viewport_.xViewToWorld(hiX - canv.offsetLeft);
+      var loWX = this.viewport_.xViewToWorld(
+          (loX - canv.offsetLeft) * pixelRatio);
+      var hiWX = this.viewport_.xViewToWorld(
+          (hiX - canv.offsetLeft) * pixelRatio);
 
       var roundedDuration = Math.round((hiWX - loWX) * 100) / 100;
       this.dragBox_.textContent = roundedDuration + 'ms';
@@ -513,12 +517,12 @@ base.exportTo('tracing', function() {
     onGridToggle_: function(left) {
       var tb;
       if (left)
-        tb = this.selection_.range.min;
+        tb = this.selection_.bounds.min;
       else
-        tb = this.selection_.range.max;
+        tb = this.selection_.bounds.max;
 
-      // Shift the timebase left until its just left of minTimestamp.
-      var numInterfvalsSinceStart = Math.ceil((tb - this.model_.minTimestamp) /
+      // Shift the timebase left until its just left of model_.bounds.min.
+      var numInterfvalsSinceStart = Math.ceil((tb - this.model_.bounds.min) /
           this.viewport_.gridStep_);
       this.viewport_.gridTimebase = tb -
           (numInterfvalsSinceStart + 1) * this.viewport_.gridStep_;
@@ -633,20 +637,31 @@ base.exportTo('tracing', function() {
         var hiVX = hiX - canv.offsetLeft;
 
         // Figure out what has been hit.
-        var selection = new TimelineSelection();
+        var selection = new Selection();
         this.modelTrack_.addIntersectingItemsInRangeToSelection(
             loVX, hiVX, loY, hiY, selection);
 
         // Activate the new selection, and zoom if ctrl key held down.
         this.selection = selection;
-        var isMac = navigator.platform.indexOf('Mac') == 0;
-        if ((isMac && e.metaKey) || (!isMac && e.ctrlKey)) {
+        if ((base.isMac && e.metaKey) || (!base.isMac && e.ctrlKey)) {
           this.zoomToSelection_();
         }
       }
     },
 
     onDblClick_: function(e) {
+      var modelTrackContainerRect =
+                              this.modelTrackContainer_.getBoundingClientRect();
+      var clipBounds = {
+        left: modelTrackContainerRect.left,
+        right: modelTrackContainerRect.right,
+      };
+      var trackTitleWidth = parseInt(this.modelTrack_.headingWidth);
+      clipBounds.left = clipBounds.left + trackTitleWidth;
+
+      if (e.clientX < clipBounds.left || e.clientX > clipBounds.right)
+        return;
+
       var canv = this.firstCanvas;
 
       var scale = 4;
@@ -658,8 +673,8 @@ base.exportTo('tracing', function() {
   };
 
   /**
-   * The TimelineModel being viewed by the timeline
-   * @type {TimelineModel}
+   * The Model being viewed by the timeline
+   * @type {Model}
    */
   base.defineProperty(Timeline, 'model', base.PropertyKind.JS);
 

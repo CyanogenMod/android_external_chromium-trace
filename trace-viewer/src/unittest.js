@@ -12,6 +12,11 @@
 base.requireStylesheet('unittest');
 base.exportTo('unittest', function() {
 
+  var NOCATCH_MODE = false;
+
+  // Uncomment the line below to make unit test failures throw exceptions.
+  //NOCATCH_MODE = true;
+
   function createTestCaseDiv(testName, opt_href, opt_alwaysShowErrorLink) {
     var el = document.createElement('test-case');
 
@@ -86,7 +91,6 @@ base.exportTo('unittest', function() {
       el.appendChild(titleEl);
     }
     var contentEl = opt_element || document.createElement('div');
-    contentEl.style.border = '1px  solid black';
     el.appendChild(contentEl);
 
     el.__defineGetter__('contents', function() {
@@ -418,6 +422,22 @@ base.exportTo('unittest', function() {
       throw new TestError(message);
     },
 
+    assertApproxEquals: function(a, b, opt_epsilon, opt_message) {
+      if (a == b)
+        return;
+      var epsilon = opt_epsilon || 0.000001; // 6 digits.
+      a = Math.abs(a);
+      b = Math.abs(b);
+      var delta = Math.abs(a - b);
+      var sum = a + b;
+      var relative_error = delta / sum;
+      if (relative_error < epsilon)
+        return;
+      var message = opt_message || 'Expect ' + a + ' and ' + b +
+        ' to be within ' + epsilon + ' was ' + relative_error;
+      throw new TestError(message);
+    },
+
     setUp: function() {
     },
 
@@ -427,28 +447,34 @@ base.exportTo('unittest', function() {
         this.results_ = results;
         results.willRunTest(this);
 
-        // Set up.
-        try {
+        if (NOCATCH_MODE) {
           this.setUp();
-        } catch (e) {
-          results.addError(e);
-          return;
-        }
-
-        // Run.
-        try {
           this.testMethod_();
-        } catch (e) {
-          results.addError(e);
-        }
-
-        // Tear down.
-        try {
           this.tearDown();
-        } catch (e) {
-          if (typeof e == 'string')
-            e = new TestError(e);
-          results.addError(e);
+        } else {
+          // Set up.
+          try {
+            this.setUp();
+          } catch (e) {
+            results.addError(e);
+            return;
+          }
+
+          // Run.
+          try {
+            this.testMethod_();
+          } catch (e) {
+            results.addError(e);
+          }
+
+          // Tear down.
+          try {
+            this.tearDown();
+          } catch (e) {
+            if (typeof e == 'string')
+              e = new TestError(e);
+            results.addError(e);
+          }
         }
       } finally {
         this.unbindGlobals_();
@@ -489,7 +515,7 @@ base.exportTo('unittest', function() {
       tests.push(testCase);
     }
     tests.sort(function(a, b) {
-      return a.testName.localeCompare(b.testName);
+      return a.testName < b.testName;
     });
     return tests;
   }
