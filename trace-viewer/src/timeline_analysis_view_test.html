@@ -31,13 +31,13 @@ found in the LICENSE file.
     base.require('tracks.counter_track');
     base.require('tracks.slice_track');
     base.require('tracks.thread_track');
-    base.require('timeline'); /* TODO(nduca): reduce dependency */
+    base.require('timeline_track_view'); /* TODO(nduca): reduce dependency */
   </script>
   <script>
     'use strict';
 
-    var Counter = tracing.Counter;
-    var Thread = tracing.Thread;
+    var Counter = tracing.model.Counter;
+    var Thread = tracing.model.Thread;
     var AnalysisView = tracing.TimelineAnalysisView;
     var Model = tracing.Model;
     var ThreadTrack = tracing.tracks.ThreadTrack;

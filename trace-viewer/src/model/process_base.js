@@ -9,12 +9,12 @@
  */
 base.require('range');
 base.require('guid');
-base.require('thread');
-base.require('counter');
-base.exportTo('tracing', function() {
+base.require('model.thread');
+base.require('model.counter');
+base.exportTo('tracing.model', function() {
 
-  var Thread = tracing.Thread;
-  var Counter = tracing.Counter;
+  var Thread = tracing.model.Thread;
+  var Counter = tracing.model.Counter;
 
   /**
    * The ProcessBase is an partial base class, upon which Kernel
@@ -66,6 +66,16 @@ base.exportTo('tracing', function() {
       for (var tid in this.threads) {
         var thread = this.threads[tid];
         thread.autoCloseOpenSlices(opt_maxTimestamp);
+      }
+    },
+
+    /**
+     * Merge slices from the kernel with those from userland for each thread.
+     */
+    mergeKernelWithUserland: function() {
+      for (var tid in this.threads) {
+        var thread = this.threads[tid];
+        thread.mergeKernelWithUserland();
       }
     },
 

@@ -9,16 +9,16 @@
  */
 base.require('range');
 base.require('guid');
-base.require('slice');
-base.require('slice_group');
-base.require('async_slice_group');
-base.require('sample');
-base.exportTo('tracing', function() {
+base.require('model.slice');
+base.require('model.slice_group');
+base.require('model.async_slice_group');
+base.require('model.sample');
+base.exportTo('tracing.model', function() {
 
-  var Slice = tracing.Slice;
-  var SliceGroup = tracing.SliceGroup;
-  var AsyncSlice = tracing.AsyncSlice;
-  var AsyncSliceGroup = tracing.AsyncSliceGroup;
+  var Slice = tracing.model.Slice;
+  var SliceGroup = tracing.model.SliceGroup;
+  var AsyncSlice = tracing.model.AsyncSlice;
+  var AsyncSliceGroup = tracing.model.AsyncSliceGroup;
 
   /**
    * A ThreadSlice represents an interval of time on a thread resource
@@ -65,6 +65,7 @@ base.exportTo('tracing', function() {
     this.tid = tid;
     this.cpuSlices = undefined;
     this.samples_ = [];
+    this.kernelSlices = new SliceGroup();
     this.asyncSlices = new AsyncSliceGroup();
     this.bounds = new base.Range();
   }
@@ -121,8 +122,8 @@ base.exportTo('tracing', function() {
         }
       }
       var colorId = tracing.getStringColorId(title);
-      var sample = new tracing.Sample(category, title, colorId, ts,
-                                              opt_args ? opt_args : {});
+      var sample = new tracing.model.Sample(category, title, colorId, ts,
+                                            opt_args ? opt_args : {});
       this.samples_.push(sample);
       return sample;
     },
@@ -163,6 +164,7 @@ base.exportTo('tracing', function() {
         }
       }
 
+      this.kernelSlices.shiftTimestampsForward(amount);
       this.asyncSlices.shiftTimestampsForward(amount);
     },
 
@@ -177,6 +179,8 @@ base.exportTo('tracing', function() {
         return false;
       if (this.cpuSlices && this.cpuSlices.length)
         return false;
+      if (this.kernelSlices.length)
+        return false;
       if (this.asyncSlices.length)
         return false;
       if (this.samples_.length)
@@ -190,6 +194,9 @@ base.exportTo('tracing', function() {
      */
     updateBounds: function() {
       SliceGroup.prototype.updateBounds.call(this);
+
+      this.kernelSlices.updateBounds();
+      this.bounds.addRange(this.kernelSlices.bounds);
 
       this.asyncSlices.updateBounds();
       this.bounds.addRange(this.asyncSlices.bounds);
@@ -209,10 +216,21 @@ base.exportTo('tracing', function() {
     addCategoriesToDict: function(categoriesDict) {
       for (var i = 0; i < this.slices.length; i++)
         categoriesDict[this.slices[i].category] = true;
+      for (var i = 0; i < this.kernelSlices.length; i++)
+        categoriesDict[this.kernelSlices.slices[i].category] = true;
       for (var i = 0; i < this.asyncSlices.length; i++)
         categoriesDict[this.asyncSlices.slices[i].category] = true;
       for (var i = 0; i < this.samples_.length; i++)
         categoriesDict[this.samples_[i].category] = true;
+    },
+
+    mergeKernelWithUserland: function() {
+      if (this.kernelSlices.length > 0) {
+        var newSlices = SliceGroup.merge(this, this.kernelSlices);
+        this.slices = newSlices.slices;
+        this.kernelSlices = new SliceGroup();
+        this.updateBounds();
+      }
     },
 
     /**
