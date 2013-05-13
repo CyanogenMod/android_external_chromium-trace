@@ -137,15 +137,23 @@ def main():
     result = adb.poll()
 
   # Read and buffer the data portion of the output.
-  while result is None:
+  while True:
     ready = select.select([adb.stdout, adb.stderr], [], [adb.stdout, adb.stderr])
+    keepReading = False
     if adb.stderr in ready[0]:
       err = os.read(adb.stderr.fileno(), 4096)
-      sys.stderr.write(err)
-      sys.stderr.flush()
+      if len(err) > 0:
+        keepReading = True
+        sys.stderr.write(err)
+        sys.stderr.flush()
     if adb.stdout in ready[0]:
       out = os.read(adb.stdout.fileno(), 4096)
-      data.append(out)
+      if len(out) > 0:
+        keepReading = True
+        data.append(out)
+
+    if result is not None and not keepReading:
+      break
 
     result = adb.poll()
 
