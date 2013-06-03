@@ -15,12 +15,46 @@ import errno, optparse, os, select, subprocess, sys, time, zlib
 flattened_css_file = 'style.css'
 flattened_js_file = 'script.js'
 
+class OptionParserIgnoreErrors(optparse.OptionParser):
+  def error(self, msg):
+    pass
+
+  def exit(self):
+    pass
+
+  def print_usage(self):
+    pass
+
+  def print_help(self):
+    pass
+
+  def print_version(self):
+    pass
+
+def get_device_sdk_version():
+  getprop_args = ['adb', 'shell', 'getprop', 'ro.build.version.sdk']
+
+  parser = OptionParserIgnoreErrors()
+  parser.add_option('-e', '--serial', dest='device_serial', type='string')
+  options, args = parser.parse_args()
+  if options.device_serial is not None:
+    getprop_args[1:1] = ['-s', options.device_serial]
+
+  version = subprocess.check_output(getprop_args)
+
+  return int(version)
+
 def add_adb_serial(command, serial):
   if serial != None:
     command.insert(1, serial)
     command.insert(1, '-s')
 
 def main():
+  device_sdk_version = get_device_sdk_version()
+  if device_sdk_version < 18:
+    legacy_script = os.path.join(os.path.dirname(sys.argv[0]), 'systrace-legacy.py')
+    os.execv(legacy_script, sys.argv)
+
   usage = "Usage: %prog [options] [category1 [category2 ...]]"
   desc = "Example: %prog -b 32768 -t 15 gfx input view sched freq"
   parser = optparse.OptionParser(usage=usage, description=desc)
