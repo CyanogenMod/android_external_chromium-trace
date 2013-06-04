@@ -40,9 +40,16 @@ def get_device_sdk_version():
   if options.device_serial is not None:
     getprop_args[1:1] = ['-s', options.device_serial]
 
-  version = subprocess.check_output(getprop_args)
+  adb = subprocess.Popen(getprop_args, stdout=subprocess.PIPE,
+                         stderr=subprocess.PIPE)
+  out, err = adb.communicate()
+  if adb.returncode != 0:
+    print >> sys.stderr, 'Error querying device SDK-version:'
+    print >> sys.stderr, err
+    sys.exit(1)
 
-  return int(version)
+  version = int(out)
+  return version
 
 def add_adb_serial(command, serial):
   if serial != None:
