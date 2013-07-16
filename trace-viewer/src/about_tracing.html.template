@@ -7,20 +7,22 @@ found in the LICENSE file.
 -->
 <WARNING_MESSAGE></WARNING_MESSAGE>
 <head i18n-values="dir:textdirection;">
+<title>chrome://tracing</title>
 <style>
 html, body {
   height: 100%;
 }
 
 body {
-  display: -webkit-box;
   -webkit-box-orient: vertical;
-  padding: 0px;
+  display: -webkit-box;
   margin: 0;
+  padding: 0;
 }
 
 </style>
 <STYLE_SHEET_CONTENTS></STYLE_SHEET_CONTENTS>
+<TEMPLATE_CONTENTS></TEMPLATE_CONTENTS>
 <script src="chrome://tracing/tracing.js"></script>
 </head>
 <body>

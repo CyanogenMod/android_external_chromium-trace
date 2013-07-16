@@ -91,11 +91,13 @@ class CSSChecker(object):
     def milliseconds_for_small_times(line):
       return re.search(small_seconds, line)
 
-    def no_data_uris_in_source_files(line):
-      return re.search(r'\(\s*\'?\s*data:', line)
-
     def one_rule_per_line(line):
-      return re.search(r'[_a-zA-Z0-9-](?<!data):(?!//)[^;]+;\s*[^ }]\s*', line)
+      match = re.search(r'[_a-zA-Z0-9-](?<!data):(?!//)[^;]+;\s*[^ }]\s*', line)
+      if match:
+        data_match = re.search(r'url\(data', match.string)
+        if data_match:
+          return False
+      return match
 
     any_reg = re.compile(r':(?:-webkit-)?any\(.*?\)', re.DOTALL)
     multi_sels = re.compile(r'(?:}[\n\s]*)?([^,]+,(?=[^{}]+?{).*[,{])\s*$',
@@ -166,9 +168,6 @@ class CSSChecker(object):
           'test': milliseconds_for_small_times,
           'after': suggest_ms_from_s,
         },
-        { 'desc': 'Don\'t use data URIs in source files. Use grit instead.',
-          'test': no_data_uris_in_source_files,
-        },
         { 'desc': 'One rule per line (what not to do: color: red; margin: 0;).',
           'test': one_rule_per_line,
         },
@@ -188,8 +187,11 @@ class CSSChecker(object):
     ]
 
     results = []
-    affected_files = self.input_api.AffectedFiles(include_deletes=False,
-                                                  file_filter=self.file_filter)
+    try: # Workaround AffectedFiles exploding on deleted files.
+      affected_files = self.input_api.AffectedFiles(include_deletes=False,
+                                                    file_filter=self.file_filter)
+    except:
+      affected_files = []
     files = []
     for f in affected_files:
       # Remove all /*comments*/, @at-keywords, and grit <if|include> tags; we're

@@ -162,9 +162,13 @@ class JSChecker(object):
 
     results = []
 
-    affected_files = self.input_api.change.AffectedFiles(
-        file_filter=self.file_filter,
-        include_deletes=False)
+    try:
+      affected_files = self.input_api.change.AffectedFiles(
+          file_filter=self.file_filter,
+          include_deletes=False)
+    except:
+      affected_files = []
+
     affected_js_files = filter(lambda f: f.LocalPath().endswith('.js'),
                                affected_files)
     for f in affected_js_files:
@@ -182,6 +186,8 @@ class JSChecker(object):
         ])
 
       # Use closure_linter to check for several different errors
+      import gflags as flags
+      flags.FLAGS.strict = True
       error_handler = ErrorHandlerImpl(self.input_api.re)
       js_checker = checker.JavaScriptStyleChecker(error_handler)
       js_checker.Check(self.input_api.os_path.join(

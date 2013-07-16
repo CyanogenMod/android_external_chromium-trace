@@ -1,170 +1,119 @@
 <!DOCTYPE html>
 <html>
 <!--
-Copyright (c) 2012 The Chromium Authors. All rights reserved.
+Copyright (c) 2013 The Chromium Authors. All rights reserved.
 Use of this source code is governed by a BSD-style license that can be
 found in the LICENSE file.
 -->
 <head>
-<title>All Tracing Tests</title>
-<script>
-  tests = [
-    'category_filter_dialog_test.html',
-    'filter_test.html',
-    'find_control_test.html',
-    'overlay_test.html',
-    'profiling_view_test.html',
-    'range_test.html',
-    'selection_test.html',
-    'settings_test.html',
-    'timeline_analysis_view_test.html',
-    'timeline_test.html',
-    'timeline_view_test.html',
-    'timeline_viewport_test.html',
-    'ui_test.html',
-    'unittest_test.html',
-
-    'model_test.html',
-    'model/async_slice_group_test.html',
-    'model/counter_test.html',
-    'model/cpu_test.html',
-    'model/process_base_test.html',
-    'model/process_test.html',
-    'model/slice_group_test.html',
-    'model/thread_test.html',
-
-    'importer/linux_perf_importer_test.html',
-    'importer/linux_perf/android_parser_test.html',
-    'importer/linux_perf/bus_parser_test.html',
-    'importer/linux_perf/clock_parser_test.html',
-    'importer/linux_perf/cpufreq_parser_test.html',
-    'importer/linux_perf/disk_parser_test.html',
-    'importer/linux_perf/drm_parser_test.html',
-    'importer/linux_perf/exynos_parser_test.html',
-    'importer/linux_perf/gesture_parser_test.html',
-    'importer/linux_perf/i915_parser_test.html',
-    'importer/linux_perf/kfunc_parser_test.html',
-    'importer/linux_perf/mali_parser_test.html',
-    'importer/linux_perf/power_parser_test.html',
-    'importer/linux_perf/sched_parser_test.html',
-    'importer/linux_perf/workqueue_parser_test.html',
-    'importer/timeline_stream_importer_test.html',
-    'importer/trace_event_importer_test.html',
-    'importer/v8_log_importer_test.html',
-
-    'tracks/async_slice_group_track_test.html',
-    'tracks/cpu_track_test.html',
-    'tracks/counter_track_test.html',
-    'tracks/slice_group_track_test.html',
-    'tracks/slice_track_test.html',
-    'tracks/thread_track_test.html',
-    'tracks/ruler_track_test.html',
-
-    'analysis/counter_selection_analysis_test.html',
-    'analysis/selection_analysis_test.html',
-    'analysis/slice_selection_analysis_test.html',
-    'analysis/slice_group_selection_analysis_test.html',
-    'analysis/single_counter_selection_analysis_test.html',
-    'analysis/single_slice_selection_analysis_test.html',
-  ];
-</script>
-<style>
-  h1 {
-      font-family: sans-serif;
-      font-size: 18pt;
-  }
-</style>
-<script src="base.js"></script>
-<script>
-  base.require('unittest');
-</script>
-</head>
-<body>
-  <h1>Trace-Viewer Tests</h3>
-
-  <div class="unittest">Interactive tests: <a href="interactive_tests.html" class="unittest-error-link">Run manually</a></div>
-  <br>
-
+  <title>All Tracing Tests</title>
+  <script src="/src/base.js"></script>
   <script>
-  function runTest(runner, testCaseEl, test) {
-    testCaseEl.status = 'RUNNING'
+    base.require('base.unittest');
+    base.require('base.settings');
+  </script>
+  <link rel="shortcut icon" href="data:image/x-icon;base64," type="image/x-icon">
+  <script>
+    function getAsync(url, cb) {
+      var req = new XMLHttpRequest();
+      req.open('GET', url, true);
+      req.onreadystatechange = function(aEvt) {
+        if (req.readyState == 4) {
+          window.setTimeout(function() {
+            if (req.status == 200) {
+              cb(req.responseText);
+            } else {
+              console.log('Failed to load ' + url);
+            }
+          }, 0);
+        }
+      };
+      req.send(null);
+    }
 
-    var iframe = document.createElement('iframe');
-    iframe.src = test;
-    iframe.style.position = 'fixed';
-    iframe.style.visibility = 'hidden';
-    document.body.appendChild(iframe);
-    iframe.contentWindow.addEventListener('error', function(msg, url, lineNumber) {
-      if (iframe.contentWindow.G_testRunner)
-        return false;
+    function launchTests() {
+      var format = document.getElementById('short-format');
+      format.checked = localStorage.getItem('testing::short-format') === 'true';
+      format.addEventListener('click', function(ev) {
+        localStorage.setItem('testing::short-format', ev.target.checked);
+        base.unittest.showCondensed(ev.target.checked);
+      });
+      base.unittest.showCondensed(format.checked);
 
-      if (iframe.contentWindow.errorsCaughtByTestHarness)
-        return false;
+      var stats = document.getElementById('stats');
 
-      iframe.contentWindow.errorsCaughtByTestHarness = [
-          {msg: msg, url: url, lineNumber: lineNumber}];
-      return false;
+      var suite = undefined;
+      var tests = [];
+
+      // Note, this is nieve, but works for our purposes. Would explode on
+      // encoded &'s.
+      var queryParams = window.location.search.substring(1).split('&');
+      queryParams.forEach(function(param) {
+        var parts = param.split('=');
+        if (parts[0] === 'suite')
+          suite = parts[1];
+        else if (parts[0] === 'test')
+          tests.push(parts[1]);
+      });
+
+      if (suite !== undefined) {
+        base.unittest.Suites(['/src/' + suite + '_test.js'], tests);
+      } else {
+        getAsync('/json/tests', function(data) {
+          base.unittest.Suites(JSON.parse(data), tests);
+        });
+      }
+    }
+
+    function launchTestsIfAvailable() {
+      if (base.unittest === undefined ||
+          base.unittest.showCondensed === undefined) {
+        window.setTimeout(launchTestsIfAvailable, 100);
+        return;
+      }
+
+      launchTests();
+    }
+
+    document.addEventListener('DOMContentLoaded', function() {
+      launchTestsIfAvailable();
     });
 
-    function checkForDone() {
-      if (!iframe.contentWindow) {
-        setTimeout(checkForDone, 100);
-        return;
-      }
-
-      if (iframe.contentWindow.errorsCaughtByTestHarness &&
-        iframe.contentWindow.errorsCaughtByTestHarness.length) {
-        testCaseEl.status = 'FAILED'
-        return;
-      }
-
-      if (!iframe.contentWindow.G_testRunner) {
-        setTimeout(checkForDone, 100);
-        return;
-      }
-
-      var runner = iframe.contentWindow.G_testRunner;
-      if (!runner.done) {
-        setTimeout(checkForDone, 100);
-        return;
-      }
-
-      var stats = runner.computeResultStats();
-      if (stats.numTestsRun && !stats.numTestsWithErrors)
-        testCaseEl.status = 'PASSED'
-      else
-        testCaseEl.status = 'FAILED'
-    }
-    setTimeout(checkForDone, 0);
-  }
-
-  function run() {
-    var resultsEl = document.createElement('div');
-    resultsEl.className = 'unittest';
-    document.body.appendChild(resultsEl);
-
-    var numPassed = 0;
-    var numFailures = 0;
-    var runner = {
-      addFailedTest: function() {
-        numFailures++;
-      },
-      addPassedTest: function() {
-        numPassed++;
-      }
-    };
-    function begin() {
-      for (var i = 0; i < tests.length; i++) {
-        (function() {
-          var testCaseEl = unittest.createTestCaseDiv_(tests[i], tests[i], true);
-          resultsEl.appendChild(testCaseEl);
-          runTest(runner, testCaseEl, tests[i]);
-        })();
-      }
-    }
-    begin();
-  }
-  document.addEventListener('DOMContentLoaded', run);
   </script>
+</head>
+
+<body id="test-harness">
+  <h1>Trace-Viewer Tests</h3>
+
+  <div id="stats">
+    <br />
+  </div>
+
+  <div id='individual-tests'>
+    <div class="unittest">
+      View a trace file:
+      <a href="/examples/trace_viewer.html"
+          class="unittest-error-link">Trace viewer</a>
+    </div>
+    <div class="unittest">
+      Record Selection Interactive Tests:
+      <a href="/src/tracing/record_selection_dialog_interactive_tests.html"
+          class="unittest-error-link">Run manually</a>
+    </div>
+    short format <input type='checkbox' id='short-format' />
+  </div>
+
+  <div id='messages'>
+    <h1>Warning</h1>
+    <ul id='message-list'></ul>
+  </div>
+
+  <div id='test-results'>
+  </div>
+
+  <div id='exceptions'>
+    <h1>Exceptions</h1>
+    <ol id="exception-list"></ol>
+  </div>
 </body>
 </html>

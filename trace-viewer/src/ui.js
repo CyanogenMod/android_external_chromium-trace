@@ -2,7 +2,9 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-base.exportTo('tracing.ui', function() {
+'use strict';
+
+base.exportTo('ui', function() {
 
   /**
    * Decorates elements as an instance of a class.
@@ -26,24 +28,12 @@ base.exportTo('tracing.ui', function() {
   }
 
   /**
-   * Helper function for creating new element for define.
-   */
-  function createElementHelper(tagName, opt_bag) {
-    // Allow passing in ownerDocument to create in a different document.
-    var doc;
-    if (opt_bag && opt_bag.ownerDocument)
-      doc = opt_bag.ownerDocument;
-    else
-      doc = base.doc;
-    return doc.createElement(tagName);
-  }
-
-  /**
-   * Creates the constructor for a UI element class.
+   * Defines a tracing UI component, a function that can be called to construct
+   * the component.
    *
-   * Usage:
+   * Base class:
    * <pre>
-   * var List = tracing.ui.define('list');
+   * var List = ui.define('list');
    * List.prototype = {
    *   __proto__: HTMLUListElement.prototype,
    *   decorate: function() {
@@ -53,37 +43,65 @@ base.exportTo('tracing.ui', function() {
    * };
    * </pre>
    *
-   * @param {string|Function} tagNameOrFunction The tagName or
-   *     function to use for newly created elements. If this is a function it
-   *     needs to return a new element when called.
-   * @return {function(Object=):Element} The constructor function which takes
-   *     an optional property bag. The function also has a static
-   *     {@code decorate} method added to it.
+   * Derived class:
+   * <pre>
+   * var CustomList = ui.define('custom-list', List);
+   * CustomList.prototype = {
+   *   __proto__: List.prototype,
+   *   decorate: function() {
+   *     ...
+   *   },
+   *   ...
+   * };
+   * </pre>
+   *
+   * @param {string} tagName The tagName of the newly created subtype. If
+   *     subclassing, this is used for debugging. If not subclassing, then it is
+   *     the tag name that will be created by the component.
+   * @param {function=} opt_parentConstructor The parent class for this new
+   *     element, if subclassing is desired. If provided, the parent class must
+   *     be also a function created by ui.define.
+   * @return {function(Object=):Element} The newly created component
+   *     constructor.
    */
-  function define(tagNameOrFunction) {
-    var createFunction, tagName;
-    if (typeof tagNameOrFunction == 'function') {
-      createFunction = tagNameOrFunction;
-      tagName = '';
-    } else {
-      createFunction = createElementHelper;
-      tagName = tagNameOrFunction;
+  function define(tagName, opt_parentConstructor) {
+    if (typeof tagName == 'function') {
+      throw new Error('Passing functions as tagName is deprecated. Please ' +
+                      'use (tagName, opt_parentConstructor) to subclass');
     }
+
+    var tagName = tagName.toLowerCase();
+    if (opt_parentConstructor && !opt_parentConstructor.tagName)
+      throw new Error('opt_parentConstructor was not created by ui.define');
 
     /**
      * Creates a new UI element constructor.
-     * @param {Object=} opt_propertyBag Optional bag of properties to set on the
-     *     object after created. The property {@code ownerDocument} is special
-     *     cased and it allows you to create the element in a different
-     *     document than the default.
+     * Arguments passed to the constuctor are provided to the decorate method.
+     * You will need to call the parent elements decorate method from within
+     * your decorate method and pass any required parameters.
      * @constructor
      */
-    function f(opt_propertyBag) {
-      var el = createFunction(tagName, opt_propertyBag);
-      f.decorate(el);
-      for (var propertyName in opt_propertyBag) {
-        el[propertyName] = opt_propertyBag[propertyName];
+    function f() {
+      if (opt_parentConstructor &&
+          f.prototype.__proto__ != opt_parentConstructor.prototype) {
+        throw new Error(
+            tagName + ' prototye\'s __proto__ field is messed up. ' +
+            'It MUST be the prototype of ' + opt_parentConstructor.tagName);
       }
+
+      // Walk up the parent constructors until we can find the type of tag
+      // to create.
+      var tag = tagName;
+      if (opt_parentConstructor) {
+        var parent = opt_parentConstructor;
+        while (parent && parent.tagName) {
+          tag = parent.tagName;
+          parent = parent.parentConstructor;
+        }
+      }
+
+      var el = base.doc.createElement(tag);
+      f.decorate.call(this, el, arguments);
       return el;
     }
 
@@ -93,82 +111,37 @@ base.exportTo('tracing.ui', function() {
      */
     f.decorate = function(el) {
       el.__proto__ = f.prototype;
-      el.decorate();
+      el.decorate.apply(el, arguments[1]);
+    };
+
+    f.tagName = tagName;
+    f.parentConstructor = (opt_parentConstructor ? opt_parentConstructor :
+                                                   undefined);
+    f.toString = function() {
+      if (!f.parentConstructor)
+        return f.tagName;
+      return f.parentConstructor.toString() + '::' + f.tagName;
     };
 
     return f;
   }
 
-  /**
-   * Input elements do not grow and shrink with their content. This is a simple
-   * (and not very efficient) way of handling shrinking to content with support
-   * for min width and limited by the width of the parent element.
-   * @param {HTMLElement} el The element to limit the width for.
-   * @param {number} parentEl The parent element that should limit the size.
-   * @param {number} min The minimum width.
-   */
-  function limitInputWidth(el, parentEl, min) {
-    // Needs a size larger than borders
-    el.style.width = '10px';
-    var doc = el.ownerDocument;
-    var win = doc.defaultView;
-    var computedStyle = win.getComputedStyle(el);
-    var parentComputedStyle = win.getComputedStyle(parentEl);
-    var rtl = computedStyle.direction == 'rtl';
+  function elementIsChildOf(el, potentialParent) {
+    if (el == potentialParent)
+      return false;
 
-    // To get the max width we get the width of the treeItem minus the position
-    // of the input.
-    var inputRect = el.getBoundingClientRect();  // box-sizing
-    var parentRect = parentEl.getBoundingClientRect();
-    var startPos = rtl ? parentRect.right - inputRect.right :
-        inputRect.left - parentRect.left;
-
-    // Add up border and padding of the input.
-    var inner = parseInt(computedStyle.borderLeftWidth, 10) +
-        parseInt(computedStyle.paddingLeft, 10) +
-        parseInt(computedStyle.paddingRight, 10) +
-        parseInt(computedStyle.borderRightWidth, 10);
-
-    // We also need to subtract the padding of parent to prevent it to overflow.
-    var parentPadding = rtl ? parseInt(parentComputedStyle.paddingLeft, 10) :
-        parseInt(parentComputedStyle.paddingRight, 10);
-
-    var max = parentEl.clientWidth - startPos - inner - parentPadding;
-
-    function limit() {
-      if (el.scrollWidth > max) {
-        el.style.width = max + 'px';
-      } else {
-        el.style.width = 0;
-        var sw = el.scrollWidth;
-        if (sw < min) {
-          el.style.width = min + 'px';
-        } else {
-          el.style.width = sw + 'px';
-        }
-      }
+    var cur = el;
+    while (cur.parentNode) {
+      if (cur == potentialParent)
+        return true;
+      cur = cur.parentNode;
     }
-
-    el.addEventListener('input', limit);
-    limit();
-  }
-
-  /**
-   * Takes a number and spits out a value CSS will be happy with. To avoid
-   * subpixel layout issues, the value is rounded to the nearest integral value.
-   * @param {number} pixels The number of pixels.
-   * @return {string} e.g. '16px'.
-   */
-  function toCssPx(pixels) {
-    if (!window.isFinite(pixels))
-      console.error('Pixel value is not a number: ' + pixels);
-    return Math.round(pixels) + 'px';
-  }
+    return false;
+  };
 
   return {
     decorate: decorate,
     define: define,
-    limitInputWidth: limitInputWidth,
-    toCssPx: toCssPx
+    elementIsChildOf: elementIsChildOf
   };
 });
