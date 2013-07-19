@@ -219,6 +219,9 @@ def main():
         # Indicate to the user that the data download is complete.
         print " done\n"
 
+      html_prefix = read_asset(script_dir, 'prefix.html')
+      html_suffix = read_asset(script_dir, 'suffix.html')
+
       html_file = open(html_filename, 'w')
       html_file.write(html_prefix % (css, js, templates))
 
@@ -238,6 +241,9 @@ def main():
   else: # i.e. result != 0
     print >> sys.stderr, 'adb returned error code %d' % result
     sys.exit(1)
+
+def read_asset(src_dir, filename):
+  return open(os.path.join(src_dir, filename)).read()
 
 def get_assets(src_dir, build_dir):
   sys.path.append(build_dir)
@@ -269,52 +275,6 @@ def get_assets(src_dir, build_dir):
 
   return (js_files, js_flattenizer, css_files, templates)
 
-html_prefix = """<!DOCTYPE HTML>
-<html>
-<head i18n-values="dir:textdirection;">
-<meta charset="utf-8"/>
-<title>Android System Trace</title>
-%s
-%s
-<script language="javascript">
-document.addEventListener('DOMContentLoaded', function() {
-  if (!linuxPerfData)
-    return;
-
-  var m = new tracing.TraceModel(linuxPerfData);
-  var timelineViewEl = document.querySelector('.view');
-  ui.decorate(timelineViewEl, tracing.TimelineView);
-  timelineViewEl.model = m;
-  timelineViewEl.tabIndex = 1;
-  timelineViewEl.timeline.focusElement = timelineViewEl;
-});
-</script>
-<style>
-  .view {
-    overflow: hidden;
-    position: absolute;
-    top: 0;
-    bottom: 0;
-    left: 0;
-    right: 0;
-  }
-</style>
-</head>
-<body>
-  <div>%s</div>
-  <div class="view">
-  </div>
-<!-- BEGIN TRACE -->
-  <script>
-  var linuxPerfData = "\\
-"""
-
-html_suffix = """\\n";
-  </script>
-<!-- END TRACE -->
-</body>
-</html>
-"""
 
 compiled_css_tag = """<style type="text/css">%s</style>"""
 compiled_js_tag = """<script language="javascript">%s</script>"""
