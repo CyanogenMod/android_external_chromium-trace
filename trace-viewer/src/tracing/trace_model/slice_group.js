@@ -64,6 +64,14 @@ base.exportTo('tracing.trace_model', function() {
     },
 
     /**
+     * Push an instant event into the slice list.
+     * @param {tracing.trace_model.InstantEvent} instantEvent The instantEvent.
+     */
+    pushInstantEvent: function(instantEvent) {
+      this.slices.push(instantEvent);
+    },
+
+    /**
      * Opens a new slice in the group's slices.
      *
      * Calls to beginSlice and
@@ -273,7 +281,7 @@ base.exportTo('tracing.trace_model', function() {
         openB[i] = newSlice;
         result.pushSlice(newSlice);
       }
-    }
+    };
 
     var closeOpenSlices = function(upTo) {
       while (openA.length > 0 || openB.length > 0) {
@@ -294,7 +302,7 @@ base.exportTo('tracing.trace_model', function() {
           openB.pop();
         }
       }
-    }
+    };
 
     while (idxA >= 0 || idxB >= 0) {
       var sA = slicesA[idxA];

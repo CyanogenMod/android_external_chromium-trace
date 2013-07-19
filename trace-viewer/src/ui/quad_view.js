@@ -13,7 +13,10 @@ base.require('ui');
 base.require('ui.quad_view_viewport');
 
 base.exportTo('ui', function() {
-  var RASTER_SCALE = 0.75; // Adjust the resolution of our backing canvases.
+  // FIXME(pdr): Remove this extra scaling so our rasters are pixel-perfect.
+  //             https://code.google.com/p/trace-viewer/issues/detail?id=228
+  // FIXME(jjb): simplify until we have the camera working (or 228 happens ;-)
+  var RASTER_SCALE = 1.0; // Adjust the resolution of our backing canvases.
 
   // Care of bckenney@ via
   // http://extremelysatisfactorytotalitarianism.com/blog/?p=2120
@@ -67,7 +70,6 @@ base.exportTo('ui', function() {
 
       this.quads_ = undefined;
       this.viewport_ = undefined;
-      this.worldViewportRect_ = undefined;
       this.canvas_ = document.createElement('canvas');
 
       this.appendChild(this.canvas_);
@@ -115,38 +117,6 @@ base.exportTo('ui', function() {
       }
       this.viewport_ = this.viewport_ ||
           this.createViewportFromQuads_(this.quads_);
-
-      this.quads_.forEach(function(quad) {
-        if (!quad.backgroundRasterData)
-          return;
-        var tex = quad.backgroundRasterData;
-        var helperCanvas = document.createElement('canvas');
-        helperCanvas.width = tex.width;
-        helperCanvas.height = tex.height;
-        var ctx = helperCanvas.getContext('2d');
-        var imageData = ctx.createImageData(tex.width, tex.height);
-        imageData.data.set(tex.data);
-        ctx.putImageData(imageData, 0, 0);
-        var img = document.createElement('img');
-        img.onload = function() {
-          quad.backgroundImage = img;
-          this.scheduleRedrawCanvas_();
-        }.bind(this);
-        img.src = helperCanvas.toDataURL();
-      }, this);
-      this.updateChildren_();
-    },
-
-    get worldViewportRect() {
-      return this.worldViewportRect_;
-    },
-
-    /**
-     * When set, darkens the canvas outside of the viewport in order to
-     * make waht is inside vs outside the viewport more obvious.
-     */
-    set worldViewportRect(rect) {
-      this.worldViewportRect_ = rect;
       this.updateChildren_();
     },
 
@@ -200,26 +170,26 @@ base.exportTo('ui', function() {
       // Background colors.
       for (var i = 0; i < quads.length; i++) {
         var quad = quads[i];
-        if (quad.backgroundImage) {
+        if (quad.canvas) {
           if (quad.isRectangle()) {
             var bounds = quad.boundingRect();
-            ctx.drawImage(quad.backgroundImage, 0, 0,
-                quad.backgroundImage.width, quad.backgroundImage.height,
+            ctx.drawImage(quad.canvas, 0, 0,
+                quad.canvas.width, quad.canvas.height,
                 bounds.x, bounds.y, bounds.width, bounds.height);
           } else {
             ctx.save();
             var quadBBox = new base.BBox2();
             quadBBox.addQuad(quad);
-            var iw = quad.backgroundImage.width;
-            var ih = quad.backgroundImage.height;
+            var iw = quad.canvas.width;
+            var ih = quad.canvas.height;
             drawTexturedTriangle(
-                ctx, quad.backgroundImage,
+                ctx, quad.canvas,
                 quad.p1[0], quad.p1[1],
                 quad.p2[0], quad.p2[1],
                 quad.p4[0], quad.p4[1],
                 0, 0, iw, 0, 0, ih);
             drawTexturedTriangle(
-                ctx, quad.backgroundImage,
+                ctx, quad.canvas,
                 quad.p2[0], quad.p2[1],
                 quad.p3[0], quad.p3[1],
                 quad.p4[0], quad.p4[1],
@@ -281,9 +251,6 @@ base.exportTo('ui', function() {
         ctx.stroke();
       }
 
-      if (this.worldViewportRect_)
-        this.drawDeviceViewport_(ctx);
-
       ctx.restore();
     },
 
@@ -322,39 +289,6 @@ base.exportTo('ui', function() {
         quadBBox.addQuad(quad);
       });
       return new ui.QuadViewViewport(quadBBox.asRect());
-    },
-
-    drawDeviceViewport_: function(ctx) {
-      var vW = this.worldViewportRect_.width;
-      var vH = this.worldViewportRect_.height;
-      var vp = this.viewport_;
-
-      ctx.fillStyle = 'rgba(0,0,0,0.2)';
-
-      // Cover above and below the viewport with dark grey.
-      ctx.fillRect(vp.worldRect.x,
-                   vp.worldRect.y,
-                   vp.worldRect.width,
-                   -vp.worldRect.y);
-      ctx.fillRect(vp.worldRect.x,
-                   vH,
-                   vp.worldRect.width,
-                   vp.worldRect.height - vH);
-
-      // Cover left and right of the viewport with dark grey.
-      ctx.fillRect(vp.worldRect.x,
-                   0,
-                   -vp.worldRect.x,
-                   vH);
-      ctx.fillRect(vW,
-                   0,
-                   vp.worldRect.width - vW,
-                   vH);
-
-      // Stroke area around viewport.
-      ctx.lineWidth = vp.getDeviceLineWidthAssumingTransformIsApplied(2.0);
-      ctx.strokeStyle = 'rgba(0,0,255,1)';
-      ctx.strokeRect(0, 0, vW, vH);
     },
 
     onMouseDown_: function(e) {

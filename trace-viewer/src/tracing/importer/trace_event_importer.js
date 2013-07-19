@@ -11,6 +11,9 @@
 base.require('base.quad');
 base.require('tracing.trace_model');
 base.require('tracing.color_scheme');
+base.require('tracing.trace_model.instant_event');
+base.require('tracing.trace_model.counter_series');
+
 base.exportTo('tracing.importer', function() {
 
   function deepCopy(value) {
@@ -161,32 +164,29 @@ base.exportTo('tracing.importer', function() {
 
       var ctr = this.model_.getOrCreateProcess(event.pid)
           .getOrCreateCounter(event.cat, ctr_name);
+
       // Initialize the counter's series fields if needed.
-      if (ctr.numSeries == 0) {
+      if (ctr.numSeries === 0) {
         for (var seriesName in event.args) {
-          ctr.seriesNames.push(seriesName);
-          ctr.seriesColors.push(
-              tracing.getStringColorId(ctr.name + '.' + seriesName));
+          ctr.addSeries(new tracing.trace_model.CounterSeries(seriesName,
+              tracing.getStringColorId(ctr.name + '.' + seriesName)));
         }
-        if (ctr.numSeries == 0) {
+
+        if (ctr.numSeries === 0) {
           this.model_.importErrors.push('Expected counter ' + event.name +
               ' to have at least one argument to use as a value.');
+
           // Drop the counter.
           delete ctr.parent.counters[ctr.name];
           return;
         }
       }
 
-      // Add the sample values.
-      ctr.timestamps.push(event.ts / 1000);
-      for (var i = 0; i < ctr.numSeries; i++) {
-        var seriesName = ctr.seriesNames[i];
-        if (event.args[seriesName] === undefined) {
-          ctr.samples.push(0);
-          continue;
-        }
-        ctr.samples.push(event.args[seriesName]);
-      }
+      var ts = event.ts / 1000;
+      ctr.series.forEach(function(series) {
+        var val = event.args[series.name] ? event.args[series.name] : 0;
+        series.addSample(ts, val);
+      });
     },
 
     processObjectEvent: function(event) {
@@ -257,11 +257,44 @@ base.exportTo('tracing.importer', function() {
     // Treat an Instant event as a duration 0 slice.
     // SliceTrack's redraw() knows how to handle this.
     processInstantEvent: function(event) {
-      var thread = this.model_.getOrCreateProcess(event.pid)
-        .getOrCreateThread(event.tid);
-      thread.sliceGroup.beginSlice(event.cat, event.name, event.ts / 1000,
-                                   this.deepCopyIfNeeded_(event.args));
-      thread.sliceGroup.endSlice(event.ts / 1000);
+      var constructor;
+      switch (event.s) {
+        case 'g':
+          constructor = tracing.trace_model.GlobalInstantEvent;
+          break;
+        case 'p':
+          constructor = tracing.trace_model.ProcessInstantEvent;
+          break;
+        case 't':
+          // fall through
+        default:
+          // Default to thread to support old style input files.
+          constructor = tracing.trace_model.ThreadInstantEvent;
+          break;
+      }
+
+      var colorId = tracing.getStringColorId(event.name);
+      var instantEvent = new constructor(event.cat, event.name,
+          colorId, event.ts / 1000, this.deepCopyIfNeeded_(event.args));
+
+      switch (instantEvent.type) {
+        case tracing.trace_model.InstantEventType.GLOBAL:
+          this.model_.pushInstantEvent(instantEvent);
+          break;
+
+        case tracing.trace_model.InstantEventType.PROCESS:
+          var process = this.model_.getOrCreateProcess(event.pid);
+          process.pushInstantEvent(instantEvent);
+          break;
+
+        case tracing.trace_model.InstantEventType.THREAD:
+          var thread = this.model_.getOrCreateProcess(event.pid)
+              .getOrCreateThread(event.tid);
+          thread.sliceGroup.pushInstantEvent(instantEvent);
+          break;
+        default:
+          throw new Error('Unknown instant event type: ' + event.s);
+      }
     },
 
     processSampleEvent: function(event) {

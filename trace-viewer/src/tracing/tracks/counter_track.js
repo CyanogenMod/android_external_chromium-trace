@@ -6,7 +6,7 @@
 
 base.requireStylesheet('tracing.tracks.counter_track');
 
-base.require('tracing.tracks.drawable_track');
+base.require('tracing.tracks.heading_track');
 base.require('tracing.color_scheme');
 base.require('ui');
 
@@ -17,18 +17,18 @@ base.exportTo('tracing.tracks', function() {
   /**
    * A track that displays a Counter object.
    * @constructor
-   * @extends {DrawableTrack}
+   * @extends {HeadingTrack}
    */
 
   var CounterTrack =
-      ui.define('counter-track', tracing.tracks.DrawableTrack);
+      ui.define('counter-track', tracing.tracks.HeadingTrack);
 
   CounterTrack.prototype = {
 
-    __proto__: tracing.tracks.DrawableTrack.prototype,
+    __proto__: tracing.tracks.HeadingTrack.prototype,
 
     decorate: function(viewport) {
-      tracing.tracks.DrawableTrack.prototype.decorate.call(this, viewport);
+      tracing.tracks.HeadingTrack.prototype.decorate.call(this, viewport);
       this.classList.add('counter-track');
       this.selectedSamples_ = {};
       this.categoryFilter_ = new tracing.Filter();
@@ -49,7 +49,6 @@ base.exportTo('tracing.tracks', function() {
     set counter(counter) {
       this.counter_ = counter;
       this.heading = counter.name + ': ';
-      this.invalidate();
     },
 
     get categoryFilter() {
@@ -62,14 +61,21 @@ base.exportTo('tracing.tracks', function() {
 
     /**
      * @return {Object} A sparse, mutable map from sample index to bool. Samples
-     * indices the map that are true are drawn as selected. Callers that mutate
-     * the map must manually call invalidate on the track to trigger a redraw.
+     * indices the map that are true are drawn as selected.
      */
     get selectedSamples() {
       return this.selectedSamples_;
     },
 
-    draw: function(viewLWorld, viewRWorld) {
+    draw: function(type, viewLWorld, viewRWorld) {
+      switch (type) {
+        case tracing.tracks.DrawType.SLICE:
+          this.drawSlices_(viewLWorld, viewRWorld);
+          break;
+      }
+    },
+
+    drawSlices_: function(viewLWorld, viewRWorld) {
       var ctx = this.context();
       var pixelRatio = window.devicePixelRatio || 1;
 
@@ -93,18 +99,17 @@ base.exportTo('tracing.tracks', function() {
       // Figure out where drawing should begin.
       var numSeries = counter.numSeries;
       var numSamples = counter.numSamples;
-      var startIndex = base.findLowIndexInSortedArray(counter.timestamps,
-                                                      function(x) {
-                                                        return x;
-                                                      },
-                                                      viewLWorld);
-      startIndex = startIndex - 1 > 0 ? startIndex - 1 : 0;
+      var startIndex = base.findLowIndexInSortedArray(
+          counter.timestamps,
+          function(x) { return x; },
+          viewLWorld);
 
+      startIndex = startIndex - 1 > 0 ? startIndex - 1 : 0;
       // Draw indices one by one until we fall off the viewRWorld.
       var yScale = height / counter.maxTotal;
       for (var seriesIndex = counter.numSeries - 1;
            seriesIndex >= 0; seriesIndex--) {
-        var colorId = counter.seriesColors[seriesIndex];
+        var colorId = counter.series[seriesIndex].color;
         ctx.fillStyle = palette[colorId];
         ctx.beginPath();
 
@@ -120,6 +125,7 @@ base.exportTo('tracing.tracks', function() {
         // drawing a sample at xLast, skip subsequent samples that are less than
         // skipDistanceWorld from xLast.
         var hasMoved = false;
+
         while (true) {
           var i = iLast + 1;
           if (i >= numSamples) {
@@ -130,7 +136,6 @@ base.exportTo('tracing.tracks', function() {
           }
 
           var x = counter.timestamps[i];
-
           var y = counter.totals[i * numSeries + seriesIndex];
           var yView = height - (yScale * y);
 
@@ -152,6 +157,7 @@ base.exportTo('tracing.tracks', function() {
             ctx.moveTo(viewLWorld, height);
             hasMoved = true;
           }
+
           if (x - xLast < skipDistanceWorld) {
             // We know that xNext > xLast + skipDistanceWorld, so we can
             // safely move this sample's x over that much without passing
@@ -161,6 +167,7 @@ base.exportTo('tracing.tracks', function() {
           }
           ctx.lineTo(x, yLastView);
           ctx.lineTo(x, yView);
+
           iLast = i;
           xLast = x;
           yLastView = yView;
@@ -168,6 +175,7 @@ base.exportTo('tracing.tracks', function() {
         ctx.closePath();
         ctx.fill();
       }
+
       ctx.fillStyle = 'rgba(255, 0, 0, 1)';
       for (var i in this.selectedSamples_) {
         if (!this.selectedSamples_[i])
@@ -188,7 +196,7 @@ base.exportTo('tracing.tracks', function() {
         loWX, hiWX, viewPixWidthWorld, selection) {
 
       function getSampleWidth(x, i) {
-        if (i == counter.timestamps.length - 1)
+        if (i === counter.timestamps.length - 1)
           return 0;
         return counter.timestamps[i + 1] - counter.timestamps[i];
       }

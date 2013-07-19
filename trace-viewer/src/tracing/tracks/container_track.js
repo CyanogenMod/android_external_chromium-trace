@@ -35,6 +35,14 @@ base.exportTo('tracing.tracks', function() {
       return tracks;
     },
 
+    drawTrack: function(type) {
+      for (var i = 0; i < this.children.length; ++i) {
+        if (!(this.children[i] instanceof tracing.tracks.Track))
+          continue;
+        this.children[i].drawTrack(type);
+      }
+    },
+
     /**
      * Adds items intersecting the given range to a selection.
      * @param {number} loVX Lower X bound of the interval to search, in
@@ -57,6 +65,9 @@ base.exportTo('tracing.tracks', function() {
           this.tracks_[i].addIntersectingItemsInRangeToSelection(
               loVX, hiVX, loY, hiY, selection);
       }
+
+      tracing.tracks.Track.prototype.addIntersectingItemsInRangeToSelection.
+          apply(this, arguments);
     },
 
     addAllObjectsMatchingFilterToSelection: function(filter, selection) {

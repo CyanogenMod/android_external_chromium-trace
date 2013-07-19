@@ -7,7 +7,7 @@
 base.requireStylesheet('tracing.tracks.object_instance_track');
 
 base.require('base.sorted_array_utils');
-base.require('tracing.tracks.drawable_track');
+base.require('tracing.tracks.heading_track');
 base.require('tracing.color_scheme');
 base.require('ui');
 
@@ -19,17 +19,17 @@ base.exportTo('tracing.tracks', function() {
   /**
    * A track that displays an array of Slice objects.
    * @constructor
-   * @extends {DrawableTrack}
+   * @extends {HeadingTrack}
    */
 
   var ObjectInstanceTrack = ui.define(
-      'object-instance-track', tracing.tracks.DrawableTrack);
+      'object-instance-track', tracing.tracks.HeadingTrack);
 
   ObjectInstanceTrack.prototype = {
-    __proto__: tracing.tracks.DrawableTrack.prototype,
+    __proto__: tracing.tracks.HeadingTrack.prototype,
 
     decorate: function(viewport) {
-      tracing.tracks.DrawableTrack.prototype.decorate.call(this, viewport);
+      tracing.tracks.HeadingTrack.prototype.decorate.call(this, viewport);
       this.classList.add('object-instance-track');
       this.objectInstances_ = [];
       this.objectSnapshots_ = [];
@@ -40,7 +40,6 @@ base.exportTo('tracing.tracks', function() {
     },
 
     set objectInstances(objectInstances) {
-      this.invalidate();
       if (!objectInstances || objectInstances.length == 0) {
         this.heading = '';
         this.objectInstances_ = [];
@@ -62,14 +61,21 @@ base.exportTo('tracing.tracks', function() {
 
     set height(height) {
       this.style.height = height;
-      this.invalidate();
     },
 
     get snapshotRadiusView() {
       return 7 * (window.devicePixelRatio || 1);
     },
 
-    draw: function(viewLWorld, viewRWorld) {
+    draw: function(type, viewLWorld, viewRWorld) {
+      switch (type) {
+        case tracing.tracks.DrawType.SLICE:
+          this.drawSlices_(viewLWorld, viewRWorld);
+          break;
+      }
+    },
+
+    drawSlices_: function(viewLWorld, viewRWorld) {
       var ctx = this.context();
       var pixelRatio = window.devicePixelRatio || 1;
 

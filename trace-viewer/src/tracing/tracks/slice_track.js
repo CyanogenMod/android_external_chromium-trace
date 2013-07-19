@@ -7,7 +7,7 @@
 base.requireStylesheet('tracing.tracks.slice_track');
 
 base.require('base.sorted_array_utils');
-base.require('tracing.tracks.drawable_track');
+base.require('tracing.tracks.heading_track');
 base.require('tracing.fast_rect_renderer');
 base.require('tracing.color_scheme');
 base.require('ui');
@@ -19,15 +19,15 @@ base.exportTo('tracing.tracks', function() {
   /**
    * A track that displays an array of Slice objects.
    * @constructor
-   * @extends {DrawableTrack}
+   * @extends {HeadingTrack}
    */
 
   var SliceTrack = ui.define(
-      'slice-track', tracing.tracks.DrawableTrack);
+      'slice-track', tracing.tracks.HeadingTrack);
 
   SliceTrack.prototype = {
 
-    __proto__: tracing.tracks.DrawableTrack.prototype,
+    __proto__: tracing.tracks.HeadingTrack.prototype,
 
     /**
      * Should we elide text on trace labels?
@@ -39,18 +39,11 @@ base.exportTo('tracing.tracks', function() {
     SHOULD_ELIDE_TEXT: true,
 
     decorate: function(viewport) {
-      tracing.tracks.DrawableTrack.prototype.decorate.call(this, viewport);
+      tracing.tracks.HeadingTrack.prototype.decorate.call(this, viewport);
       this.classList.add('slice-track');
       this.elidedTitleCache = new ElidedTitleCache();
       this.asyncStyle_ = false;
-    },
-
-    /**
-     * Called by all the addToSelection functions on the created selection
-     * hit objects. Override this function on parent classes to add
-     * context-specific information to the hit.
-     */
-    decorateHit: function(hit) {
+      this.slices_ = null;
     },
 
     get asyncStyle() {
@@ -59,7 +52,6 @@ base.exportTo('tracing.tracks', function() {
 
     set asyncStyle(v) {
       this.asyncStyle_ = !!v;
-      this.invalidate();
     },
 
     get slices() {
@@ -68,7 +60,6 @@ base.exportTo('tracing.tracks', function() {
 
     set slices(slices) {
       this.slices_ = slices || [];
-      this.invalidate();
     },
 
     get height() {
@@ -77,7 +68,6 @@ base.exportTo('tracing.tracks', function() {
 
     set height(height) {
       this.style.height = height;
-      this.invalidate();
     },
 
     get hasVisibleContent() {
@@ -92,7 +82,15 @@ base.exportTo('tracing.tracks', function() {
       return this.labelWidth(title) * pixWidth;
     },
 
-    draw: function(viewLWorld, viewRWorld) {
+    draw: function(type, viewLWorld, viewRWorld) {
+      switch (type) {
+        case tracing.tracks.DrawType.SLICE:
+          this.drawSlices_(viewLWorld, viewRWorld);
+          break;
+      }
+    },
+
+    drawSlices_: function(viewLWorld, viewRWorld) {
       var ctx = this.context();
       var pixelRatio = window.devicePixelRatio || 1;
 
@@ -122,9 +120,9 @@ base.exportTo('tracing.tracks', function() {
       for (var i = lowSlice; i < slices.length; ++i) {
         var slice = slices[i];
         var x = slice.start;
-        if (x > viewRWorld) {
+        if (x > viewRWorld)
           break;
-        }
+
         // Less than 0.001 causes short events to disappear when zoomed in.
         var w = Math.max(slice.duration, 0.001);
         var colorId = slice.selected ?
@@ -199,17 +197,15 @@ base.exportTo('tracing.tracks', function() {
 
     addIntersectingItemsInRangeToSelectionInWorldSpace: function(
         loWX, hiWX, viewPixWidthWorld, selection) {
-
-      var that = this;
       function onPickHit(slice) {
-        var hit = selection.addSlice(that, slice);
-        that.decorateHit(hit);
+        var hit = selection.addSlice(this, slice);
+        this.decorateHit(hit);
       }
       base.iterateOverIntersectingIntervals(this.slices_,
           function(x) { return x.start; },
           function(x) { return x.duration; },
           loWX, hiWX,
-          onPickHit);
+          onPickHit.bind(this));
     },
 
     /**

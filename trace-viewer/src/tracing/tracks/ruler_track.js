@@ -6,8 +6,9 @@
 
 base.requireStylesheet('tracing.tracks.ruler_track');
 
+base.require('tracing.constants');
 base.require('tracing.tracks.track');
-base.require('tracing.tracks.drawable_track');
+base.require('tracing.tracks.heading_track');
 base.require('ui');
 
 base.exportTo('tracing.tracks', function() {
@@ -15,10 +16,10 @@ base.exportTo('tracing.tracks', function() {
   /**
    * A track that displays the ruler.
    * @constructor
-   * @extends {DrawableTrack}
+   * @extends {HeadingTrack}
    */
 
-  var RulerTrack = ui.define('ruler-track', tracing.tracks.DrawableTrack);
+  var RulerTrack = ui.define('ruler-track', tracing.tracks.HeadingTrack);
 
   var logOf10 = Math.log(10);
   function log10(x) {
@@ -26,10 +27,10 @@ base.exportTo('tracing.tracks', function() {
   }
 
   RulerTrack.prototype = {
-    __proto__: tracing.tracks.DrawableTrack.prototype,
+    __proto__: tracing.tracks.HeadingTrack.prototype,
 
     decorate: function(viewport) {
-      tracing.tracks.DrawableTrack.prototype.decorate.call(this, viewport);
+      tracing.tracks.HeadingTrack.prototype.decorate.call(this, viewport);
       this.classList.add('ruler-track');
       this.strings_secs_ = [];
       this.strings_msecs_ = [];
@@ -41,7 +42,7 @@ base.exportTo('tracing.tracks', function() {
     },
 
     detach: function() {
-      tracing.tracks.DrawableTrack.prototype.detach.call(this);
+      tracing.tracks.HeadingTrack.prototype.detach.call(this);
       this.viewport.removeEventListener('markersChange',
                                         this.viewportMarkersChange_);
     },
@@ -54,16 +55,20 @@ base.exportTo('tracing.tracks', function() {
     },
 
     onMouseDown: function(e) {
-      if (e.button != 0)
+      if (e.button !== 0)
         return;
       this.placeAndBeginDraggingMarker(e.clientX);
     },
 
     placeAndBeginDraggingMarker: function(clientX) {
       var pixelRatio = window.devicePixelRatio || 1;
-      var viewX = (clientX - this.canvasContainer_.offsetLeft) * pixelRatio;
+
+      var viewX =
+          (clientX - this.offsetLeft - tracing.constants.HEADING_WIDTH) *
+              pixelRatio;
       var worldX = this.viewport.xViewToWorld(viewX);
       var marker = this.viewport.findMarkerNear(worldX, 6);
+
       var createdMarker = false;
       var movedMarker = false;
       if (!marker) {
@@ -72,21 +77,24 @@ base.exportTo('tracing.tracks', function() {
       }
       marker.selected = true;
 
-      var that = this;
       var onMouseMove = function(e) {
-        var viewX = (e.clientX - that.canvasContainer_.offsetLeft) * pixelRatio;
-        var worldX = that.viewport.xViewToWorld(viewX);
+        var viewX =
+            (e.clientX - this.offsetLeft - tracing.constants.HEADING_WIDTH) *
+                pixelRatio;
+        var worldX = this.viewport.xViewToWorld(viewX);
+
         marker.positionWorld = worldX;
         movedMarker = true;
-      };
+      }.bind(this);
 
       var onMouseUp = function(e) {
         marker.selected = false;
         if (!movedMarker && !createdMarker)
-          that.viewport.removeMarker(marker);
+          this.viewport.removeMarker(marker);
+
         document.removeEventListener('mouseup', onMouseUp);
         document.removeEventListener('mousemove', onMouseMove);
-      };
+      }.bind(this);
 
       document.addEventListener('mouseup', onMouseUp);
       document.addEventListener('mousemove', onMouseMove);
@@ -125,7 +133,15 @@ base.exportTo('tracing.tracks', function() {
       ctx.fill();
     },
 
-    draw: function(viewLWorld, viewRWorld) {
+    draw: function(type, viewLWorld, viewRWorld) {
+      switch (type) {
+        case tracing.tracks.DrawType.SLICE:
+          this.drawSlices_(viewLWorld, viewRWorld);
+          break;
+      }
+    },
+
+    drawSlices_: function(viewLWorld, viewRWorld) {
       var ctx = this.context();
       var pixelRatio = window.devicePixelRatio || 1;
 
@@ -228,14 +244,13 @@ base.exportTo('tracing.tracks', function() {
 
         ctx.stroke();
       }
+      // Draw bottom bar.
+      ctx.moveTo(0, rulerHeight);
+      ctx.lineTo(width, rulerHeight);
+      ctx.stroke();
 
       // Give distance between directly adjacent markers.
       if (measurements) {
-        // Divide canvas horizontally between ruler and measurements.
-        ctx.moveTo(0, rulerHeight);
-        ctx.lineTo(width, rulerHeight);
-        ctx.stroke();
-
         // Obtain a sorted array of markers
         var sortedMarkers = vp.markers.slice();
         sortedMarkers.sort(function(a, b) {
@@ -322,6 +337,10 @@ base.exportTo('tracing.tracks', function() {
                 rightMarkerView, arrowPosY, arrowWidthView, arrowColor);
           }
         }
+        // Draw bottom bar.
+        ctx.moveTo(0, rulerHeight * 2);
+        ctx.lineTo(width, rulerHeight * 2);
+        ctx.stroke();
       }
     },
 

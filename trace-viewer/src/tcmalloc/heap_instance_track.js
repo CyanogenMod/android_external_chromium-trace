@@ -7,7 +7,7 @@
 base.requireStylesheet('tcmalloc.heap_instance_track');
 
 base.require('base.sorted_array_utils');
-base.require('tracing.tracks.drawable_track');
+base.require('tracing.tracks.heading_track');
 base.require('tracing.tracks.object_instance_track');
 base.require('tracing.color_scheme');
 base.require('ui');
@@ -20,24 +20,23 @@ base.exportTo('tcmalloc', function() {
   /**
    * A track that displays heap memory data.
    * @constructor
-   * @extends {DrawableTrack}
+   * @extends {HeadingTrack}
    */
 
   var HeapInstanceTrack = ui.define(
-      'heap-instance-track', tracing.tracks.DrawableTrack);
+      'heap-instance-track', tracing.tracks.HeadingTrack);
 
   HeapInstanceTrack.prototype = {
 
-    __proto__: tracing.tracks.DrawableTrack.prototype,
+    __proto__: tracing.tracks.HeadingTrack.prototype,
 
     decorate: function(viewport) {
-      tracing.tracks.DrawableTrack.prototype.decorate.call(this, viewport);
+      tracing.tracks.HeadingTrack.prototype.decorate.call(this, viewport);
       this.classList.add('heap-instance-track');
       this.objectInstance_ = null;
     },
 
     set objectInstances(objectInstances) {
-      this.invalidate();
       if (!objectInstances) {
         this.objectInstance_ = [];
         return;
@@ -72,33 +71,46 @@ base.exportTo('tcmalloc', function() {
 
     set height(height) {
       this.style.height = height;
-      this.invalidate();
     },
 
-    draw: function(viewLWorld, viewRWorld) {
+    draw: function(type, viewLWorld, viewRWorld) {
+      switch (type) {
+        case tracing.tracks.DrawType.SLICE:
+          this.drawSlices_(viewLWorld, viewRWorld);
+          break;
+      }
+    },
+
+    drawSlices_: function(viewLWorld, viewRWorld) {
       var ctx = this.context();
       var pixelRatio = window.devicePixelRatio || 1;
 
       var bounds = this.getBoundingClientRect();
+      var width = bounds.width * pixelRatio;
       var height = bounds.height * pixelRatio;
 
       // Culling parameters.
       var vp = this.viewport;
-      var snapshotRadiusWorld = vp.xViewVectorToWorld(height);
 
-      // Snapshots. Has to run in worldspace because ctx.arc gets transformed.
+      // Scale by the size of the largest snapshot.
+      var maxBytes = this.maxBytes_;
+
       var objectSnapshots = this.objectInstance_.snapshots;
       var lowIndex = base.findLowIndexInSortedArray(
           objectSnapshots,
           function(snapshot) {
-            return snapshot.ts +
-                snapshotRadiusWorld;
+            return snapshot.ts;
           },
           viewLWorld);
+      // Assure that the stack with the left edge off screen still gets drawn
+      if (lowIndex > 0)
+        lowIndex -= 1;
+
       for (var i = lowIndex; i < objectSnapshots.length; ++i) {
         var snapshot = objectSnapshots[i];
+
         var left = snapshot.ts;
-        if (left - snapshotRadiusWorld > viewRWorld)
+        if (left > viewRWorld)
           break;
         var leftView = vp.xWorldToView(left);
         if (leftView < 0)
@@ -111,9 +123,12 @@ base.exportTo('tcmalloc', function() {
         else
           right = objectSnapshots[objectSnapshots.length - 1].ts + 5000;
         var rightView = vp.xWorldToView(right);
+        if (rightView > width)
+          rightView = width;
 
-        // Scale by the size of the largest snapshot.
-        var maxBytes = this.maxBytes_;
+        // Floor the bounds to avoid a small gap between stacks.
+        leftView = Math.floor(leftView);
+        rightView = Math.floor(rightView);
 
         // Draw a stacked bar graph. Largest item is stored first in the
         // heap data structure, so iterate backwards. Likewise draw from
@@ -134,9 +149,10 @@ base.exportTo('tcmalloc', function() {
                 snapshot.objectInstance.colorId;
             ctx.fillStyle = palette[colorId + k];
           }
+
           var barHeight = height * trace.currentBytes / maxBytes;
           ctx.fillRect(leftView, currentY - barHeight,
-                       rightView - leftView + 1, barHeight);
+                       Math.max(rightView - leftView, 1), barHeight);
           currentY -= barHeight;
         }
       }
