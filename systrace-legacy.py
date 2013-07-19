@@ -174,6 +174,7 @@ def main():
             sys.stdout.write("downloading trace...")
             sys.stdout.flush()
             out = ''.join(lines[i+1:])
+            html_prefix = read_asset(script_dir, 'prefix.html')
             html_file = open(html_filename, 'w')
             html_file.write(html_prefix % (css, js))
             trace_started = True
@@ -197,12 +198,16 @@ def main():
     html_out = dec.flush().replace('\n', '\\n\\\n').replace('\r', '')
     if len(html_out) > 0:
       html_file.write(html_out)
+    html_suffix = read_asset(script_dir, 'suffix.html')
     html_file.write(html_suffix)
     html_file.close()
     print " done\n\n    wrote file://%s/%s\n" % (os.getcwd(), options.output_file)
   else:
     print >> sys.stderr, ('An error occured while capturing the trace.  Output ' +
       'file was not written.')
+
+def read_asset(src_dir, filename):
+  return open(os.path.join(src_dir, filename)).read()
 
 def get_assets(src_dir, build_dir):
   sys.path.append(build_dir)
@@ -224,51 +229,6 @@ def get_assets(src_dir, build_dir):
   sys.path.pop()
 
   return (js_files, js_flattenizer, css_files)
-
-html_prefix = """<!DOCTYPE HTML>
-<html>
-<head i18n-values="dir:textdirection;">
-<title>Android System Trace</title>
-%s
-%s
-<script language="javascript">
-document.addEventListener('DOMContentLoaded', function() {
-  if (!linuxPerfData)
-    return;
-
-  var m = new tracing.Model(linuxPerfData);
-  var timelineViewEl = document.querySelector('.view');
-  tracing.ui.decorate(timelineViewEl, tracing.TimelineView);
-  timelineViewEl.model = m;
-  timelineViewEl.tabIndex = 1;
-  timelineViewEl.timeline.focusElement = timelineViewEl;
-});
-</script>
-<style>
-  .view {
-    overflow: hidden;
-    position: absolute;
-    top: 0;
-    bottom: 0;
-    left: 0;
-    right: 0;
-  }
-</style>
-</head>
-<body>
-  <div class="view">
-  </div>
-<!-- BEGIN TRACE -->
-  <script>
-  var linuxPerfData = "\\
-"""
-
-html_suffix = """\\n";
-  </script>
-<!-- END TRACE -->
-</body>
-</html>
-"""
 
 compiled_css_tag = """<style type="text/css">%s</style>"""
 compiled_js_tag = """<script language="javascript">%s</script>"""
