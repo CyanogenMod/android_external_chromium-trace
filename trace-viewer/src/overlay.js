@@ -15,7 +15,7 @@
 base.requireStylesheet('overlay');
 base.require('ui');
 base.require('event_target');
-base.exportTo('tracing', function() {
+base.exportTo('tracing.ui', function() {
   /**
    * Manages a full-window div that darkens the window, disables
    * input, and hosts the currently-visible overlays. You shouldn't
@@ -24,7 +24,7 @@ base.exportTo('tracing', function() {
    * @constructor
    * @extends {HTMLDivElement}
    */
-  var OverlayRoot = base.ui.define('div');
+  var OverlayRoot = tracing.ui.define('div');
   OverlayRoot.prototype = {
     __proto__: HTMLDivElement.prototype,
     decorate: function() {
@@ -102,7 +102,7 @@ base.exportTo('tracing', function() {
      * Prevent the user from shift-tabbing backwards out of the overlay.
      */
     onKeydown_: function(e) {
-      if (e.keyCode == 9 &&
+      if (e.keyCode == 9 &&  // tab
           e.shiftKey &&
           e.target == this.contentHost.firstChild) {
         e.preventDefault();
@@ -142,7 +142,7 @@ base.exportTo('tracing', function() {
    * @constructor
    * @extends {HTMLDivElement}
    */
-  var Overlay = base.ui.define('div');
+  var Overlay = tracing.ui.define('div');
 
   Overlay.prototype = {
     __proto__: HTMLDivElement.prototype,
@@ -154,7 +154,7 @@ base.exportTo('tracing', function() {
       // create the overlay root on this document if its not present
       if (!this.ownerDocument.querySelector('.overlay-root')) {
         var overlayRoot = this.ownerDocument.createElement('div');
-        base.ui.decorate(overlayRoot, OverlayRoot);
+        tracing.ui.decorate(overlayRoot, OverlayRoot);
         this.ownerDocument.body.appendChild(overlayRoot);
       }
 
@@ -188,7 +188,7 @@ base.exportTo('tracing', function() {
       if (!this.autoClose)
         return;
 
-      if (e.keyCode == 27) {
+      if (e.keyCode == 27) {  // escape
         this.visible = false;
         e.preventDefault();
         return;

@@ -22,7 +22,7 @@ base.exportTo('tracing', function() {
     this.overlay_ = document.createElement('div');
     this.overlay_.className = 'tracing-overlay';
 
-    base.ui.decorate(this.overlay_, tracing.Overlay);
+    tracing.ui.decorate(this.overlay_, tracing.ui.Overlay);
 
     this.statusDiv_ = document.createElement('div');
     this.overlay_.appendChild(this.statusDiv_);
@@ -90,7 +90,8 @@ base.exportTo('tracing', function() {
      * Example: beginTracing("test_MyTest*,test_OtherStuff");
      * Example: beginTracing("-excluded_category1,-excluded_category2");
      */
-    beginTracing: function(opt_systemTracingEnabled, opt_trace_categories) {
+    beginTracing: function(opt_systemTracingEnabled, opt_trace_continuous,
+                           opt_trace_categories) {
       if (this.tracingEnabled_)
         throw new Error('Tracing already begun.');
 
@@ -104,13 +105,17 @@ base.exportTo('tracing', function() {
       console.log('Beginning to trace...');
       this.statusDiv_.textContent = 'Tracing active.';
 
+      var trace_options = (opt_trace_continuous ? 'record-continuously' :
+                                                  'record-until-full');
+
       this.traceEvents_ = [];
       this.systemTraceEvents_ = [];
       this.sendFn_(
           'beginTracing',
           [
            opt_systemTracingEnabled || false,
-           opt_trace_categories || '-test_*'
+           opt_trace_categories || '-test_*',
+           trace_options
           ]
       );
       this.beginRequestBufferPercentFull_();
@@ -211,6 +216,17 @@ base.exportTo('tracing', function() {
       e.events = this.traceEvents_;
       this.dispatchEvent(e);
     },
+
+    collectCategories: function() {
+      this.sendFn_('getKnownCategories');
+    },
+
+    onKnownCategoriesCollected: function(categories) {
+      var e = new base.Event('categoriesCollected');
+      e.categories = categories;
+      this.dispatchEvent(e);
+    },
+
 
     /**
      * Called by tracing c++ code when new system trace data arrives.
