@@ -52,7 +52,7 @@ def get_device_sdk_version():
   return version
 
 def add_adb_serial(command, serial):
-  if serial != None:
+  if serial is not None:
     command.insert(1, serial)
     command.insert(1, '-s')
 
@@ -130,16 +130,18 @@ def main():
     src_dir = os.path.join(script_dir, options.asset_dir, 'src')
     build_dir = os.path.join(script_dir, options.asset_dir, 'build')
 
-    js_files, js_flattenizer, css_files = get_assets(src_dir, build_dir)
+    js_files, js_flattenizer, css_files, templates = get_assets(src_dir, build_dir)
 
     css = '\n'.join(linked_css_tag % (os.path.join(src_dir, f)) for f in css_files)
     js = '<script language="javascript">\n%s</script>\n' % js_flattenizer
     js += '\n'.join(linked_js_tag % (os.path.join(src_dir, f)) for f in js_files)
+
   else:
     css_filename = os.path.join(script_dir, flattened_css_file)
     js_filename = os.path.join(script_dir, flattened_js_file)
     css = compiled_css_tag % (open(css_filename).read())
     js = compiled_js_tag % (open(js_filename).read())
+    templates = ''
 
   html_filename = options.output_file
 
@@ -221,7 +223,7 @@ def main():
       html_suffix = read_asset(script_dir, 'suffix.html')
 
       html_file = open(html_filename, 'w')
-      html_file.write(html_prefix % (css, js))
+      html_file.write(html_prefix % (css, js, templates))
 
       size = 4096
       dec = zlib.decompressobj()
@@ -234,7 +236,7 @@ def main():
       html_file.write(html_out)
       html_file.write(html_suffix)
       html_file.close()
-      print "\n    wrote file://%s/%s\n" % (os.getcwd(), options.output_file)
+      print "\n    wrote file://%s\n" % os.path.abspath(options.output_file)
 
   else: # i.e. result != 0
     print >> sys.stderr, 'adb returned error code %d' % result
@@ -247,22 +249,32 @@ def get_assets(src_dir, build_dir):
   sys.path.append(build_dir)
   gen = __import__('generate_standalone_timeline_view', {}, {})
   parse_deps = __import__('parse_deps', {}, {})
+  gen_templates = __import__('generate_template_contents', {}, {})
   filenames = gen._get_input_filenames()
   load_sequence = parse_deps.calc_load_sequence(filenames, src_dir)
 
   js_files = []
   js_flattenizer = "window.FLATTENED = {};\n"
+  js_flattenizer += "window.FLATTENED_RAW_SCRIPTS = {};\n"
   css_files = []
 
   for module in load_sequence:
     js_files.append(os.path.relpath(module.filename, src_dir))
     js_flattenizer += "window.FLATTENED['%s'] = true;\n" % module.name
+    for dependent_raw_script_name in module.dependent_raw_script_names:
+      js_flattenizer += (
+        "window.FLATTENED_RAW_SCRIPTS['%s'] = true;\n" %
+        dependent_raw_script_name)
+
     for style_sheet in module.style_sheets:
       css_files.append(os.path.relpath(style_sheet.filename, src_dir))
 
+  templates = gen_templates.generate_templates()
+
   sys.path.pop()
 
-  return (js_files, js_flattenizer, css_files)
+  return (js_files, js_flattenizer, css_files, templates)
+
 
 compiled_css_tag = """<style type="text/css">%s</style>"""
 compiled_js_tag = """<script language="javascript">%s</script>"""

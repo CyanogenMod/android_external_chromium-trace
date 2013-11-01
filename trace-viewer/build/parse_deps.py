@@ -193,7 +193,9 @@ class Module(object):
     else:
       self.contents = module_contents
     self.filename = module_filename
-    self.parse_definition_(self.contents, decl_required)
+    stripped_text = _strip_js_comments(self.contents)
+    self.validate_uses_strict_mode_(stripped_text)
+    self.parse_definition_(stripped_text, decl_required)
 
   def resolve(self, all_resources, resource_finder):
     if "scripts" not in all_resources:
@@ -213,18 +215,22 @@ class Module(object):
 
       filename, contents = resource_finder.find_and_load_module(self, name)
       if not filename:
-        raise DepsException("Could not find a file for module %s" % name)
+        raise DepsException("No file for module %(name)s needed by %(dep)s" %
+          {"name": name, "dep": self.filename})
 
       module = Module(name)
       all_resources["scripts"][name] = module
       self.dependent_modules.append(module)
-      module.load_and_parse(filename, contents)
+      try:
+        module.load_and_parse(filename, contents)
+      except Exception, e:
+        raise Exception('While processing ' + filename + ': ' + e.message)
       module.resolve(all_resources, resource_finder)
 
     for name in self.dependent_raw_script_names:
       filename, contents = resource_finder.find_and_load_raw_script(self, name)
       if not filename:
-        raise DepsException("Could not find a file for module %s" % name)
+        raise DepsException("Could not find a file for raw script %s" % name)
 
       if name in all_resources["raw_scripts"]:
         assert all_resources["raw_scripts"][name].contents
@@ -238,7 +244,7 @@ class Module(object):
     for name in self.style_sheet_names:
       if name in all_resources["style_sheets"]:
         assert all_resources["style_sheets"][name].contents
-        self.style_sheets.append(all_resources["scripts"][name])
+        self.style_sheets.append(all_resources["style_sheets"][name])
         continue
 
       filename, contents = resource_finder.find_and_load_style_sheet(self, name)
@@ -257,11 +263,20 @@ class Module(object):
       already_loaded_set.add(self.name)
       load_sequence.append(self)
 
-  def parse_definition_(self, text, decl_required = True):
+  def validate_uses_strict_mode_(self, stripped_text):
+    lines = stripped_text.split('\n')
+    for line in lines:
+      line = line.strip()
+      if len(line.strip()) == 0:
+        continue
+      if line.strip() == """'use strict';""":
+        break
+      raise DepsException('%s must use strict mode' % self.name)
+
+  def parse_definition_(self, stripped_text, decl_required = True):
     if not decl_required and not self.name:
       raise Exception("Module.name must be set for decl_required to be false.")
 
-    stripped_text = _strip_js_comments(text)
     rest = stripped_text
     while True:
       # Things to search for.
@@ -323,11 +338,8 @@ def calc_load_sequence(filenames, toplevel_dir):
   """
   all_resources = {}
   all_resources["scripts"] = {}
-  toplevel_modules = []
-  root_dir = ''
-  if filenames:
-    root_dir = os.path.abspath(os.path.dirname(filenames[0]))
-  resource_finder = ResourceFinder(root_dir)
+  resource_finder = ResourceFinder(os.path.abspath(toplevel_dir))
+  initial_module_name_indices = {}
   for filename in filenames:
     if not os.path.exists(filename):
       raise Exception("Could not find %s" % filename)
@@ -344,13 +356,16 @@ def calc_load_sequence(filenames, toplevel_dir):
       continue
 
     module = Module(name)
+    initial_module_name_indices[module.name] = len(initial_module_name_indices)
     module.load_and_parse(filename, decl_required = False)
     all_resources["scripts"][module.name] = module
     module.resolve(all_resources, resource_finder)
 
-  # Find the root modules: ones who have no dependencies.
+  # Find the root modules: ones that have no dependencies. While doing that,
+  # sort the dependent module list so that the computed load order is stable.
   module_ref_counts = {}
   for module in all_resources["scripts"].values():
+    module.dependent_modules.sort(lambda x, y: cmp(x.name, y.name))
     module_ref_counts[module.name] = 0
 
   def inc_ref_count(name):
@@ -363,7 +378,16 @@ def calc_load_sequence(filenames, toplevel_dir):
                   for name, ref_count in module_ref_counts.items()
                   if ref_count == 0]
 
-  root_modules.sort(lambda x, y: cmp(x.name, y.name))
+  # Sort root_modules by the order they were originally requested,
+  # then sort everything else by name.
+  def compare_root_module(x, y):
+    n = len(initial_module_name_indices);
+    iX = initial_module_name_indices.get(x.name, n)
+    iY = initial_module_name_indices.get(y.name, n)
+    if cmp(iX, iY) != 0:
+      return cmp(iX, iY)
+    return cmp(x.name, y.name)
+  root_modules.sort(compare_root_module)
 
   already_loaded_set = set()
   load_sequence = []

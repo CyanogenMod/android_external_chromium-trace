@@ -10,9 +10,9 @@ document.addEventListener('DOMContentLoaded', function() {
   if (!linuxPerfData)
     return;
 
-  var m = new tracing.Model(linuxPerfData);
+  var m = new tracing.TraceModel(linuxPerfData);
   var timelineViewEl = document.querySelector('.view');
-  tracing.ui.decorate(timelineViewEl, tracing.TimelineView);
+  ui.decorate(timelineViewEl, tracing.TimelineView);
   timelineViewEl.model = m;
   timelineViewEl.tabIndex = 1;
   timelineViewEl.timeline.focusElement = timelineViewEl;
@@ -30,6 +30,7 @@ document.addEventListener('DOMContentLoaded', function() {
 </style>
 </head>
 <body>
+  <div>%s</div>
   <div class="view">
   </div>
 <!-- BEGIN TRACE -->
