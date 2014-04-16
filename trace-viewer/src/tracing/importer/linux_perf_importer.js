@@ -35,6 +35,7 @@ base.require('tracing.importer.linux_perf.sync_parser');
 base.require('tracing.importer.linux_perf.workqueue_parser');
 base.require('tracing.importer.linux_perf.android_parser');
 base.require('tracing.importer.linux_perf.kfunc_parser');
+base.require('tracing.importer.linux_perf.irq_parser');
 
 base.exportTo('tracing.importer', function() {
   /**
