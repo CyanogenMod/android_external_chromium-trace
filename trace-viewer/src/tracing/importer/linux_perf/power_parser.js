@@ -62,7 +62,7 @@ base.exportTo('tracing.importer.linux_perf', function() {
             tracing.getStringColorId(powerCounter.name)));
       }
       // NB: 4294967295/-1 means an exit from the current state
-      var val = (cpuState != 4294967295 ? cpuState : 0);
+      var val = (cpuState != 4294967295 ? cpuState + 1 : 0);
       powerCounter.series.forEach(function(series) {
         series.addSample(ts, val);
       });
