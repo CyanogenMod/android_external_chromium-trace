@@ -10,7 +10,7 @@ This is a tool for capturing a trace that includes data from both userland and
 the kernel.  It creates an HTML file for visualizing the trace.
 """
 
-import errno, optparse, os, select, subprocess, sys, time, zlib
+import errno, optparse, os, re, select, subprocess, sys, time, zlib
 
 flattened_css_file = 'style.css'
 flattened_js_file = 'script.js'
@@ -78,6 +78,8 @@ def main():
   parser.add_option('-a', '--app', dest='app_name', default=None, type='string',
                     action='store', help='enable application-level tracing for comma-separated ' +
                     'list of app cmdlines')
+  parser.add_option('--no-fix-threads', dest='fix_threads', default=True,
+                    action='store_false', help='don\'t fix missing or truncated thread names')
 
   parser.add_option('--link-assets', dest='link_assets', default=False,
                     action='store_true', help='link to original CSS or JS resources '
@@ -120,6 +122,9 @@ def main():
       atrace_args.extend(['-k', options.kfuncs])
 
     atrace_args.extend(args)
+
+    if options.fix_threads:
+      atrace_args.extend([';', 'ps', '-t'])
 
   if atrace_args[0] == 'adb':
     add_adb_serial(atrace_args, options.device_serial)
@@ -219,20 +224,42 @@ def main():
         # Indicate to the user that the data download is complete.
         print " done\n"
 
+      # Extract the thread list dumped by ps.
+      threads = {}
+      if options.fix_threads:
+        parts = data.split('USER     PID   PPID  VSIZE  RSS     WCHAN    PC        NAME', 1)
+        if len(parts) == 2:
+          data = parts[0]
+          for line in parts[1].splitlines():
+            cols = line.split(None, 8)
+            if len(cols) == 9:
+              tid = int(cols[1])
+              name = cols[8]
+              threads[tid] = name
+
+      # Decompress and preprocess the data.
+      out = zlib.decompress(data)
+      if options.fix_threads:
+        def repl(m):
+          tid = int(m.group(2))
+          if tid > 0:
+            name = threads.get(tid)
+            if name is None:
+              name = m.group(1)
+              if name == '<...>':
+                name = '<' + str(tid) + '>'
+              threads[tid] = name
+            return name + '-' + m.group(2)
+          else:
+            return m.group(0)
+        out = re.sub(r'^\s*(\S+)-(\d+)', repl, out, flags=re.MULTILINE)
+
       html_prefix = read_asset(script_dir, 'prefix.html')
       html_suffix = read_asset(script_dir, 'suffix.html')
 
       html_file = open(html_filename, 'w')
       html_file.write(html_prefix % (css, js, templates))
-
-      size = 4096
-      dec = zlib.decompressobj()
-      for chunk in (data[i:i+size] for i in xrange(0, len(data), size)):
-        decoded_chunk = dec.decompress(chunk)
-        html_chunk = decoded_chunk.replace('\n', '\\n\\\n')
-        html_file.write(html_chunk)
-
-      html_out = dec.flush().replace('\n', '\\n\\\n')
+      html_out = out.replace('\n', '\\n\\\n')
       html_file.write(html_out)
       html_file.write(html_suffix)
       html_file.close()
