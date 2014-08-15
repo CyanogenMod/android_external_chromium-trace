@@ -166,18 +166,16 @@ base.exportTo('tracing.importer.linux_perf', function() {
           break;
 
         case 'F':
-          var ppid = this.ppids_[pid];
-          if (ppid === undefined) {
-            // Silently ignore unmatched F events.
-            break;
-          }
-
-          var thread = this.model_.getOrCreateProcess(ppid)
-            .getOrCreateThread(pid);
-
+          // Note: An async slice may end on a different thread from the one
+          // that started it so this thread may not have been seen yet.
+          var ppid = parseInt(eventData[1]);
           var name = eventData[2];
           var cookie = parseInt(eventData[3]);
+          var thread = this.model_.getOrCreateProcess(ppid)
+            .getOrCreateThread(pid);
+          thread.name = eventBase.threadName;
 
+          this.ppids_[pid] = ppid;
           this.closeAsyncSlice(thread, name, cookie, ts);
 
           break;
