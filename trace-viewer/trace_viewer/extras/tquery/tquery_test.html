@@ -1,0 +1,143 @@
+<!DOCTYPE html>
+<!--
+Copyright 2015 The Chromium Authors. All rights reserved.
+Use of this source code is governed by a BSD-style license that can be
+found in the LICENSE file.
+-->
+
+<link rel="import" href="/base/task.html">
+<link rel="import" href="/extras/tquery/tquery.html">
+
+<polymer-element name='tv-e-tquery-fake-timeline'>
+  <script>
+  'use strict';
+
+  Polymer({
+    ready: function() {
+      this.allObjects = [];
+    },
+
+    addAllObjectsMatchingFilterToSelectionAsTask: function(filter, selection) {
+      return new tv.b.Task(function() {
+        var n = this.allObjects.length;
+        for (var i = 0; i < n; i++) {
+          this.addSubtreeToSelection_(selection, this.allObjects[i]);
+        }
+      }, this);
+    },
+
+    addSubtreeToSelection_: function(selection, event) {
+      selection.push(event);
+      if (event.subSlices) {
+        for (var i = 0; i < event.subSlices.length; i++) {
+          this.addSubtreeToSelection_(selection, event.subSlices[i]);
+        }
+      }
+    },
+
+    setHighlightAndClearSelection: function(highlight) {
+      this.highlight = highlight;
+    }
+  });
+  </script>
+</polymer-element>
+
+<script>
+'use strict';
+
+tv.b.unittest.testSuite(function() {
+  function createFakeTimeline_(sliceCount) {
+    var timeline = document.createElement('tv-e-tquery-fake-timeline');
+    timeline.allObjects = [];
+    for (var i = 0; i < sliceCount; i++) {
+      timeline.allObjects.push({guid: i});
+    }
+    return timeline;
+  }
+
+  function createFakeTimelineWithEvents_(events) {
+    var timeline = document.createElement('tv-e-tquery-fake-timeline');
+    timeline.allObjects = events;
+    return timeline;
+  }
+
+  test('tqueryAsyncSelection', function() {
+    var tquery = document.createElement('tv-e-tquery');
+    var timeline = createFakeTimeline_(3);
+    tquery.onTimelineChanged(timeline);
+
+    var result = tquery.show();
+    tv.b.Task.RunSynchronously(result);
+    assert.equal(timeline.highlight.length, 3);
+  });
+
+  test('tquerySyncSelection', function() {
+    var tquery = document.createElement('tv-e-tquery');
+    var timeline = createFakeTimeline_(3);
+    tquery.onTimelineChanged(timeline);
+
+    assert.equal(tquery.selection.length, 3);
+
+    // Selection should get reset when the timeline changes.
+    tquery.onTimelineChanged(createFakeTimeline_(5));
+    assert.equal(tquery.selection.length, 5);
+  });
+
+  test('tqueryPassThroughFiltering', function() {
+    var tquery = document.createElement('tv-e-tquery');
+    var timeline = createFakeTimeline_(3);
+    tquery.onTimelineChanged(timeline);
+
+    var result = tquery.filter().filter().show();
+    tv.b.Task.RunSynchronously(result);
+    assert.equal(timeline.highlight.length, 3);
+  });
+
+  test('tqueryFilterHasTitle', function() {
+    var tquery = document.createElement('tv-e-tquery');
+    var hasTitle = document.createElement(
+        'tv-e-tquery-filter-has-title').scriptValue;
+    var timeline = createFakeTimelineWithEvents_([
+        {guid: 1, title: 'a'},
+        {guid: 2, title: 'b'},
+        {guid: 3, title: 'c'}
+    ]);
+    tquery.onTimelineChanged(timeline);
+
+    var result = tquery.filter(hasTitle('a')).selection;
+    assert.equal(result.length, 1);
+    assert.equal(result[0].guid, 1);
+
+    var result = tquery.filter('b').selection;
+    assert.equal(result.length, 1);
+    assert.equal(result[0].guid, 2);
+
+    var result = tquery.filter(/^c$/).selection;
+    assert.equal(result.length, 1);
+    assert.equal(result[0].guid, 3);
+  });
+
+  test('tqueryFilterHasAncestor', function() {
+    var tquery = document.createElement('tv-e-tquery');
+    var hasAncestor = document.createElement(
+        'tv-e-tquery-filter-has-ancestor').scriptValue;
+    var timeline = createFakeTimelineWithEvents_([
+        {guid: 1, title: 'a'},
+        {guid: 2, title: 'b', subSlices: [{guid: 4}]},
+        {guid: 3, title: 'c'}
+    ]);
+    tquery.onTimelineChanged(timeline);
+
+    var result = tquery.filter(hasAncestor('b')).selection;
+    assert.equal(result.length, 1);
+    assert.equal(result[0].guid, 4);
+
+    var result = tquery.filter(hasAncestor()).selection;
+    assert.equal(result.length, 1);
+    assert.equal(result[0].guid, 4);
+
+    var result = tquery.filter(hasAncestor('a')).selection;
+    assert.equal(result.length, 0);
+  });
+});
+</script>

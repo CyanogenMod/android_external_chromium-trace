@@ -1,0 +1,77 @@
+<!DOCTYPE html>
+<!--
+Copyright (c) 2013 The Chromium Authors. All rights reserved.
+Use of this source code is governed by a BSD-style license that can be
+found in the LICENSE file.
+-->
+
+<link rel="import" href="/base/extension_registry.html">
+<link rel="import" href="/core/analysis/util.html">
+<link rel="import" href="/core/trace_model/slice.html">
+
+<script>
+'use strict';
+
+/**
+ * @fileoverview Provides the AsyncSlice class.
+ */
+tv.exportTo('tv.c.trace_model', function() {
+  /**
+   * A AsyncSlice represents an interval of time during which an
+   * asynchronous operation is in progress. An AsyncSlice consumes no CPU time
+   * itself and so is only associated with Threads at its start and end point.
+   *
+   * @constructor
+   */
+  function AsyncSlice(category, title, colorId, start, args, duration,
+                      opt_isTopLevel) {
+    tv.c.trace_model.Slice.call(this, category, title, colorId, start, args,
+                                duration);
+
+    // TODO(nduca): Forgive me for what I must do.
+    this.subSlices = undefined;
+    this.isTopLevel = (opt_isTopLevel === true);
+  };
+
+  AsyncSlice.prototype = {
+    __proto__: tv.c.trace_model.Slice.prototype,
+
+    id: undefined,
+
+    startThread: undefined,
+
+    endThread: undefined,
+
+    subSlices: undefined,
+
+    get viewSubGroupTitle() {
+      return this.title;
+    },
+
+    get userFriendlyName() {
+      return 'Async slice ' + this.title + ' at ' +
+          tv.c.analysis.tsString(this.start);
+    }
+  };
+
+  tv.c.trace_model.EventRegistry.register(
+      AsyncSlice,
+      {
+        name: 'asyncSlice',
+        pluralName: 'asyncSlices',
+        singleViewElementName: 'tv-c-single-slice-sub-view',
+        multiViewElementName: 'tv-c-multi-slice-sub-view'
+      });
+
+
+  var options = new tv.b.ExtensionRegistryOptions(
+      tv.b.TYPE_BASED_REGISTRY_MODE);
+  options.mandatoryBaseClass = AsyncSlice;
+  options.defaultConstructor = AsyncSlice;
+  tv.b.decorateExtensionRegistry(AsyncSlice, options);
+
+  return {
+    AsyncSlice: AsyncSlice
+  };
+});
+</script>
