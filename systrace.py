@@ -12,8 +12,7 @@ the kernel.  It creates an HTML file for visualizing the trace.
 
 import errno, optparse, os, re, select, subprocess, sys, time, zlib
 
-flattened_css_file = 'style.css'
-flattened_js_file = 'script.js'
+flattened_html_file = 'systrace_trace_viewer.html'
 
 class OptionParserIgnoreErrors(optparse.OptionParser):
   def error(self, msg):
@@ -40,8 +39,12 @@ def get_device_sdk_version():
   if options.device_serial is not None:
     getprop_args[1:1] = ['-s', options.device_serial]
 
-  adb = subprocess.Popen(getprop_args, stdout=subprocess.PIPE,
-                         stderr=subprocess.PIPE)
+  try:
+    adb = subprocess.Popen(getprop_args, stdout=subprocess.PIPE,
+                           stderr=subprocess.PIPE)
+  except OSError:
+    print 'Missing adb?'
+    sys.exit(1)
   out, err = adb.communicate()
   if adb.returncode != 0:
     print >> sys.stderr, 'Error querying device SDK-version:'
@@ -93,6 +96,9 @@ def main():
 
   options, args = parser.parse_args()
 
+  if options.link_assets or options.asset_dir != 'trace-viewer':
+    parser.error('--link-assets and --asset-dir is deprecated.')
+
   if options.list_categories:
     atrace_args = ['adb', 'shell', 'atrace', '--list_categories']
     expect_trace = False
@@ -131,22 +137,8 @@ def main():
 
   script_dir = os.path.dirname(os.path.abspath(sys.argv[0]))
 
-  if options.link_assets:
-    src_dir = os.path.join(script_dir, options.asset_dir, 'src')
-    build_dir = os.path.join(script_dir, options.asset_dir, 'build')
-
-    js_files, js_flattenizer, css_files, templates = get_assets(src_dir, build_dir)
-
-    css = '\n'.join(linked_css_tag % (os.path.join(src_dir, f)) for f in css_files)
-    js = '<script language="javascript">\n%s</script>\n' % js_flattenizer
-    js += '\n'.join(linked_js_tag % (os.path.join(src_dir, f)) for f in js_files)
-
-  else:
-    css_filename = os.path.join(script_dir, flattened_css_file)
-    js_filename = os.path.join(script_dir, flattened_js_file)
-    css = compiled_css_tag % (open(css_filename).read())
-    js = compiled_js_tag % (open(js_filename).read())
-    templates = ''
+  with open(os.path.join(script_dir, flattened_html_file), 'r') as f:
+    trace_viewer_html = f.read()
 
   html_filename = options.output_file
 
@@ -258,7 +250,8 @@ def main():
       html_suffix = read_asset(script_dir, 'suffix.html')
 
       html_file = open(html_filename, 'w')
-      html_file.write(html_prefix % (css, js, templates))
+      html_file.write(
+        html_prefix.replace("{{SYSTRACE_TRACE_VIEWER_HTML}}", trace_viewer_html))
       html_out = out.replace('\n', '\\n\\\n')
       html_file.write(html_out)
       html_file.write(html_suffix)
@@ -272,42 +265,6 @@ def main():
 def read_asset(src_dir, filename):
   return open(os.path.join(src_dir, filename)).read()
 
-def get_assets(src_dir, build_dir):
-  sys.path.append(build_dir)
-  gen = __import__('generate_standalone_timeline_view', {}, {})
-  parse_deps = __import__('parse_deps', {}, {})
-  gen_templates = __import__('generate_template_contents', {}, {})
-  filenames = gen._get_input_filenames()
-  load_sequence = parse_deps.calc_load_sequence(filenames, src_dir)
-
-  js_files = []
-  js_flattenizer = "window.FLATTENED = {};\n"
-  js_flattenizer += "window.FLATTENED_RAW_SCRIPTS = {};\n"
-  css_files = []
-
-  for module in load_sequence:
-    js_files.append(os.path.relpath(module.filename, src_dir))
-    js_flattenizer += "window.FLATTENED['%s'] = true;\n" % module.name
-    for dependent_raw_script_name in module.dependent_raw_script_names:
-      js_flattenizer += (
-        "window.FLATTENED_RAW_SCRIPTS['%s'] = true;\n" %
-        dependent_raw_script_name)
-
-    for style_sheet in module.style_sheets:
-      css_files.append(os.path.relpath(style_sheet.filename, src_dir))
-
-  templates = gen_templates.generate_templates()
-
-  sys.path.pop()
-
-  return (js_files, js_flattenizer, css_files, templates)
-
-
-compiled_css_tag = """<style type="text/css">%s</style>"""
-compiled_js_tag = """<script language="javascript">%s</script>"""
-
-linked_css_tag = """<link rel="stylesheet" href="%s"></link>"""
-linked_js_tag = """<script language="javascript" src="%s"></script>"""
 
 if __name__ == '__main__':
   main()

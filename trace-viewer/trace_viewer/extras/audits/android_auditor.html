@@ -1,0 +1,212 @@
+<!DOCTYPE html>
+<!--
+Copyright (c) 2013 The Chromium Authors. All rights reserved.
+Use of this source code is governed by a BSD-style license that can be
+found in the LICENSE file.
+-->
+<link rel="import" href="/base/base.html">
+<link rel="import" href="/core/auditor.html">
+<link rel="import" href="/extras/audits/android_model_helper.html">
+<link rel="import" href="/extras/audits/utils.html">
+
+<script>
+'use strict';
+
+/**
+ * @fileoverview Class for Android-specific Auditing
+ */
+tv.exportTo('tv.e.audits', function() {
+  // TODO: extract from VSYNC, since not all devices have vsync near 60fps
+  var EXPECTED_FRAME_TIME_MS = 16.67;
+
+  var Auditor = tv.c.Auditor;
+  var AndroidModelHelper = tv.e.audits.AndroidModelHelper;
+
+  /**
+   * Auditor for Android-specific traces.
+   * @constructor
+   */
+  function AndroidAuditor(model) {
+    this.model = model;
+    var helper = new AndroidModelHelper(model);
+    if (helper.apps.length || helper.surfaceFlinger)
+      this.helper = helper;
+  };
+
+  AndroidAuditor.prototype = {
+    __proto__: Auditor.prototype,
+
+    renameAndSort_: function() {
+      // SurfaceFlinger first, other processes sorted by slice count
+      this.model.getAllProcesses().forEach(function(process) {
+        if (this.helper.surfaceFlinger &&
+            process == this.helper.surfaceFlinger.process) {
+          if (!process.name)
+            process.name = 'SurfaceFlinger';
+          process.sortIndex = Number.NEGATIVE_INFINITY;
+          return;
+        }
+
+        var uiThread = process.getThread(process.pid);
+        if (!process.name && uiThread && uiThread.name) {
+          if (/^ndroid\./.test(uiThread.name))
+            uiThread.name = 'a' + uiThread.name;
+          process.name = uiThread.name;
+        }
+
+        process.sortIndex = 0;
+        for (var tid in process.threads) {
+          process.sortIndex -= process.threads[tid].sliceGroup.slices.length;
+        }
+      }, this);
+
+      // ensure sequential, relative order for UI/Render/Worker threads
+      this.model.getAllThreads().forEach(function(thread) {
+        if (thread.tid == thread.parent.pid)
+          thread.sortIndex = -3;
+        if (thread.name == 'RenderThread')
+          thread.sortIndex = -2;
+        if (/^hwuiTask/.test(thread.name))
+          thread.sortIndex = -1;
+      });
+    },
+
+    pushFramesAndJudgeJank_: function() {
+      var badFramesObserved = 0;
+      var framesObserved = 0;
+      this.helper.apps.forEach(function(app) {
+        // override frame list
+        app.process.frames = app.getFrames();
+
+        app.process.frames.forEach(function(frame) {
+          if (frame.totalDuration > EXPECTED_FRAME_TIME_MS)
+            badFramesObserved++;
+        });
+        framesObserved += app.process.frames.length;
+      });
+
+      if (framesObserved) {
+        var portionBad = badFramesObserved / framesObserved;
+        if (portionBad > 0.3)
+          this.model.faviconHue = 'red';
+        else if (portionBad > 0.05)
+          this.model.faviconHue = 'yellow';
+        else
+          this.model.faviconHue = 'green';
+      }
+    },
+
+    runAnnotate: function() {
+      if (!this.helper)
+        return;
+
+      this.renameAndSort_();
+      this.pushFramesAndJudgeJank_();
+
+      this.helper.iterateImportantSlices(function(slice) {
+        slice.important = true;
+      });
+    },
+
+    runAudit: function() {
+      if (!this.helper)
+        return;
+
+      this.helper.apps.forEach(function(app) {
+        // per frame alerts
+        app.getFrames().forEach(this.getFrameTimingAlerts, this);
+
+        // general alerts
+        this.addSaveLayerAlerts(app.renderThread);
+      }, this);
+
+      this.addRenderingInteractionRecords();
+      this.addInputInteractionRecords();
+    },
+
+    getFrameTimingAlerts: function(frame) {
+      /*
+      * Currently, we create alerts for these, but really we should
+      * highlight frame-production-performance isolated per app,
+      * without alerts.
+      *
+      * Consider highlighting process background green when frames
+      * take < 16.6ms, yellow when double buffered but not dropping
+      * frames, red when actively janking.
+      */
+      if (frame.totalDuration > EXPECTED_FRAME_TIME_MS) {
+        var alertType = new tv.c.trace_model.AlertType(
+            'Long frame',
+            'Frames should take fewer than' + EXPECTED_FRAME_TIME_MS +
+            'ms to ensure smooth performance.',
+            tv.c.trace_model.ALERT_SEVERITY.WARNING);
+        var alert = new tv.c.trace_model.Alert(
+            alertType,
+            frame.start, { 'totalDuration' : frame.totalDuration });
+        this.model.alerts.push(alert);
+      }
+    },
+
+    addSaveLayerAlerts: function(renderThread) {
+      if (!renderThread)
+        return;
+      var saveLayerRegEx = /caused (unclipped )?saveLayer (\d+)x(\d+)/;
+      renderThread.sliceGroup.slices.forEach(function(slice) {
+        var match = saveLayerRegEx.exec(slice.title);
+        if (match) {
+          var alertType = new tv.c.trace_model.AlertType(
+              'Inefficient Alpha',
+              'http://developer.android.com/reference/android/view/View.html#setAlpha(float)', // @suppress longLineCheck
+              tv.c.trace_model.ALERT_SEVERITY.CRITICAL);
+          var args = { 'width' : parseInt(match[2]),
+                       'height' : parseInt(match[3]) };
+          var alert = new tv.c.trace_model.Alert(alertType, slice.start, args);
+          this.model.alerts.push(alert);
+        }
+        // TODO: also do something reasonable with standalone saveLayer commands
+      }, this);
+    },
+
+    addRenderingInteractionRecords: function() {
+      var events = [];
+      this.helper.apps.forEach(function(app) {
+        events.push.apply(events, app.getAnimationAsyncSlices());
+        events.push.apply(events, app.getFrames());
+      });
+
+      var mergerFunction = function(events) {
+        var ir = new tv.c.trace_model.InteractionRecord('Rendering',
+            tv.b.ui.getColorIdForGeneralPurposeString('mt_rendering'),
+            events[0].start,
+            events[events.length - 1].end - events[0].start);
+        this.model.addInteractionRecord(ir);
+      }.bind(this);
+      tv.e.audits.mergeEvents(events, 30, mergerFunction);
+    },
+
+    addInputInteractionRecords: function() {
+      var inputSamples = [];
+      this.helper.apps.forEach(function(app) {
+        inputSamples.push.apply(inputSamples, app.getInputSamples());
+      });
+
+      var mergerFunction = function(events) {
+        var ir = new tv.c.trace_model.InteractionRecord('Input',
+            tv.b.ui.getColorIdForGeneralPurposeString('mt_input'),
+            events[0].timestamp,
+            events[events.length - 1].timestamp - events[0].timestamp);
+        this.model.addInteractionRecord(ir);
+      }.bind(this);
+      var timestampFunction = function(x) { return x.timestamp; };
+      tv.e.audits.mergeEvents(inputSamples, 30, mergerFunction,
+                              timestampFunction, timestampFunction);
+    }
+  };
+
+  Auditor.register(AndroidAuditor);
+
+  return {
+    AndroidAuditor: AndroidAuditor
+  };
+});
+</script>

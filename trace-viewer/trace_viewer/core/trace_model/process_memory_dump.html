@@ -1,0 +1,126 @@
+<!DOCTYPE html>
+<!--
+Copyright (c) 2015 The Chromium Authors. All rights reserved.
+Use of this source code is governed by a BSD-style license that can be
+found in the LICENSE file.
+-->
+
+<link rel="import" href="/core/trace_model/timed_event.html">
+<link rel="import" href="/core/analysis/util.html">
+
+<script>
+'use strict';
+
+/**
+ * @fileoverview Provides the ProcessMemoryDump class.
+ */
+tv.exportTo('tv.c.trace_model', function() {
+  /**
+   * The ProcessMemoryDump represents a memory dump of a single process.
+   * @constructor
+   */
+  function ProcessMemoryDump(globalMemoryDump, process, start) {
+    tv.c.trace_model.TimedEvent.call(this, start);
+    this.process = process;
+    this.globalMemoryDump = globalMemoryDump;
+
+    this.totalResidentBytes = undefined;
+    this.vmRegions = undefined;
+    this.memoryAllocatorDumps = [];
+    this.memoryAllocatorDumpsByFullName = {};
+  };
+
+  ProcessMemoryDump.prototype = {
+    __proto__: tv.c.trace_model.TimedEvent.prototype,
+
+    shiftTimestampsForward: function(amount) {
+      this.start += amount;
+    },
+
+    get userFriendlyName() {
+      return 'Process memory dump ' + ' at ' +
+          tv.c.analysis.tsString(this.start);
+    }
+  };
+
+  /**
+   * @constructor
+   */
+  function MemoryAllocatorDump(fullName, physicalSizeInBytes,
+      allocatedObjectsCount, allocatedObjectsSizeInBytes, opt_parent) {
+    this.fullName = fullName;
+    this.parent = opt_parent;
+    this.children = [];
+
+    this.physicalSizeInBytes = physicalSizeInBytes;
+    this.allocatedObjectsCount = allocatedObjectsCount;
+    this.allocatedObjectsSizeInBytes = allocatedObjectsSizeInBytes;
+
+    // TODO(primiano): next CLs add extra_attributes.
+  };
+
+  MemoryAllocatorDump.prototype = {
+    get name() {
+      return this.fullName.substring(this.fullName.lastIndexOf('/') + 1);
+    }
+  };
+
+  /**
+   * @constructor
+   */
+  function VMRegion(startAddress, sizeInBytes, protectionFlags,
+      mappedFile, byteStats) {
+    this.startAddress = startAddress;
+    this.sizeInBytes = sizeInBytes;
+    this.protectionFlags = protectionFlags;
+    this.mappedFile = mappedFile;
+    this.byteStats = byteStats;
+  };
+
+  VMRegion.PROTECTION_FLAG_READ = 4;
+  VMRegion.PROTECTION_FLAG_WRITE = 2;
+  VMRegion.PROTECTION_FLAG_EXECUTE = 1;
+
+  VMRegion.prototype = {
+    get protectionFlagsToString() {
+      return (
+          (this.protectionFlags & VMRegion.PROTECTION_FLAG_READ ? 'r' : '-') +
+          (this.protectionFlags & VMRegion.PROTECTION_FLAG_WRITE ? 'w' : '-') +
+          (this.protectionFlags & VMRegion.PROTECTION_FLAG_EXECUTE ? 'x' : '-')
+      );
+    }
+  };
+
+  /**
+   * @constructor
+   */
+  function VMRegionByteStats(privateResident, sharedResident,
+      proportionalResident) {
+    this.privateResident = privateResident;
+    this.sharedResident = sharedResident;
+    this.proportionalResident = proportionalResident;
+  };
+
+  VMRegionByteStats.prototype = {
+    get totalResident() {
+      return this.privateResident + this.sharedResident;
+    }
+  };
+
+  tv.c.trace_model.EventRegistry.register(
+      ProcessMemoryDump,
+      {
+        name: 'processMemoryDump',
+        pluralName: 'processMemoryDumps',
+        singleViewElementName: 'tv-c-single-process-memory-dump-sub-view',
+        multiViewElementName: 'tv-c-multi-process-memory-dump-sub-view'
+      });
+
+  return {
+    ProcessMemoryDump: ProcessMemoryDump,
+    MemoryAllocatorDump: MemoryAllocatorDump,
+    VMRegion: VMRegion,
+    VMRegionByteStats: VMRegionByteStats
+  };
+});
+</script>

@@ -1,0 +1,129 @@
+<!DOCTYPE html>
+<!--
+Copyright (c) 2013 The Chromium Authors. All rights reserved.
+Use of this source code is governed by a BSD-style license that can be
+found in the LICENSE file.
+-->
+
+<link rel="import" href="/core/analysis/generic_object_view.html">
+<link rel="import" href="/core/trace_model/object_instance.html">
+
+<script>
+'use strict';
+
+tv.b.unittest.testSuite(function() { // @suppress longLineCheck
+  test('undefinedValue', function() {
+    var view = document.createElement('tv-c-analysis-generic-object-view');
+    view.object = undefined;
+    assert.equal(view.shadowRoot.textContent, 'undefined');
+  });
+
+  test('nullValue', function() {
+    var view = document.createElement('tv-c-analysis-generic-object-view');
+    view.object = null;
+    assert.equal(view.shadowRoot.textContent, 'null');
+  });
+
+  test('stringValue', function() {
+    var view = document.createElement('tv-c-analysis-generic-object-view');
+    view.object = 'string value';
+    assert.equal(view.shadowRoot.textContent, '"string value"');
+  });
+
+  test('jsonObjectStringValue', function() {
+    var view = document.createElement('tv-c-analysis-generic-object-view');
+    view.object = '{"x": 1}';
+    assert.equal(view.shadowRoot.children.length, 1);
+    assert.equal(view.shadowRoot.children[0].children.length, 4);
+  });
+
+  test('jsonArraStringValue', function() {
+    var view = document.createElement('tv-c-analysis-generic-object-view');
+    view.object = '[1,2,3]';
+    assert.equal(view.shadowRoot.children.length, 3);
+  });
+
+  test('booleanValue', function() {
+    var view = document.createElement('tv-c-analysis-generic-object-view');
+    view.object = false;
+    assert.equal(view.shadowRoot.textContent, 'false');
+  });
+
+  test('numberValue', function() {
+    var view = document.createElement('tv-c-analysis-generic-object-view');
+    view.object = 3.14159;
+    assert.equal(view.shadowRoot.textContent, '3.14159');
+  });
+
+  test('objectSnapshotValue', function() {
+    var view = document.createElement('tv-c-analysis-generic-object-view');
+
+    var i10 = new tv.c.trace_model.ObjectInstance(
+        {}, '0x1000', 'cat', 'name', 10);
+    var s10 = i10.addSnapshot(10, {foo: 1});
+
+    view.object = s10;
+    this.addHTMLOutput(view);
+    assert.strictEqual(view.shadowRoot.children[0].dataElement.tagName,
+        'TV-C-ANALYSIS-LINK');
+  });
+
+  test('objectInstanceValue', function() {
+    var view = document.createElement('tv-c-analysis-generic-object-view');
+
+    var i10 = new tv.c.trace_model.ObjectInstance(
+        {}, '0x1000', 'cat', 'name', 10);
+    var s10 = i10.addSnapshot(10, {foo: 1});
+
+    view.object = i10;
+    assert.strictEqual(view.shadowRoot.children[0].dataElement.tagName,
+        'TV-C-ANALYSIS-LINK');
+  });
+
+  test('instantiate_emptyArrayValue', function() {
+    var view = document.createElement('tv-c-analysis-generic-object-view');
+    view.object = [];
+    this.addHTMLOutput(view);
+  });
+
+  test('instantiate_twoValueArrayValue', function() {
+    var view = document.createElement('tv-c-analysis-generic-object-view');
+    view.object = [1, 2];
+    this.addHTMLOutput(view);
+  });
+
+  test('instantiate_twoValueBArrayValue', function() {
+    var view = document.createElement('tv-c-analysis-generic-object-view');
+    view.object = [1, {x: 1}];
+    this.addHTMLOutput(view);
+  });
+
+  test('instantiate_arrayValue', function() {
+    var view = document.createElement('tv-c-analysis-generic-object-view');
+    view.object = [1, 2, 'three'];
+    this.addHTMLOutput(view);
+  });
+
+  test('instantiate_arrayWithSimpleObjectValue', function() {
+    var view = document.createElement('tv-c-analysis-generic-object-view');
+    view.object = [{simple: 'object'}];
+    this.addHTMLOutput(view);
+  });
+
+  test('instantiate_arrayWithComplexObjectValue', function() {
+    var view = document.createElement('tv-c-analysis-generic-object-view');
+    view.object = [{complex: 'object', field: 'two'}];
+    this.addHTMLOutput(view);
+  });
+
+  test('instantiate_objectValue', function() {
+    var view = document.createElement('tv-c-analysis-generic-object-view');
+    view.object = {
+      'entry_one': 'entry_one_value',
+      'entry_two': 2,
+      'entry_three': [3, 4, 5]
+    };
+    this.addHTMLOutput(view);
+  });
+});
+</script>

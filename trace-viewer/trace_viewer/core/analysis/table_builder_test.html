@@ -1,0 +1,374 @@
+<!DOCTYPE html>
+<!--
+Copyright (c) 2014 The Chromium Authors. All rights reserved.
+Use of this source code is governed by a BSD-style license that can be
+found in the LICENSE file.
+-->
+
+<link rel="import" href="/base/deep_utils.html">
+<link rel="import" href="/core/analysis/table_builder.html">
+
+<script>
+'use strict';
+
+tv.b.unittest.testSuite(function() {
+  var THIS_DOC = document._currentScript.ownerDocument;
+
+  test('instantiateNestedTableNoNests', function() {
+    var columns = [
+      {
+        title: 'First Column',
+        value: function(row) { return row.firstData; },
+        width: '200px'
+      },
+      {
+        title: 'Second Column',
+        value: function(row) { return row.secondData; }
+      }
+    ];
+
+    var rows = [
+      {
+        firstData: 'A1',
+        secondData: 'A2'
+      },
+      {
+        firstData: 'B1',
+        secondData: 'B2'
+      }
+    ];
+
+    var table = document.createElement('tracing-analysis-nested-table');
+    table.tableColumns = columns;
+    table.tableRows = rows;
+    table.rebuild();
+
+    this.addHTMLOutput(table);
+  });
+
+  test('instantiateNestedTableWithNests', function() {
+    var columns = [
+      {
+        title: 'First Column',
+        value: function(row) { return row.firstData; },
+        width: '250px'
+      },
+      {
+        title: 'Second Column',
+        value: function(row) { return row.secondData; },
+        width: '50%'
+      }
+    ];
+
+    var rows = [
+      {
+        firstData: 'A1',
+        secondData: 'A2',
+        subRows: [
+          {
+            firstData: 'Sub1 A1',
+            secondData: 'Sub1 A2'
+          },
+          {
+            firstData: 'Sub2 A1',
+            secondData: 'Sub2 A2',
+            subRows: [
+              {
+                firstData: 'SubSub1 A1',
+                secondData: 'SubSub1 A2'
+              },
+              {
+                firstData: 'SubSub2 A1',
+                secondData: 'SubSub2 A2'
+              }
+            ]
+          },
+          {
+            firstData: 'Sub3 A1',
+            secondData: 'Sub3 A2'
+          }
+        ]
+      },
+      {
+        firstData: 'B1',
+        secondData: 'B2'
+      }
+    ];
+
+    var table = document.createElement('tracing-analysis-nested-table');
+    table.tableColumns = columns;
+    table.tableRows = rows;
+    table.rebuild();
+
+    this.addHTMLOutput(table);
+  });
+
+  test('instantiateSortingCallbacksWithNests', function() {
+    var table = document.createElement('tracing-analysis-nested-table');
+
+    var columns = [
+      {
+        title: 'First Column',
+        value: function(row) { return row.firstData; },
+        width: '50%'
+      },
+      {
+        title: 'Second Column',
+        value: function(row) { return row.secondData; },
+        width: '250px',
+        cmp: function(rowA, rowB) {
+          return rowA.secondData.toString().localeCompare(
+              rowB.secondData.toString());
+        },
+        showExpandButtons: true
+      }
+    ];
+
+    var rows = [
+      {
+        firstData: 'A1',
+        secondData: 'A2',
+        subRows: [
+          {
+            firstData: 'Sub1 A1',
+            secondData: 'Sub1 A2'
+          },
+          {
+            firstData: 'Sub2 A1',
+            secondData: 'Sub2 A2',
+            subRows: [
+              {
+                firstData: 'SubSub1 A1',
+                secondData: 'SubSub1 A2'
+              },
+              {
+                firstData: 'SubSub2 A1',
+                secondData: 'SubSub2 A2'
+              }
+            ]
+          },
+          {
+            firstData: 'Sub3 A1',
+            secondData: 'Sub3 A2'
+          }
+        ]
+      },
+      {
+        firstData: 'B1',
+        secondData: 'B2'
+      }
+    ];
+
+    var footerRows = [
+      {
+        firstData: 'F1',
+        secondData: 'F2',
+        subRows: [
+          {
+            firstData: 'Sub1F1',
+            secondData: 'Sub1F2'
+          },
+          {
+            firstData: 'Sub2F1',
+            secondData: 'Sub2F2',
+            subRows: [
+              {
+                firstData: 'SubSub1F1',
+                secondData: 'SubSub1F2'
+              },
+              {
+                firstData: 'SubSub2F1',
+                secondData: 'SubSub2F2'
+              }
+            ]
+          },
+          {
+            firstData: 'Sub3F1',
+            secondData: 'Sub3F2'
+          }
+        ]
+      },
+      {
+        firstData: 'F\'1',
+        secondData: 'F\'2'
+      }
+
+    ];
+
+    table.tableColumns = columns;
+    table.tableRows = rows;
+    table.footerRows = footerRows;
+    table.rebuild();
+
+    this.addHTMLOutput(table);
+
+    var button = THIS_DOC.createElement('button');
+    button.textContent = 'Sort By Col 0';
+    button.addEventListener('click', function() {
+      table.sortDescending = !table.sortDescending;
+      table.sortColumnIndex = 0;
+    });
+    table.rebuild();
+
+    this.addHTMLOutput(button);
+  });
+
+
+  test('instantiateNestedTableAlreadyExpanded', function() {
+    var columns = [
+      {
+        title: 'a',
+        value: function(row) { return row.a; },
+        width: '150px'
+      },
+      {
+        title: 'a',
+        value: function(row) { return row.b; },
+        width: '50%'
+      }
+    ];
+
+    var rows = [
+      {
+        a: 'aToplevel',
+        b: 'bToplevel',
+        isExpanded: true,
+        subRows: [
+          {
+            a: 'a1',
+            b: 'b1'
+          }
+        ]
+      }
+    ];
+
+    var table = document.createElement('tracing-analysis-nested-table');
+    table.tableColumns = columns;
+    table.tableRows = rows;
+    table.rebuild();
+    this.addHTMLOutput(table);
+
+    var a1El = tv.b.findDeepElementMatchingPredicate(table, function(element) {
+      return element.textContent == 'a1';
+    });
+    assert.isDefined(a1El);
+
+    var bToplevelEl = tv.b.findDeepElementMatchingPredicate(
+        table,
+        function(element) {
+          return element.textContent == 'bToplevel';
+        });
+    assert.isDefined(bToplevelEl);
+    var expandButton = bToplevelEl.parentElement.querySelector('expand-button');
+    assert.isTrue(expandButton.classList.contains('button-expanded'));
+  });
+
+
+  test('instantiateTableWithHiddenHeader', function() {
+    var columns = [
+      {
+        title: 'a',
+        value: function(row) { return row.a; },
+        width: '150px'
+      },
+      {
+        title: 'a',
+        value: function(row) { return row.b; },
+        width: '50%'
+      }
+    ];
+
+    var rows = [
+      {
+        a: 'aToplevel',
+        b: 'bToplevel'
+      }
+    ];
+
+    var table = document.createElement('tracing-analysis-nested-table');
+    table.showHeader = false;
+    table.tableColumns = columns;
+    table.tableRows = rows;
+    table.rebuild();
+    this.addHTMLOutput(table);
+
+    var tHead = table.$.head;
+    assert.equal(table.$.head.children.length, 0);
+    assert.equal(0, tHead.getBoundingClientRect().height);
+
+    table.showHeader = true;
+    table.rebuild();
+    table.showHeader = false;
+    table.rebuild();
+    assert.equal(table.$.head.children.length, 0);
+  });
+
+
+  test('sortColumnsNotPossibleOnPercentSizedColumns', function() {
+    var columns = [
+      {
+        title: 'Title',
+        value: function(row) { return row.a; },
+        width: '150px'
+      },
+      {
+        title: 'Value',
+        value: function(row) { return row.b; },
+        width: '100%',
+        showExpandButtons: true
+      }
+    ];
+
+    var table1 = document.createElement('tracing-analysis-nested-table');
+    table1.showHeader = true;
+
+    assert.throws(function() {
+      table1.tableColumns = columns;
+    });
+  });
+
+  test('twoTablesFirstColumnMatching', function() {
+    var columns = [
+      {
+        title: 'Title',
+        value: function(row) { return row.a; },
+        width: '150px'
+      },
+      {
+        title: 'Value',
+        value: function(row) { return row.b; },
+        width: '100%'
+      }
+    ];
+
+    var table1 = document.createElement('tracing-analysis-nested-table');
+    table1.showHeader = true;
+    table1.tableColumns = columns;
+    table1.tableRows = [
+      {
+        a: 'first',
+        b: 'row'
+      }
+    ];
+    table1.rebuild();
+    this.addHTMLOutput(table1);
+
+    var table2 = document.createElement('tracing-analysis-nested-table');
+    table2.showHeader = false;
+    table2.tableColumns = columns;
+    table2.tableRows = [
+      {
+        a: 'second',
+        b: 'row'
+      }
+    ];
+    table2.rebuild();
+    this.addHTMLOutput(table2);
+
+    var h1FirstCol = table1.$.head.children[0].children[0];
+    var h2FirstCol = table2.$.body.children[0].children[0];
+    assert.equal(h1FirstCol.getBoundingClientRect().width,
+                 h2FirstCol.getBoundingClientRect().width);
+  });
+});
+</script>
