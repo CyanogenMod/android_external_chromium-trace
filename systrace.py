@@ -252,8 +252,11 @@ def main():
       html_file = open(html_filename, 'w')
       html_file.write(
         html_prefix.replace("{{SYSTRACE_TRACE_VIEWER_HTML}}", trace_viewer_html))
-      html_out = out.replace('\n', '\\n\\\n')
-      html_file.write(html_out)
+
+      # format newlines and double quotes
+      # for embedding in double-quoted JS string
+      html_file.write(out.replace('\n', '\\n\\\n').replace('\"', '\\\"'))
+
       html_file.write(html_suffix)
       html_file.close()
       print "\n    wrote file://%s\n" % os.path.abspath(options.output_file)
