@@ -39,16 +39,17 @@ tv.exportTo('tv.c.trace_model', function() {
       return this.leafStackFrame.colorId;
     },
 
-    toJSON: function() {
-      return {};
-    },
-
     get stackTrace() {
       return this.leafStackFrame.stackTrace;
     },
 
     getUserFriendlyStackTrace: function() {
       return this.leafStackFrame.getUserFriendlyStackTrace();
+    },
+
+    get userFriendlyName() {
+      return 'Sample ' + ' at ' +
+          tv.c.analysis.tsString(this.start);
     }
   };
 

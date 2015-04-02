@@ -35,7 +35,6 @@ tv.b.unittest.testSuite(function() {
     items[1].selectionState = SelectionState.SELECTED;
 
     var div = document.createElement('div');
-    this.addHTMLOutput(div);
 
     var viewport = new Viewport(div);
     var drawingContainer = new tv.c.tracks.DrawingContainer(viewport);
@@ -43,8 +42,10 @@ tv.b.unittest.testSuite(function() {
 
     var track = LetterDotTrack(viewport);
     track.getModelEventFromItem = function(item) { return item; }
-    drawingContainer.invalidate();
     drawingContainer.appendChild(track);
+
+    this.addHTMLOutput(div);
+    drawingContainer.invalidate();
 
     track.items = items;
     var dt = new tv.c.TimelineDisplayTransform();
@@ -67,22 +68,22 @@ tv.b.unittest.testSuite(function() {
     var selection = [];
     track.addIntersectingItemsInRangeToSelectionInWorldSpace(
         3, 4, viewPixWidthWorld, selection);
-    assertEquals(0, selection.length);
+    assert.equal(selection.length, 0);
 
     // Hit the first item, via pixel-nearness.
     selection = [];
     track.addIntersectingItemsInRangeToSelectionInWorldSpace(
         19.98, 19.99, viewPixWidthWorld, selection);
-    assertEquals(1, selection.length);
-    assertEquals(selection[0], items[1]);
+    assert.equal(selection.length, 1);
+    assert.equal(selection[0], items[1]);
 
     // Hit the instance, between the 1st and 2nd snapshots
     selection = [];
     track.addIntersectingItemsInRangeToSelectionInWorldSpace(
         30, 50, viewPixWidthWorld, selection);
-    assertEquals(2, selection.length);
-    assertEquals(selection[0], items[2]);
-    assertEquals(selection[1], items[3]);
+    assert.equal(selection.length, 2);
+    assert.equal(selection[0], items[2]);
+    assert.equal(selection[1], items[3]);
   });
 });
 </script>

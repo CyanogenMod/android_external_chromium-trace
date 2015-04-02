@@ -6,6 +6,7 @@ found in the LICENSE file.
 -->
 
 <link rel="import" href="/core/trace_model/timed_event.html">
+<link rel="import" href="/core/analysis/util.html">
 
 <script>
 'use strict';
@@ -18,11 +19,15 @@ tv.exportTo('tv.c.trace_model', function() {
    * The ProcessMemoryDump represents a memory dump of a single process.
    * @constructor
    */
-  function ProcessMemoryDump(globalMemoryDump, process, start, opt_args) {
+  function ProcessMemoryDump(globalMemoryDump, process, start) {
     tv.c.trace_model.TimedEvent.call(this, start);
     this.process = process;
     this.globalMemoryDump = globalMemoryDump;
-    this.args = opt_args;
+
+    this.totalResidentBytes = undefined;
+    this.vmRegions = undefined;
+    this.memoryAllocatorDumps = [];
+    this.memoryAllocatorDumpsByFullName = {};
   };
 
   ProcessMemoryDump.prototype = {
@@ -32,20 +37,73 @@ tv.exportTo('tv.c.trace_model', function() {
       this.start += amount;
     },
 
-    toJSON: function() {
-      var obj = new Object();
-      var keys = Object.keys(this);
-      for (var i = 0; i < keys.length; i++) {
-        var key = keys[i];
-        if (typeof this[key] == 'function')
-          continue;
-        if (key == 'process')
-          continue;
-        if (key == 'globalMemoryDump')
-          continue;
-        obj[key] = this[key];
-      }
-      return obj;
+    get userFriendlyName() {
+      return 'Process memory dump ' + ' at ' +
+          tv.c.analysis.tsString(this.start);
+    }
+  };
+
+  /**
+   * @constructor
+   */
+  function MemoryAllocatorDump(fullName, physicalSizeInBytes,
+      allocatedObjectsCount, allocatedObjectsSizeInBytes, opt_parent) {
+    this.fullName = fullName;
+    this.parent = opt_parent;
+    this.children = [];
+
+    this.physicalSizeInBytes = physicalSizeInBytes;
+    this.allocatedObjectsCount = allocatedObjectsCount;
+    this.allocatedObjectsSizeInBytes = allocatedObjectsSizeInBytes;
+
+    // TODO(primiano): next CLs add extra_attributes.
+  };
+
+  MemoryAllocatorDump.prototype = {
+    get name() {
+      return this.fullName.substring(this.fullName.lastIndexOf('/') + 1);
+    }
+  };
+
+  /**
+   * @constructor
+   */
+  function VMRegion(startAddress, sizeInBytes, protectionFlags,
+      mappedFile, byteStats) {
+    this.startAddress = startAddress;
+    this.sizeInBytes = sizeInBytes;
+    this.protectionFlags = protectionFlags;
+    this.mappedFile = mappedFile;
+    this.byteStats = byteStats;
+  };
+
+  VMRegion.PROTECTION_FLAG_READ = 4;
+  VMRegion.PROTECTION_FLAG_WRITE = 2;
+  VMRegion.PROTECTION_FLAG_EXECUTE = 1;
+
+  VMRegion.prototype = {
+    get protectionFlagsToString() {
+      return (
+          (this.protectionFlags & VMRegion.PROTECTION_FLAG_READ ? 'r' : '-') +
+          (this.protectionFlags & VMRegion.PROTECTION_FLAG_WRITE ? 'w' : '-') +
+          (this.protectionFlags & VMRegion.PROTECTION_FLAG_EXECUTE ? 'x' : '-')
+      );
+    }
+  };
+
+  /**
+   * @constructor
+   */
+  function VMRegionByteStats(privateResident, sharedResident,
+      proportionalResident) {
+    this.privateResident = privateResident;
+    this.sharedResident = sharedResident;
+    this.proportionalResident = proportionalResident;
+  };
+
+  VMRegionByteStats.prototype = {
+    get totalResident() {
+      return this.privateResident + this.sharedResident;
     }
   };
 
@@ -59,7 +117,10 @@ tv.exportTo('tv.c.trace_model', function() {
       });
 
   return {
-    ProcessMemoryDump: ProcessMemoryDump
+    ProcessMemoryDump: ProcessMemoryDump,
+    MemoryAllocatorDump: MemoryAllocatorDump,
+    VMRegion: VMRegion,
+    VMRegionByteStats: VMRegionByteStats
   };
 });
 </script>

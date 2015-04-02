@@ -6,6 +6,7 @@ found in the LICENSE file.
 -->
 
 <link rel="import" href="/core/trace_model/timed_event.html">
+<link rel="import" href="/core/analysis/util.html">
 
 <script>
 'use strict';
@@ -31,6 +32,12 @@ tv.exportTo('tv.c.trace_model', function() {
     this.startStackFrame = undefined;
     this.endStackFrame = undefined;
     this.didNotFinish = false;
+    this.inFlowEvents = [];
+    this.outFlowEvents = [];
+    this.subSlices = [];
+    this.selfTime = undefined;
+    this.cpuSelfTime = undefined;
+    this.important = false;
 
     if (opt_duration !== undefined)
       this.duration = opt_duration;
@@ -45,8 +52,27 @@ tv.exportTo('tv.c.trace_model', function() {
   Slice.prototype = {
     __proto__: tv.c.trace_model.TimedEvent.prototype,
 
+
     get analysisTypeName() {
       return this.title;
+    },
+
+    get userFriendlyName() {
+      return 'Slice ' + this.title + ' at ' +
+          tv.c.analysis.tsString(this.start);
+    },
+
+    findDescendentSlice: function(targetTitle) {
+      if (!this.subSlices)
+        return undefined;
+
+      for (var i = 0; i < this.subSlices.length; i++) {
+        if (this.subSlices[i].title == targetTitle)
+          return this.subSlices[i];
+        var slice = this.subSlices[i].findDescendentSlice(targetTitle);
+        if (slice) return slice;
+      }
+      return undefined;
     }
   };
 

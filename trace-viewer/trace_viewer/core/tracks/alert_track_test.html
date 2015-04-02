@@ -22,14 +22,17 @@ tv.b.unittest.testSuite(function() {
   var Viewport = tv.c.TimelineViewport;
 
   var ALERT_SEVERITY = tv.c.trace_model.ALERT_SEVERITY;
+  var ALERT_TYPE_1 = new tv.c.trace_model.AlertType(
+    'Alert 1', 'Critical alert', ALERT_SEVERITY.CRITICAL);
+  var ALERT_TYPE_2 = new tv.c.trace_model.AlertType(
+    'Alert 2', 'Warning alert', ALERT_SEVERITY.WARNING);
 
   var createAlerts = function() {
-    var m = new tv.c.TraceModel();
     var alerts = [
-      new tv.c.trace_model.Alert('Aaaah', 3, ALERT_SEVERITY.CRITICAL, 5),
-      new tv.c.trace_model.Alert('Aaaah', 3, ALERT_SEVERITY.CRITICAL, 20),
-      new tv.c.trace_model.Alert('Hrrrm', 5, ALERT_SEVERITY.WARNING, 35),
-      new tv.c.trace_model.Alert('Grrrr', 5, ALERT_SEVERITY.WARNING, 50)
+      new tv.c.trace_model.Alert(ALERT_TYPE_1, 5),
+      new tv.c.trace_model.Alert(ALERT_TYPE_1, 20),
+      new tv.c.trace_model.Alert(ALERT_TYPE_2, 35),
+      new tv.c.trace_model.Alert(ALERT_TYPE_2, 50)
     ];
     return alerts;
   };
@@ -39,22 +42,23 @@ tv.b.unittest.testSuite(function() {
     alerts[1].selectionState = SelectionState.SELECTED;
 
     var div = document.createElement('div');
-    this.addHTMLOutput(div);
-
     var viewport = new Viewport(div);
     var drawingContainer = new tv.c.tracks.DrawingContainer(viewport);
     div.appendChild(drawingContainer);
 
     var track = AlertTrack(viewport);
-    drawingContainer.invalidate();
     drawingContainer.appendChild(track);
+
+    this.addHTMLOutput(div);
+    drawingContainer.invalidate();
 
     track.alerts = alerts;
     var dt = new tv.c.TimelineDisplayTransform();
     dt.xSetWorldBounds(0, 50, track.clientWidth);
     track.viewport.setDisplayTransformImmediately(dt);
 
-    assertEquals(track.items[0].start, 5);
+
+    assert.equal(5, track.items[0].start);
   });
 
   test('modelMapping', function() {
@@ -66,7 +70,7 @@ tv.b.unittest.testSuite(function() {
     track.alerts = alerts;
 
     var a0 = track.getModelEventFromItem(track.items[0]);
-    assertTrue(a0 == alerts[0]);
+    assert.equal(a0, alerts[0]);
   });
 });
 </script>

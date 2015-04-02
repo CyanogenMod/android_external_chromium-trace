@@ -84,6 +84,12 @@ tv.exportTo('tv.c', function() {
     return options;
   }
 
+  function ClockSyncRecord(name, ts, args) {
+    this.name = name;
+    this.ts = ts;
+    this.args = args;
+  }
+
   /**
    * Builds a model from an array of TraceEvent objects.
    * @param {Object=} opt_eventData Data from a single trace to be imported into
@@ -93,6 +99,8 @@ tv.exportTo('tv.c', function() {
    * @constructor
    */
   function TraceModel(opt_eventData, opt_options) {
+    this.faviconHue = 'blue'; // Should be a key from favicons.html
+
     this.kernel = new Kernel(this);
     this.processes = {};
     this.metadata = [];
@@ -100,6 +108,7 @@ tv.exportTo('tv.c', function() {
     this.bounds = new tv.b.Range();
     this.instantEvents = [];
     this.flowEvents = [];
+    this.clockSyncRecords = [];
 
     this.stackFrames = {};
     this.samples = [];
@@ -108,10 +117,12 @@ tv.exportTo('tv.c', function() {
     this.interaction_records = [];
 
     this.flowIntervalTree = new tv.b.IntervalTree(
-        function(s) { return s.start; },
-        function(e) { return e.start; });
+        function(f) { return f.start; },
+        function(f) { return f.end; });
 
     this.globalMemoryDumps = [];
+
+    this.annotationsByGuid_ = {};
 
     this.importWarnings_ = [];
     this.reportedImportWarnings_ = {};
@@ -164,6 +175,12 @@ tv.exportTo('tv.c', function() {
       this.interaction_records.push(ir1);
     },
 
+    getClockSyncRecordsNamed: function(name) {
+      return this.clockSyncRecords.filter(function(x) {
+        return x.name === name;
+      });
+    },
+
     /**
      * Generates the set of categories from the slices and counters.
      */
@@ -193,6 +210,10 @@ tv.exportTo('tv.c', function() {
       for (var i = 0; i < this.globalMemoryDumps.length; i++)
         this.globalMemoryDumps[i].addBoundsToRange(this.bounds);
 
+      this.flowEvents.forEach(function(flowEvent) {
+        this.bounds.addValue(flowEvent.start);
+        this.bounds.addValue(flowEvent.end);
+      }, this);
       this.alerts.forEach(function(alert) {
         this.bounds.addValue(alert.start);
         this.bounds.addValue(alert.end);
@@ -219,6 +240,9 @@ tv.exportTo('tv.c', function() {
         var sample = this.samples[i];
         sample.start -= timeBase;
       }
+      this.flowEvents.forEach(function(flowEvent) {
+        flowEvent.start -= timeBase;
+      });
       this.alerts.forEach(function(alert) {
         alert.start -= timeBase;
       });
@@ -270,6 +294,27 @@ tv.exportTo('tv.c', function() {
         }
       }
       return counters;
+    },
+
+    getAnnotationByGUID: function(guid) {
+      return this.annotationsByGuid_[guid];
+    },
+
+    addAnnotation: function(annotation) {
+      if (!annotation.guid)
+        throw new Error('Annotation with undefined guid given');
+
+      this.annotationsByGuid_[annotation.guid] = annotation;
+      tv.b.dispatchSimpleEvent(this, 'annotationChange');
+    },
+
+    removeAnnotation: function(annotation) {
+      delete this.annotationsByGuid_[annotation.guid];
+      tv.b.dispatchSimpleEvent(this, 'annotationChange');
+    },
+
+    getAllAnnotations: function() {
+      return tv.b.dictionaryValues(this.annotationsByGuid_);
     },
 
     /**
@@ -443,7 +488,7 @@ tv.exportTo('tv.c', function() {
           task.subTask(function() {
             progressMeter.update(
                 'Importing ' + (index + 1) + ' of ' + importers.length);
-            importer.importEvents(index > 0);
+            importer.importEvents();
           }, this);
         }, this);
       }, this);
@@ -516,6 +561,19 @@ tv.exportTo('tv.c', function() {
           this.processes[pid].mergeKernelWithUserland();
       }, this);
 
+      // Create auditors
+      var auditors = [];
+      lastTask = lastTask.after(function() {
+        progressMeter.update('Adding arbitrary data to model...');
+        auditors = options.auditorConstructors.map(
+          function(auditorConstructor) {
+            return new auditorConstructor(this);
+          }, this);
+        auditors.forEach(function(auditor) {
+          auditor.runAnnotate();
+        });
+      }, this);
+
       lastTask = lastTask.after(function() {
         progressMeter.update('Computing final world bounds...');
         this.updateBounds();
@@ -529,8 +587,8 @@ tv.exportTo('tv.c', function() {
       lastTask = lastTask.after(function() {
         progressMeter.update('Building flow event map...');
         for (var i = 0; i < this.flowEvents.length; ++i) {
-          var pair = this.flowEvents[i];
-          this.flowIntervalTree.insert(pair[0], pair[1]);
+          var flowEvent = this.flowEvents[i];
+          this.flowIntervalTree.insert(flowEvent);
         }
         this.flowIntervalTree.updateHighValues();
       }, this);
@@ -569,10 +627,6 @@ tv.exportTo('tv.c', function() {
       // Run audits.
       lastTask = lastTask.after(function() {
         progressMeter.update('Running auditors...');
-        var auditors = options.auditorConstructors.map(
-          function(auditorConstructor) {
-            return new auditorConstructor(this);
-          }, this);
         auditors.forEach(function(auditor) {
           auditor.runAudit();
         });
@@ -657,6 +711,7 @@ tv.exportTo('tv.c', function() {
 
   return {
     ImportOptions: ImportOptions,
+    ClockSyncRecord: ClockSyncRecord,
     TraceModel: TraceModel
   };
 });

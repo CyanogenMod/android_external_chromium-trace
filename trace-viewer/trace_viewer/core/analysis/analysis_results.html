@@ -34,10 +34,12 @@ tv.exportTo('tv.c.analysis', function() {
 
     createSelectionChangingLink: function(text, selectionGenerator,
                                           opt_tooltip) {
-      var el = this.ownerDocument.createElement('a');
-      tv.c.analysis.AnalysisLink.decorate(el);
-      el.textContent = text;
-      el.selectionGenerator = selectionGenerator;
+      var el = this.ownerDocument.createElement('tv-c-analysis-link');
+      function wrap() {
+        return selectionGenerator();
+      }
+      wrap.userFriendlyName = text;
+      el.selection = wrap;
       if (opt_tooltip)
         el.title = opt_tooltip;
       return el;
@@ -195,7 +197,8 @@ tv.exportTo('tv.c.analysis', function() {
         var row = this.appendBodyRow(table);
       this.appendTableCell_(table, row, 0, label);
       if (opt_value !== undefined) {
-        var objectView = new tv.c.analysis.GenericObjectView();
+        var objectView =
+            document.createElement('tv-c-analysis-generic-object-view');
         objectView.object = opt_value;
         objectView.classList.add('analysis-table-col-1');
         objectView.style.display = 'table-cell';
@@ -218,7 +221,7 @@ tv.exportTo('tv.c.analysis', function() {
         var row = this.appendBodyRow(table);
       this.appendTableCell_(table, row, 0, label);
       this.appendTableCell_(
-          table, row, 1, tv.c.analysis.tsRound(time) + ' ms', opt_warning);
+          table, row, 1, tv.c.analysis.tsString(time), opt_warning);
     },
 
     /**
@@ -243,26 +246,26 @@ tv.exportTo('tv.c.analysis', function() {
 
         if (opt_selectionGenerator) {
           var labelEl = this.appendTableCell(table, row,
-                                             tv.c.analysis.tsRound(start));
+                                             tv.c.analysis.tsString(start));
           labelEl.textContent = '';
           labelEl.appendChild(this.createSelectionChangingLink(
-                                      tv.c.analysis.tsRound(start),
+                                      tv.c.analysis.tsString(start),
                                       opt_selectionGenerator, ''));
         } else {
-          this.appendTableCell(table, row, tv.c.analysis.tsRound(start));
+          this.appendTableCell(table, row, tv.c.analysis.tsString(start));
         }
       }
       if (duration !== null)
-        this.appendTableCell(table, row, tv.c.analysis.tsRound(duration));
+        this.appendTableCell(table, row, tv.c.analysis.tsString(duration));
 
       if (opt_cpuDuration)
         this.appendTableCell(table, row,
                              opt_cpuDuration != '' ?
-                             tv.c.analysis.tsRound(opt_cpuDuration) :
+                             tv.c.analysis.tsString(opt_cpuDuration) :
                              '');
 
       if (selfTime !== null)
-        this.appendTableCell(table, row, tv.c.analysis.tsRound(selfTime));
+        this.appendTableCell(table, row, tv.c.analysis.tsString(selfTime));
 
       var argsCell = this.appendTableCell(table, row, '');
       var n = 0;
@@ -273,7 +276,8 @@ tv.exportTo('tv.c.analysis', function() {
       if (n > 0) {
         for (var argName in args) {
           var argVal = args[argName];
-          var objectView = new tv.c.analysis.GenericObjectView();
+          var objectView =
+              document.createElement('tv-c-analysis-generic-object-view');
           objectView.object = argVal;
           var argsRow = this.appendElement_(
               this.appendElement_(argsCell, 'table'), 'tr');
@@ -290,32 +294,32 @@ tv.exportTo('tv.c.analysis', function() {
      * |occurrences| in the third.
      *
      * @param {object=} opt_statistics May be undefined, or an object which
-     *          contains calculated statistics containing min/max/avg for slices,
-     *          or min/max/avg/start/end for counters.
+     *          contains calculated statistics containing min/max/avg for
+     *          slices, or min/max/avg/start/end for counters.
      */
     appendDataRow: function(table, label, opt_duration, opt_cpuDuration,
-                            opt_selfTime, opt_cpuSelfTime, opt_occurences,
+                            opt_selfTime, opt_cpuSelfTime, opt_occurrences,
                             opt_percentage, opt_statistics,
                             opt_selectionGenerator, opt_inFoot) {
 
       var tooltip = undefined;
       if (opt_statistics) {
         tooltip = 'Min Duration:\u0009' +
-                  tv.c.analysis.tsRound(opt_statistics.min) +
+                  tv.c.analysis.tsString(opt_statistics.min) +
                   ' ms \u000DMax Duration:\u0009' +
-                  tv.c.analysis.tsRound(opt_statistics.max) +
+                  tv.c.analysis.tsString(opt_statistics.max) +
                   ' ms \u000DAvg Duration:\u0009' +
-                  tv.c.analysis.tsRound(opt_statistics.avg) +
+                  tv.c.analysis.tsString(opt_statistics.avg) +
                   ' ms (\u03C3 = ' +
                   tv.c.analysis.tsRound(opt_statistics.avg_stddev) + ')';
 
         if (opt_statistics.start) {
           tooltip += '\u000DStart Time:\u0009' +
-              tv.c.analysis.tsRound(opt_statistics.start) + ' ms';
+              tv.c.analysis.tsString(opt_statistics.start);
         }
         if (opt_statistics.end) {
           tooltip += '\u000DEnd Time:\u0009' +
-              tv.c.analysis.tsRound(opt_statistics.end) + ' ms';
+              tv.c.analysis.tsString(opt_statistics.end);
         }
         if (opt_statistics.frequency && opt_statistics.frequency_stddev) {
           tooltip += '\u000DFrequency:\u0009' +
@@ -352,7 +356,7 @@ tv.exportTo('tv.c.analysis', function() {
                 '[' + opt_duration.join(', ') + ']', tooltip);
           } else {
             this.appendTableCellWithTooltip_(table, row, cellNum,
-                tv.c.analysis.tsRound(opt_duration), tooltip);
+                tv.c.analysis.tsString(opt_duration), tooltip);
           }
         } else {
           this.appendTableCell_(table, row, cellNum, '');
@@ -363,7 +367,7 @@ tv.exportTo('tv.c.analysis', function() {
       if (opt_cpuDuration !== null) {
         if (opt_cpuDuration != '') {
           this.appendTableCellWithTooltip_(table, row, cellNum,
-              tv.c.analysis.tsRound(opt_cpuDuration), tooltip);
+              tv.c.analysis.tsString(opt_cpuDuration), tooltip);
         } else {
           this.appendTableCell_(table, row, cellNum, '');
         }
@@ -373,7 +377,7 @@ tv.exportTo('tv.c.analysis', function() {
       if (opt_selfTime !== null) {
         if (opt_selfTime) {
           this.appendTableCellWithTooltip_(table, row, cellNum,
-              tv.c.analysis.tsRound(opt_selfTime), tooltip);
+              tv.c.analysis.tsString(opt_selfTime), tooltip);
         } else {
           this.appendTableCell_(table, row, cellNum, '');
         }
@@ -383,7 +387,7 @@ tv.exportTo('tv.c.analysis', function() {
       if (opt_cpuSelfTime !== null) {
         if (opt_cpuSelfTime) {
           this.appendTableCellWithTooltip_(table, row, cellNum,
-              tv.c.analysis.tsRound(opt_cpuSelfTime), tooltip);
+              tv.c.analysis.tsString(opt_cpuSelfTime), tooltip);
         } else {
           this.appendTableCell_(table, row, cellNum, '');
         }
@@ -400,9 +404,9 @@ tv.exportTo('tv.c.analysis', function() {
         cellNum++;
       }
 
-      if (opt_occurences) {
+      if (opt_occurrences) {
         this.appendTableCellWithTooltip_(table, row, cellNum,
-            String(opt_occurences), tooltip);
+            String(opt_occurrences), tooltip);
       } else {
         this.appendTableCell_(table, row, cellNum, '');
       }

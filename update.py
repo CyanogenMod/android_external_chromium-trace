@@ -1,6 +1,6 @@
 #!/usr/bin/env python
 
-import httplib, json, optparse, os, urllib, shutil, subprocess, sys
+import codecs, httplib, json, optparse, os, urllib, shutil, subprocess, sys
 
 output_html_file = 'systrace_trace_viewer.html'
 
@@ -51,7 +51,7 @@ build_dir = os.path.join(trace_viewer_dir)
 sys.path.append(build_dir)
 
 from trace_viewer.build import vulcanize_trace_viewer
-with open(output_html_file, 'wt') as f:
+with codecs.open(output_html_file, encoding='utf-8', mode='w') as f:
   vulcanize_trace_viewer.WriteTraceViewer(
       f,
       config_name='systrace',

@@ -7,8 +7,8 @@ found in the LICENSE file.
 
 <link rel="import" href="/core/trace_model/event_container.html">
 <link rel="import" href="/core/trace_model/slice.html">
-<link rel="import" href="/core/color_scheme.html">
 <link rel="import" href="/core/filter.html">
+<link rel="import" href="/base/ui/color_scheme.html">
 <link rel="import" href="/base/guid.html">
 
 <script>
@@ -45,6 +45,7 @@ tv.exportTo('tv.c.trace_model', function() {
     this.slices = [];
     this.bounds = new tv.b.Range();
     this.topLevelSlices = [];
+    this.haveTopLevelSlicesBeenBuilt = false;
     this.name_ = opt_name;
   }
 
@@ -88,15 +89,17 @@ tv.exportTo('tv.c.trace_model', function() {
      * @param {Slice} slice The slice to be added to the slices array.
      */
     pushSlice: function(slice) {
+      this.haveTopLevelSlicesBeenBuilt = false;
       this.slices.push(slice);
       return slice;
     },
 
     /**
-     * Helper function that pushes the provided slice onto the slices array.
+     * Helper function that pushes the provided slices onto the slices array.
      * @param {Array.<Slice>} slices An array of slices to be added.
      */
     pushSlices: function(slices) {
+      this.haveTopLevelSlicesBeenBuilt = false;
       this.slices.push.apply(this.slices, slices);
     },
 
@@ -258,8 +261,14 @@ tv.exportTo('tv.c.trace_model', function() {
       callback(this);
     },
 
-    toJSON: function() {
-      return {};
+    getSlicesOfName: function(title) {
+      var slices = [];
+      for (var i = 0; i < this.slices.length; i++) {
+        if (this.slices[i].title == title) {
+          slices.push(this.slices[i]);
+        }
+      }
+      return slices;
     },
 
     /**
@@ -269,6 +278,27 @@ tv.exportTo('tv.c.trace_model', function() {
      * reference.
      */
     createSubSlices: function() {
+      this.haveTopLevelSlicesBeenBuilt = true;
+      this.createSubSlicesImpl_();
+
+      this.slices.forEach(function(slice) {
+        var selfTime = slice.duration;
+        for (var i = 0; i < slice.subSlices.length; i++)
+          selfTime -= slice.subSlices[i].duration;
+        slice.selfTime = selfTime;
+
+        if (slice.cpuDuration === undefined)
+          return;
+
+        var cpuSelfTime = slice.cpuDuration;
+        for (var i = 0; i < slice.subSlices.length; i++) {
+          if (slice.subSlices[i].cpuDuration !== undefined)
+            cpuSelfTime -= slice.subSlices[i].cpuDuration;
+        }
+        slice.cpuSelfTime = cpuSelfTime;
+      });
+    },
+    createSubSlicesImpl_: function() {
       function addSliceIfBounds(root, child) {
         // Because we know that the start time of child is >= the start time
         // of all other slices seen so far, we can just check the last slice
@@ -279,17 +309,10 @@ tv.exportTo('tv.c.trace_model', function() {
                                  child))
               return true;
           }
-          if (!root.selfTime)
-            root.selfTime = root.duration;
-          if (!root.cpuSelfTime && root.cpuDuration)
-            root.cpuSelfTime = root.cpuDuration;
           child.parentSlice = root;
-          if (!root.subSlices)
+          if (root.subSlices === undefined)
             root.subSlices = [];
           root.subSlices.push(child);
-          root.selfTime -= child.duration;
-          if (child.cpuDuration)
-            root.cpuSelfTime -= child.cpuDuration;
           return true;
         }
         return false;

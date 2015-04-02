@@ -8,6 +8,7 @@ found in the LICENSE file.
 <link rel="import" href="/base/events.html">
 <link rel="import" href="/base/guid.html">
 <link rel="import" href="/base/range.html">
+<link rel="import" href="/base/iteration_helpers.html">
 <link rel="import" href="/core/trace_model/trace_model.html">
 
 <script>
@@ -41,8 +42,12 @@ tv.exportTo('tv.c', function() {
     this.pushed_guids_ = {};
 
     if (opt_events) {
-      for (var i = 0; i < opt_events.length; i++)
-        this.push(opt_events[i]);
+      if (opt_events instanceof Array) {
+        for (var i = 0; i < opt_events.length; i++)
+          this.push(opt_events[i]);
+      } else {
+        this.push(opt_events);
+      }
     }
   }
   Selection.prototype = {
@@ -85,13 +90,17 @@ tv.exportTo('tv.c', function() {
       if (event.guid == undefined)
         throw new Error('Event must have a GUID');
 
-      if (this.pushed_guids_[event.guid])
+      if (this.contains(event))
         return event;
 
       this.pushed_guids_[event.guid] = true;
       this[this.length_++] = event;
       this.bounds_dirty_ = true;
       return event;
+    },
+
+    contains: function(event) {
+      return this.pushed_guids_[event.guid];
     },
 
     addSelection: function(selection) {
@@ -150,10 +159,46 @@ tv.exportTo('tv.c', function() {
       }
     },
 
+    getEventsOrganizedByTitle: function() {
+      var eventsByTitle = {};
+      for (var i = 0; i < this.length; i++) {
+        var event = this[i];
+        if (event.title === undefined)
+          throw new Error('An event didn\'t have a title!');
+        if (eventsByTitle[event.title] == undefined) {
+          eventsByTitle[event.title] = [];
+        }
+        eventsByTitle[event.title].push(event);
+      }
+      return eventsByTitle;
+    },
+
     enumEventsOfType: function(type, func) {
       for (var i = 0; i < this.length_; i++)
         if (this[i] instanceof type)
           func(this[i]);
+    },
+
+    get userFriendlyName() {
+      if (this.length === 0) {
+        throw new Error('Empty selection');
+      }
+
+      var eventsByBaseType = this.getEventsOrganizedByBaseType(true);
+      var eventTypeName = tv.b.dictionaryKeys(eventsByBaseType)[0];
+
+      if (this.length === 1) {
+        var tmp = EventRegistry.getUserFriendlySingularName(eventTypeName);
+        return this[0].userFriendlyName;
+      }
+
+      var numEventTypes = tv.b.dictionaryLength(eventsByBaseType);
+      if (numEventTypes !== 1) {
+        return this.length + ' events of various types';
+      }
+
+      var tmp = EventRegistry.getUserFriendlyPluralName(eventTypeName);
+      return this.length + ' ' + tmp;
     },
 
     /**

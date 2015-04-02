@@ -5,8 +5,12 @@ Use of this source code is governed by a BSD-style license that can be
 found in the LICENSE file.
 -->
 
-<link rel="import" href="/core/analysis/analysis_results.html">
 <link rel="import" href="/core/analysis/analysis_sub_view.html">
+<link rel="import" href="/core/analysis/time_span.html">
+<link rel="import" href="/core/analysis/time_stamp.html">
+<link rel="import" href="/core/analysis/stack_frame.html">
+<link rel="import" href="/core/analysis/generic_object_view.html">
+<link rel="import" href="/core/analysis/table_builder.html">
 <link rel="import" href="/core/analysis/util.html">
 <link rel="import" href="/base/base.html">
 <link rel="import" href="/base/ui.html">
@@ -14,12 +18,40 @@ found in the LICENSE file.
 
 <polymer-element name="tv-c-single-slice-sub-view"
     extends="tracing-analysis-sub-view">
+  <template>
+    <style>
+    :host {
+      display: flex;
+      flex-direction: column;
+    }
+    #table {
+      font-family: monospace;
+      flex: 1 1 auto;
+      align-self: stretch;
+    }
+    </style>
+    <tracing-analysis-nested-table id="table">
+    </tracing-analysis-nested-table>
+  </template>
   <script>
   'use strict';
 
   Polymer({
-    created: function() {
+    ready: function() {
       this.currentSelection_ = undefined;
+      this.$.table.tableColumns = [
+        {
+          title: 'Label',
+          value: function(row) { return row.name; },
+          width: '150px'
+        },
+        {
+          title: 'Value',
+          width: '100%',
+          value: function(row) { return row.value; }
+        }
+      ];
+      this.$.table.showHeader = false;
     },
 
     set selection(selection) {
@@ -36,78 +68,90 @@ found in the LICENSE file.
 
     setSelectionWithoutErrorChecks: function(selection) {
       this.currentSelection_ = selection;
-      this.textContent = '';
 
-      var results = new tv.c.analysis.AnalysisResults();
-      this.appendChild(results);
+      if (this.currentSelection_ === undefined) {
+        this.$.table.rows = [];
+        this.$.table.rebuild();
+        return;
+      }
 
-      this.analyzeSingleSlice_(results, selection[0]);
-    },
+      var slice = this.currentSelection_[0];
 
-    analyzeSingleSlice_: function(results, slice) {
-      var table = results.appendTable('analysis-slice-table', 2);
-
+      var rows = [];
       if (slice.error)
-        results.appendInfoRow(table, 'Error', slice.error);
+        rows.push({ name: 'Error', value: slice.error });
 
       if (slice.title)
-        results.appendInfoRow(table, 'Title', slice.title);
+        rows.push({ name: 'Title', value: slice.title });
 
       if (slice.category)
-        results.appendInfoRow(table, 'Category', slice.category);
+        rows.push({ name: 'Category', value: slice.category });
 
-      results.appendInfoRowTime(table, 'Start', slice.start);
-      results.appendInfoRowTime(table, 'Wall Duration', slice.duration);
+      var startEl = document.createElement('tv-c-a-time-stamp');
+      startEl.timestamp = slice.start;
+      rows.push({ name: 'Start', value: startEl });
 
-      if (slice.cpuDuration)
-        results.appendInfoRowTime(table, 'CPU Duration', slice.cpuDuration);
+      var wallDurationEl = document.createElement('tv-c-a-time-span');
+      wallDurationEl.duration = slice.duration;
+      rows.push({ name: 'Wall Duration', value: wallDurationEl });
 
-      if (slice.selfTime)
-        results.appendInfoRowTime(table, 'Self Time', slice.selfTime);
+      if (slice.cpuDuration) {
+        var cpuDurationEl = document.createElement('tv-c-a-time-span');
+        cpuDurationEl.duration = slice.cpuDuration;
+        rows.push({ name: 'CPU Duration', value: cpuDurationEl });
+      }
 
-      if (slice.cpuSelfTime) {
-        var warning;
-        if (slice.cpuSelfTime > slice.selfTime) {
-          warning =
-              'Note that CPU Self Time is larger than Self Time. ' +
-              'This is a known limitation of this system, which occurs ' +
-              'due to several subslices, rounding issues, and inprecise ' +
-              'time at which we get cpu- and real-time.';
+      if (slice.subSlices !== undefined && slice.subSlices.length !== 0) {
+        if (slice.selfTime) {
+          var selfTimeEl = document.createElement('tv-c-a-time-span');
+          selfTimeEl.duration = slice.selfTime;
+          rows.push({ name: 'Self Time', value: selfTimeEl });
         }
-        results.appendInfoRowTime(table, 'CPU Self Time', slice.cpuSelfTime,
-                                  false, warning);
+
+        if (slice.cpuSelfTime) {
+          var cpuSelfTimeEl = document.createElement('tv-c-a-time-span');
+          cpuSelfTimeEl.duration = slice.cpuSelfTime;
+          if (slice.cpuSelfTime > slice.selfTime) {
+            cpuSelfTimeEl.warning =
+                ' Note that CPU Self Time is larger than Self Time. ' +
+                'This is a known limitation of this system, which occurs ' +
+                'due to several subslices, rounding issues, and imprecise ' +
+                'time at which we get cpu- and real-time.';
+          }
+          rows.push({name: 'CPU Self Time',
+                     value: cpuSelfTimeEl});
+        }
       }
 
       if (slice.durationInUserTime) {
-        results.appendInfoRowTime(table, 'Duration (U)',
-                                  slice.durationInUserTime);
+        var durationInUserTimeEl = document.createElement('tv-c-a-time-span');
+        durationInUserTimeEl.duration = slice.durationInUserTime;
+        rows.push({ name: 'Duration (U)', value: durationInUserTimeEl });
       }
 
+      function createStackFrameEl(sf) {
+        var sfEl = document.createElement('tv-c-a-stack-frame');
+        sfEl.stackFrame = sf;
+        return sfEl;
+      }
       if (slice.startStackFrame && slice.endStackFrame) {
         if (slice.startStackFrame === slice.endStackFrame) {
-          results.appendInfoRow(
-              table,
-              'Start+End Stack Trace',
-              slice.startStackFrame.getUserFriendlyStackTrace());
+          rows.push({name: 'Start+End Stack Trace',
+              value: createStackFrameEl(slice.startStackFrame)});
+
         } else {
-          results.appendInfoRow(
-              table,
-              'Start Stack Trace',
-              slice.startStackFrame.getUserFriendlyStackTrace());
-          results.appendInfoRow(
-              table,
-              'End Stack Trace',
-              slice.endStackFrame.getUserFriendlyStackTrace());
+          rows.push({ name: 'Start Stack Trace',
+              value: createStackFrameEl(slice.startStackFrame)});
+          rows.push({ name: 'End Stack Trace',
+              value: createStackFrameEl(slice.endStackFrame)});
         }
       } else if (slice.startStackFrame) {
-          results.appendInfoRow(
-              table,
-              'Start Stack Trace',
-              slice.startStackFrame.getUserFriendlyStackTrace());
+        rows.push({ name: 'Start Stack Trace',
+            value: createStackFrameEl(slice.startStackFrame)});
+
       } else if (slice.endStackFrame) {
-        results.appendInfoRow(table,
-                              'End Stack Trace',
-                              slice.endStackFrame.getUserFriendlyStackTrace());
+        rows.push({ name: 'End Stack Trace',
+            value: createStackFrameEl(slice.endStackFrame)});
       }
 
       var n = 0;
@@ -115,13 +159,22 @@ found in the LICENSE file.
         n += 1;
       }
       if (n > 0) {
-        results.appendInfoRow(table, 'Args');
+        var subRows = [];
         for (var argName in slice.args) {
-          var argVal = slice.args[argName];
-          // TODO(sleffler) use span instead?
-          results.appendInfoRow(table, ' ' + argName, argVal);
+          var argView =
+              document.createElement('tv-c-analysis-generic-object-view');
+          argView.object = slice.args[argName];
+          subRows.push({ name: argName,
+                      value: argView});
         }
+        rows.push({
+          name: 'Args', value: '',
+          isExpanded: true, subRows: subRows
+        });
       }
+
+      this.$.table.tableRows = rows;
+      this.$.table.rebuild();
     }
   });
   </script>

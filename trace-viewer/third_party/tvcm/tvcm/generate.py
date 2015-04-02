@@ -3,6 +3,7 @@
 # found in the LICENSE file.
 
 import base64
+import codecs
 import httplib
 import optparse
 import json
@@ -53,6 +54,11 @@ css_warning_message = """
  * Do not edit directly.
  */
 """
+
+def _AssertIsUTF8(f):
+  if isinstance(f, StringIO.StringIO):
+    return
+  assert f.encoding == 'utf-8'
 
 def CanMinify():
   return _HasLocalClosureCompiler()
@@ -143,7 +149,28 @@ def GenerateJS(load_sequence,
                    dir_for_include_tag_root,
                    minify=minify,
                    report_sizes=report_sizes)
+
   return f.getvalue()
+
+def pt_parts(self):
+  sl = ['unicode and 8-bit string parts of above page template']
+  for x in self.buflist:
+      if type(x) == type(''):
+          maxcode = 0
+          for c in x:
+              maxcode = max(ord(c), maxcode)
+      # show only unicode objects and non-ascii strings
+      if type(x) == type('') and maxcode > 127:
+          t = '****NonAsciiStr: '
+      elif type(x) == type(u''):
+          t = '*****UnicodeStr: '
+      else:
+          t = None
+      if t:
+          sl.append(t + repr(x))
+  s = '\n'.join(sl)
+  return s
+
 
 def GenerateJSToFile(f,
                      load_sequence,
@@ -151,6 +178,7 @@ def GenerateJSToFile(f,
                      dir_for_include_tag_root=None,
                      minify=False,
                      report_sizes=False):
+  _AssertIsUTF8(f)
   if use_include_tags_for_scripts and dir_for_include_tag_root == None:
     raise Exception('Must provide dir_for_include_tag_root')
 
@@ -159,7 +187,7 @@ def GenerateJSToFile(f,
 
   loader = load_sequence[0].loader
 
-  polymer_script = loader.LoadRawScript('components/polymer/polymer.js')
+  polymer_script = loader.LoadRawScript('components/polymer/polymer.min.js')
   f.write(polymer_script.contents)
 
   f.write('\n')
@@ -218,6 +246,7 @@ class ExtraScript(object):
     self.content_type = content_type
 
   def WriteToFile(self, output_file):
+    _AssertIsUTF8(output_file)
     attrs = []
     if self.script_id:
       attrs.append('id="%s"' % self.script_id)
@@ -250,7 +279,7 @@ def _MinifyCSS(css_text):
     p.communicate(input=css_text)
     if p.wait() != 0:
       raise Exception('Failed to generate %s.' % output_css_file)
-    with open(f.name, 'r') as f2:
+    with codecs.open(f.name, mode='r', encoding='utf-8') as f2:
       return f2.read()
 
 
@@ -268,6 +297,7 @@ def GenerateStandaloneHTMLToFile(output_file,
                                  minify=False,
                                  report_sizes=False,
                                  output_html_head_and_body=True):
+  _AssertIsUTF8(output_file)
   extra_scripts = extra_scripts or []
 
   if output_html_head_and_body:
@@ -311,8 +341,8 @@ def GenerateStandaloneHTMLToFile(output_file,
     output_file.write('<script src="%s"></script>\n' % flattened_js_url)
   else:
     output_file.write('<script>\n')
-    output_file.write(
-        GenerateJS(load_sequence, minify=minify, report_sizes=report_sizes))
+    x = GenerateJS(load_sequence, minify=minify, report_sizes=report_sizes)
+    output_file.write(x)
     output_file.write('</script>\n')
 
   for extra_script in extra_scripts:

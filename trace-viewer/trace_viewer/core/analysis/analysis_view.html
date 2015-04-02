@@ -14,6 +14,8 @@ found in the LICENSE file.
 <link rel="import" href="/core/analysis/single_slice_sub_view.html">
 <link rel="import" href="/core/analysis/multi_slice_sub_view.html">
 
+<link rel="import" href="/core/analysis/multi_event_sub_view.html">
+
 <link rel="import" href="/core/analysis/single_thread_time_slice_sub_view.html">
 <link rel="import" href="/core/analysis/single_cpu_slice_sub_view.html">
 
@@ -76,15 +78,6 @@ using custom elements specialized for different event types.
   'use strict';
   (function() {
     var EventRegistry = tv.c.trace_model.EventRegistry;
-
-    /**
-     * Utility function used to convert camelCase to Title Case.
-     */
-    function convertCamelCaseToTitleCase(name) {
-      var result = name.replace(/[A-Z]/g, ' $&');
-      result = result.charAt(0).toUpperCase() + result.slice(1);
-      return result;
-    }
 
     Polymer({
       ready: function() {
@@ -182,11 +175,10 @@ using custom elements specialized for different event types.
         // Set label.
         var camelLabel;
         if (subSelection.length === 1)
-          camelLabel = eventTypeInfo.metadata.name;
+          camelLabel = EventRegistry.getUserFriendlySingularName(eventTypeName);
         else
-          camelLabel = eventTypeInfo.metadata.pluralName;
-
-        subView.tabLabel = convertCamelCaseToTitleCase(camelLabel);
+          camelLabel = EventRegistry.getUserFriendlyPluralName(eventTypeName);
+        subView.tabLabel = camelLabel;
 
         return subView;
       },

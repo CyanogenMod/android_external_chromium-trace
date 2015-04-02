@@ -5,22 +5,17 @@ Use of this source code is governed by a BSD-style license that can be
 found in the LICENSE file.
 -->
 <link rel="import" href="/core/trace_model/timed_event.html">
+<link rel="import" href="/core/trace_model/alert_type.html">
+<link rel="import" href="/core/analysis/util.html">
 
 <script>
 'use strict';
 
 tv.exportTo('tv.c.trace_model', function() {
 
-  var ALERT_SEVERITY = {
-    CRITICAL: 'high',
-    WARNING: 'warning'
-  };
-
-  function Alert(title, colorId, severity, start, opt_args) {
+  function Alert(type, start, opt_args) {
     tv.c.trace_model.TimedEvent.call(this, start);
-    this.title = title;
-    this.colorId = colorId;
-    this.severity = severity;
+    this.type = type;
     if (opt_args !== undefined)
       this.args = opt_args;
     else
@@ -28,7 +23,20 @@ tv.exportTo('tv.c.trace_model', function() {
     this.duration = 0;
   }
   Alert.prototype = {
-    __proto__: tv.c.trace_model.TimedEvent.prototype
+    __proto__: tv.c.trace_model.TimedEvent.prototype,
+
+    get title() {
+      return this.type.title;
+    },
+
+    get colorId() {
+      return this.type.colorId;
+    },
+
+    get userFriendlyName() {
+      return 'Alert ' + this.title + ' at ' +
+          tv.c.analysis.tsString(this.start);
+    }
   };
 
   tv.c.trace_model.EventRegistry.register(
@@ -41,8 +49,7 @@ tv.exportTo('tv.c.trace_model', function() {
       });
 
   return {
-    Alert: Alert,
-    ALERT_SEVERITY: ALERT_SEVERITY
+    Alert: Alert
   };
 });
 </script>
