@@ -21,16 +21,23 @@
 {{SYSTRACE_TRACE_VIEWER_HTML}}
 <script language="javascript">
 document.addEventListener('DOMContentLoaded', function() {
-  if (!linuxPerfData)
-    return;
-
   var traceViewerEl = new tv.TraceViewer();
   traceViewerEl.viewTitle = 'Android System Trace';
   var viewInsertionPt = document.body.querySelector('#trace-viewer-insertion-pt');
   viewInsertionPt.parentElement.replaceChild(traceViewerEl, viewInsertionPt);
 
   var m = new tv.c.TraceModel();
-  var p = m.importTracesWithProgressDialog([linuxPerfData], true);
+
+  var traceDataEls = document.body.querySelectorAll('.trace-data');
+  var traces = [];
+  for (var i = 0; i < traceDataEls.length; i++) {
+    traceText = traceDataEls[i].textContent;
+    // Remove the leading newline.
+    traceText = traceText.substring(1);
+    traces.push(traceText);
+  }
+
+  var p = m.importTracesWithProgressDialog(traces, true);
   p.then(
     function() {
       traceViewerEl.model = m;
@@ -50,6 +57,3 @@ document.addEventListener('DOMContentLoaded', function() {
 <body>
   <div id="trace-viewer-insertion-pt">
   </div>
-<!-- BEGIN TRACE -->
-  <script>
-  var linuxPerfData = "\

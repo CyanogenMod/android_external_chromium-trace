@@ -253,9 +253,10 @@ def main():
       html_file.write(
         html_prefix.replace("{{SYSTRACE_TRACE_VIEWER_HTML}}", trace_viewer_html))
 
-      # format newlines and double quotes
-      # for embedding in double-quoted JS string
-      html_file.write(out.replace('\n', '\\n\\\n').replace('\"', '\\\"'))
+      html_file.write('<!-- BEGIN TRACE -->\n' +
+          '  <script class="trace-data" type="application/text">\n')
+      html_file.write(out)
+      html_file.write('  </script>\n<!-- END TRACE -->\n')
 
       html_file.write(html_suffix)
       html_file.close()
