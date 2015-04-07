@@ -12,7 +12,7 @@ the kernel.  It creates an HTML file for visualizing the trace.
 
 import errno, optparse, os, re, select, subprocess, sys, time, zlib
 
-flattened_html_file = 'systrace_trace_viewer.html'
+default_categories = 'sched gfx view dalvik webview input disk am wm'.split()
 
 class OptionParserIgnoreErrors(optparse.OptionParser):
   def error(self, msg):
@@ -59,6 +59,16 @@ def add_adb_serial(command, serial):
     command.insert(1, serial)
     command.insert(1, '-s')
 
+def get_default_categories():
+  list_command = ['adb', 'shell', 'atrace', '--list_categories']
+  try:
+    categories_output = subprocess.check_output(list_command)
+    categories = [c.split('-')[0].strip() for c in categories_output.splitlines()]
+
+    return [c for c in categories if c in default_categories]
+  except:
+    return []
+
 def main():
   device_sdk_version = get_device_sdk_version()
   if device_sdk_version < 18:
@@ -94,7 +104,7 @@ def main():
   parser.add_option('-e', '--serial', dest='device_serial', type='string',
                     help='adb device serial number')
 
-  options, args = parser.parse_args()
+  options, categories = parser.parse_args()
 
   if options.link_assets or options.asset_dir != 'trace-viewer':
     parser.error('--link-assets and --asset-dir is deprecated.')
@@ -127,7 +137,9 @@ def main():
     if options.kfuncs is not None:
       atrace_args.extend(['-k', options.kfuncs])
 
-    atrace_args.extend(args)
+    if not categories:
+      categories = get_default_categories()
+    atrace_args.extend(categories)
 
     if options.fix_threads:
       atrace_args.extend([';', 'ps', '-t'])
@@ -136,9 +148,6 @@ def main():
     add_adb_serial(atrace_args, options.device_serial)
 
   script_dir = os.path.dirname(os.path.abspath(sys.argv[0]))
-
-  with open(os.path.join(script_dir, flattened_html_file), 'r') as f:
-    trace_viewer_html = f.read()
 
   html_filename = options.output_file
 
@@ -248,6 +257,7 @@ def main():
 
       html_prefix = read_asset(script_dir, 'prefix.html')
       html_suffix = read_asset(script_dir, 'suffix.html')
+      trace_viewer_html = read_asset(script_dir, 'systrace_trace_viewer.html')
 
       html_file = open(html_filename, 'w')
       html_file.write(
