@@ -52,60 +52,60 @@ found in the LICENSE file.
   Polymer({
     created: function() {
       this.currentSelection_ = undefined;
-      this.requiresTallView_ = false;
+      this.eventsHaveDuration_ = true;
+      this.eventsHaveSubRows_ = true;
     },
 
     set selection(selection) {
       if (selection.length <= 1)
         throw new Error('Only supports multiple items');
-      if (!selection.every(
-          function(x) { return x instanceof tv.c.trace_model.Slice; })) {
-        throw new Error('Only supports slices');
-      }
       this.setSelectionWithoutErrorChecks(selection);
     },
+
     get selection() {
       return this.currentSelection_;
     },
 
-    get requiresTallView() {
-      return this.requiresTallView_;
-    },
-
     setSelectionWithoutErrorChecks: function(selection) {
       this.currentSelection_ = selection;
-      this.requiresTallView_ = false;
+      this.updateContents_();
+    },
 
-      // TODO(nduca): This is a gross hack for cc Frame Viewer, but its only
-      // the frame viewer that needs this feature, so ~shrug~.
-      if (window.RasterTaskView !== undefined) { // May not have been imported.
-        if (tv.e.cc.RasterTaskSelection.supports(selection)) {
-          var ltvSelection = new tv.e.cc.RasterTaskSelection(selection);
+    get eventsHaveDuration() {
+      return this.eventsHaveDuration_;
+    },
 
-          var ltv = new tv.e.cc.LayerTreeHostImplSnapshotView();
-          ltv.objectSnapshot = ltvSelection.containingSnapshot;
-          ltv.selection = ltvSelection;
-          ltv.extraHighlightsByLayerId = ltvSelection.extraHighlightsByLayerId;
-          this.appendChild(ltv);
+    set eventsHaveDuration(eventsHaveDuration) {
+      this.eventsHaveDuration_ = eventsHaveDuration;
+      this.updateContents_();
+    },
 
-          this.style.display = 'flex';
+    get eventsHaveSubRows() {
+      return this.eventsHaveSubRows_;
+    },
 
-          this.requiresTallView_ = true;
-          return;
-        }
-      }
-      this.style.display = '';
+    set eventsHaveSubRows(eventsHaveSubRows) {
+      this.eventsHaveSubRows_ = eventsHaveSubRows;
+      this.updateContents_();
+    },
+
+    updateContents_: function() {
+      var selection = this.currentSelection_;
+
+      this.$.content.textContent = '';
+      if (!selection)
+        return;
 
       var eventsByTitle = selection.getEventsOrganizedByTitle();
       var numTitles = tv.b.dictionaryLength(eventsByTitle);
-
-      this.$.content.textContent = '';
 
       var summaryTableEl = document.createElement(
           'tv-c-a-multi-event-summary-table');
       summaryTableEl.configure({
         showTotals: numTitles > 1,
-        eventsByTitle: eventsByTitle
+        eventsByTitle: eventsByTitle,
+        eventsHaveDuration: this.eventsHaveDuration_,
+        eventsHaveSubRows: this.eventsHaveSubRows_
       });
       this.$.content.appendChild(summaryTableEl);
 
@@ -117,6 +117,8 @@ found in the LICENSE file.
       if (numTitles === 1) {
         var detailsTableEl = document.createElement(
             'tv-c-a-multi-event-details-table');
+        detailsTableEl.eventsHaveDuration = this.eventsHaveDuration_;
+        detailsTableEl.eventsHaveSubRows = this.eventsHaveSubRows_;
         detailsTableEl.selection = selection;
         this.$.content.appendChild(detailsTableEl);
       }

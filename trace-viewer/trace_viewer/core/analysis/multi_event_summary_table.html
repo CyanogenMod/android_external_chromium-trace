@@ -35,23 +35,23 @@ found in the LICENSE file.
   Polymer({
     ready: function() {
       this.showTotals_ = false;
+      this.eventsHaveDuration_ = true;
+      this.eventsHaveSubRows_ = true;
       this.eventsByTitle_ = undefined;
     },
 
     updateTableColumns_: function(rows) {
       var hasCpuData = false;
+      var hasAlerts = false;
       rows.forEach(function(row) {
         if (row.cpuDuration !== undefined)
           hasCpuData = true;
         if (row.cpuSelfTime !== undefined)
           hasCpuData = true;
+        if (row.numAlerts)
+          hasAlerts = true;
       });
 
-      var colWidthPercentage;
-      if (hasCpuData)
-        colWidthPercentage = '20%';
-      else
-        colWidthPercentage = '33.3333%';
 
       var columns = [];
 
@@ -72,47 +72,52 @@ found in the LICENSE file.
           return rowA.title.localeCompare(rowB.title);
         }
       });
-      columns.push({
-        title: 'Wall Duration (ms)',
-        value: function(row) {
-          return tv.c.analysis.createTimeSpan(row.duration);
-        },
-        width: colWidthPercentage,
-        cmp: function(rowA, rowB) {
-          return rowA.duration - rowB.duration;
-        }
-      });
+      if (this.eventsHaveDuration_) {
+        columns.push({
+          title: 'Wall Duration (ms)',
+          value: function(row) {
+            return tv.c.analysis.createTimeSpan(row.duration);
+          },
+          width: '<upated further down>',
+          cmp: function(rowA, rowB) {
+            return rowA.duration - rowB.duration;
+          }
+        });
+      }
 
-      if (hasCpuData) {
+      if (this.eventsHaveDuration_ && hasCpuData) {
         columns.push({
           title: 'CPU Duration (ms)',
           value: function(row) {
             return tv.c.analysis.createTimeSpan(row.cpuDuration);
           },
-          width: colWidthPercentage,
+          width: '<upated further down>',
           cmp: function(rowA, rowB) {
             return rowA.cpuDuration - rowB.cpuDuration;
           }
         });
       }
 
-      columns.push({
-        title: 'Self time (ms)',
-        value: function(row) {
-          return tv.c.analysis.createTimeSpan(row.selfTime);
-        },
-        width: colWidthPercentage,
-        cmp: function(rowA, rowB) {
-          return rowA.selfTime - rowB.selfTime;
-        }
-      });
-      if (hasCpuData) {
+      if (this.eventsHaveSubRows_ && this.eventsHaveDuration_) {
+        columns.push({
+          title: 'Self time (ms)',
+          value: function(row) {
+            return tv.c.analysis.createTimeSpan(row.selfTime);
+          },
+          width: '<upated further down>',
+          cmp: function(rowA, rowB) {
+            return rowA.selfTime - rowB.selfTime;
+          }
+        });
+      }
+
+      if (this.eventsHaveSubRows_ && this.eventsHaveDuration_ && hasCpuData) {
         columns.push({
           title: 'CPU Self Time (ms)',
           value: function(row) {
             return tv.c.analysis.createTimeSpan(row.cpuSelfTime);
           },
-          width: colWidthPercentage,
+          width: '<upated further down>',
           cmp: function(rowA, rowB) {
             return rowA.cpuSelfTime - rowB.cpuSelfTime;
           }
@@ -123,17 +128,62 @@ found in the LICENSE file.
         value: function(row) {
           return row.numEvents;
         },
-        width: colWidthPercentage,
+        width: '<upated further down>',
         cmp: function(rowA, rowB) {
           return rowA.numEvents - rowB.numEvents;
         }
       });
 
+      var alertsColumnIndex;
+      if (hasAlerts) {
+        columns.push({
+          title: 'Num Alerts',
+          value: function(row) {
+            return row.numAlerts;
+          },
+          width: '<upated further down>',
+          cmp: function(rowA, rowB) {
+            return rowA.numAlerts - rowB.numAlerts;
+          }
+        });
+        alertsColumnIndex = columns.length - 1;
+      }
+      var colWidthPercentage;
+      if (columns.length == 1)
+        colWidthPercentage = '100%';
+      else
+        colWidthPercentage = (100 / (columns.length - 1)).toFixed(3) + '%';
+
+      for (var i = 1; i < columns.length; i++)
+        columns[i].width = colWidthPercentage;
+
       this.$.table.tableColumns = columns;
+
+      if (hasAlerts) {
+        this.$.table.sortColumnIndex = alertsColumnIndex;
+        this.$.table.sortDescending = true;
+      }
     },
 
     configure: function(config) {
-      this.showTotals_ = config.showTotals;
+      if (config.eventsByTitle === undefined)
+        throw new Error('Required: eventsByTitle');
+
+      if (config.showTotals !== undefined)
+        this.showTotals_ = config.showTotals;
+      else
+        this.showTotals_ = true;
+
+      if (config.eventsHaveDuration !== undefined)
+        this.eventsHaveDuration_ = config.eventsHaveDuration;
+      else
+        this.eventsHaveDuration_ = true;
+
+      if (config.eventsHaveSubRows !== undefined)
+        this.eventsHaveSubRows_ = config.eventsHaveSubRows;
+      else
+        this.eventsHaveSubRows_ = true;
+
       this.eventsByTitle_ = config.eventsByTitle;
       this.updateContents_();
     },
@@ -147,13 +197,31 @@ found in the LICENSE file.
       this.updateContents_();
     },
 
+    get eventsHaveDuration() {
+      return this.eventsHaveDuration_;
+    },
+
+    set eventsHaveDuration(eventsHaveDuration) {
+      this.eventsHaveDuration_ = eventsHaveDuration;
+      this.updateContents_();
+    },
+
+    get eventsHaveSubRows() {
+      return this.eventsHaveSubRows_;
+    },
+
+    set eventsHaveSubRows(eventsHaveSubRows) {
+      this.eventsHaveSubRows_ = eventsHaveSubRows;
+      this.updateContents_();
+    },
+
     get eventsByTitle() {
       return this.eventsByTitle_;
     },
 
     set eventsByTitle(eventsByTitle) {
       this.eventsByTitle_ = eventsByTitle;
-      this.appendChild(this.updateContents_());
+      this.updateContents_();
     },
 
     get selectionBounds() {
