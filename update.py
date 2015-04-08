@@ -21,7 +21,7 @@ if options.local_dir is None:
   # Remove the old source tree.
   shutil.rmtree(trace_viewer_dir, True)
 
-  # Pull the latest source from the upstream svn.
+  # Pull the latest source from the upstream git.
   git_args = ['git', 'clone', upstream_git, trace_viewer_dir]
   p = subprocess.Popen(git_args, stdout=subprocess.PIPE, cwd=script_dir)
   p.communicate()

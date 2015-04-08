@@ -6,6 +6,7 @@ found in the LICENSE file.
 -->
 
 <link rel="import" href="/core/analysis/toggle_container.html">
+<link rel="import" href="/base/utils.html">
 
 <!--
 @fileoverview A container that constructs a table-like container.
@@ -34,6 +35,14 @@ found in the LICENSE file.
         vertical-align: text-top;
       }
 
+      tr:focus {
+        outline: 1px dotted rgba(0,0,0,0.1);
+        outline-offset: 0;
+      }
+      tr[selected] {
+        background-color: rgb(103, 199, 165);
+      }
+
       button.toggle-button {
         height: 15px;
         line-height: 60%;
@@ -49,7 +58,6 @@ found in the LICENSE file.
       td.button-column {
         width: 30px;
       }
-
 
       table > thead > tr > td.sensitive:hover {
         background-color: #fcfcfc;
@@ -73,6 +81,9 @@ found in the LICENSE file.
         font-weight: bold;
       }
 
+      table > tbody > tr:hover[selected] {
+        background-color: rgb(171, 217, 202);
+      }
       table > tbody > tr:hover,
       table > tfoot > tr:hover {
         background-color: #e6e6e6
@@ -119,6 +130,8 @@ found in the LICENSE file.
 
     Polymer({
       created: function() {
+        this.supportsSelection_ = false;
+        this.selectedTableRowInfo_ = undefined;
         this.tableColumns_ = [];
         this.tableRows_ = [];
         this.tableRowsInfo_ = [];
@@ -130,17 +143,24 @@ found in the LICENSE file.
         this.showHeader_ = true;
       },
 
+      ready: function() {
+        this.$.body.addEventListener(
+            'keydown', this.onKeyDown_.bind(this), true);
+      },
+
       clear: function() {
+        this.supportsSelection_ = false;
+        this.selectedTableRowInfo_ = undefined;
         this.textContent = '';
         this.tableColumns_ = [];
         this.tableRows_ = [];
-        this.tableRowsInfo_ = [];
+        this.tableRowsInfo_ = new WeakMap();
         this.tableFooterRows_ = [];
+        this.tableFooterRowsInfo_ = new WeakMap();
         this.sortColumnIndex_ = undefined;
         this.sortDescending_ = false;
         this.columnsWithExpandButtons_ = [];
         this.headerCells_ = [];
-        this.rowClickCallback_ = undefined;
       },
 
       get showHeader() {
@@ -200,6 +220,9 @@ found in the LICENSE file.
         this.columnsWithExpandButtons_ = columnsWithExpandButtons;
         this.sortColumnIndex = undefined;
         this.scheduleRebuildHeaders_();
+
+        // Blow away the table rows, too.
+        this.tableRows = this.tableRows_;
       },
 
       get tableColumns() {
@@ -213,11 +236,10 @@ found in the LICENSE file.
        *                     structure.
        */
       set tableRows(rows) {
+        this.selectedTableRowInfo_ = undefined;
+        this.maybeUpdateSelectedRow_();
         this.tableRows_ = rows;
-        this.tableRowsInfo_ = [];
-        this.createTableRowsInfo_(rows, this.tableRowsInfo_);
-        if (this.sortColumnIndex_ !== undefined)
-          this.sortTable_();
+        this.tableRowsInfo_ = new WeakMap();
         this.scheduleRebuildBody_();
       },
 
@@ -227,8 +249,7 @@ found in the LICENSE file.
 
       set footerRows(rows) {
         this.tableFooterRows_ = rows;
-        this.tableFooterRowsInfo_ = [];
-        this.createTableRowsInfo_(rows, this.tableFooterRowsInfo_);
+        this.tableFooterRowsInfo_ = new WeakMap();
         this.scheduleRebuildFooter_();
       },
 
@@ -250,7 +271,7 @@ found in the LICENSE file.
 
         this.sortColumnIndex_ = number;
         this.updateHeaderArrows_();
-        this.sortTable_();
+        this.scheduleRebuildBody_();
       },
 
       get sortColumnIndex() {
@@ -263,21 +284,12 @@ found in the LICENSE file.
         if (newValue !== this.sortDescending_) {
           this.sortDescending_ = newValue;
           this.updateHeaderArrows_();
-          if (this.sortColumnIndex_ !== undefined)
-            this.sortTable_();
+          this.scheduleRebuildBody_();
         }
       },
 
       get sortDescending() {
         return this.sortDescending_;
-      },
-
-      set rowClickCallback(callback) {
-        this.rowClickCallback_ = callback;
-      },
-
-      get rowClickCallback() {
-        return this.rowClickCallback_;
       },
 
       updateHeaderArrows_: function() {
@@ -293,11 +305,6 @@ found in the LICENSE file.
           this.headerCells_[i].sideContent = this.sortDescending_ ?
             DESCENDING_ARROW : ASCENDING_ARROW;
         }
-      },
-
-      sortTable_: function() {
-        this.sortRows_(this.tableRowsInfo_);
-        this.scheduleRebuildBody_();
       },
 
       sortRows_: function(rows) {
@@ -321,9 +328,9 @@ found in the LICENSE file.
         if (!this.showHeader_)
           return;
 
-        var tr = this.appendNewElementAfter_(this.$.head, 'tr');
+        var tr = this.appendNewElement_(this.$.head, 'tr');
         for (var i = 0; i < this.tableColumns_.length; i++) {
-          var td = this.appendNewElementAfter_(tr, 'td');
+          var td = this.appendNewElement_(tr, 'td');
 
           var headerCell = new TracingAnalysisHeaderCell();
 
@@ -351,6 +358,8 @@ found in the LICENSE file.
       },
 
       applySizes_: function() {
+        if (this.tableRows_.length === 0)
+          return;
         var rowToRemoveSizing;
         var rowToSize;
         if (this.showHeader) {
@@ -409,50 +418,96 @@ found in the LICENSE file.
         }.bind(this);
       },
 
-      generateTableRowNodes_: function(tableSection, sectionRows, indentation,
-                                       opt_prevSibling) {
-        var sibling = opt_prevSibling;
-        for (var i = 0; i < sectionRows.length; i++) {
-          var row = sectionRows[i];
-          this.generateRowNode_(tableSection, row, indentation);
-          this.appendElementAfter_(tableSection, row.htmlNode, sibling);
-          if (row.isExpanded) {
-            sibling = this.generateTableRowNodes_(tableSection, row.subRows,
-                          indentation + 1, row.htmlNode);
-          } else {
-            sibling = row.htmlNode;
-          }
+      generateTableRowNodes_: function(tableSection, userRows, rowInfoMap,
+                                       indentation, lastAddedRow,
+                                       parentRowInfo) {
+
+        if (this.sortColumnIndex_ !== undefined &&
+            tableSection === this.$.body) {
+          userRows = userRows.slice(); // Don't mess with the input data.
+          userRows.sort(function(rowA, rowB) {
+            var c = this.tableColumns_[this.sortColumnIndex_].cmp(
+                  rowA, rowB);
+            if (this.sortDescending_)
+              c = -c;
+            return c;
+          }.bind(this));
         }
-        return sibling;
+
+        for (var i = 0; i < userRows.length; i++) {
+          var userRow = userRows[i];
+          var rowInfo = this.getOrCreateRowInfoFor_(rowInfoMap, userRow,
+                                                    parentRowInfo);
+          var htmlNode = this.getHTMLNodeForRowInfo_(
+              tableSection, rowInfo, rowInfoMap, indentation);
+
+          if (lastAddedRow === undefined) {
+            // Put first into the table.
+            tableSection.insertBefore(htmlNode, tableSection.firstChild);
+          } else {
+            // This is shorthand for insertAfter(htmlNode, lastAdded).
+            var nextSiblingOfLastAdded = lastAddedRow.nextSibling;
+            tableSection.insertBefore(htmlNode, nextSiblingOfLastAdded);
+          }
+          if (this.supportsSelection_)
+            htmlNode.tabIndex = 0;
+          else
+            htmlNode.removeAttribute('tabIndex');
+
+          lastAddedRow = htmlNode;
+          if (!rowInfo.isExpanded)
+            continue;
+
+          // Append subrows now.
+          lastAddedRow = this.generateTableRowNodes_(
+              tableSection, userRow.subRows, rowInfoMap,
+              indentation + 1, lastAddedRow, rowInfo);
+        }
+        return lastAddedRow;
       },
 
-      generateRowNode_: function(tableSection, row, indentation) {
-        if (row.htmlNode)
-          return row.htmlNode;
+      getOrCreateRowInfoFor_: function(rowInfoMap, userRow, parentRowInfo) {
+        if (rowInfoMap.has(userRow))
+          return rowInfoMap.get(userRow);
+
+        var rowInfo = {
+          userRow: userRow,
+          htmlNode: undefined,
+          isExpanded: userRow.isExpanded || false,
+          parentRowInfo: parentRowInfo
+        };
+        rowInfoMap.set(userRow, rowInfo);
+        return rowInfo;
+      },
+
+      getHTMLNodeForRowInfo_: function(tableSection, rowInfo,
+                                       rowInfoMap, indentation) {
+        if (rowInfo.htmlNode)
+          return rowInfo.htmlNode;
 
         var INDENT_SPACE = indentation * 16;
         var INDENT_SPACE_NO_BUTTON = indentation * 16 + BASIC_INDENTATION;
         var tr = this.ownerDocument.createElement('tr');
-        row.htmlNode = tr;
-        row.indentation = indentation;
+        rowInfo.htmlNode = tr;
+        rowInfo.indentation = indentation;
+        tr.rowInfo = rowInfo;
 
         for (var i = 0; i < this.tableColumns_.length;) {
-          var td = this.appendNewElementAfter_(tr, 'td');
+          var td = this.appendNewElement_(tr, 'td');
           var column = this.tableColumns_[i];
-          var value = column.value(row.userRow);
+          var value = column.value(rowInfo.userRow);
           var colSpan = column.colSpan ? column.colSpan : 1;
           td.style.colSpan = colSpan;
 
           if (this.columnsWithExpandButtons_.indexOf(i) != -1) {
-            if (row.subRows.length > 0) {
+            if (rowInfo.userRow.subRows &&
+                rowInfo.userRow.subRows.length > 0) {
               td.style.paddingLeft = INDENT_SPACE + 'px';
-              var expandButton = this.appendNewElementAfter_(td,
+              var expandButton = this.appendNewElement_(td,
                   'expand-button');
               expandButton.textContent = RIGHT_ARROW;
-              if (row.isExpanded)
+              if (rowInfo.isExpanded)
                 expandButton.classList.add('button-expanded');
-              this.addToggleListenerForRowToButton_(tableSection, row,
-                  expandButton);
             } else {
               td.style.paddingLeft = INDENT_SPACE_NO_BUTTON + 'px';
             }
@@ -466,39 +521,58 @@ found in the LICENSE file.
           i += colSpan;
         }
 
-        var self = this;
-        tr.addEventListener('click', function(e) {
-          if (self.rowClickCallback_) {
-            self.rowClickCallback_(e);
-          }
-        });
+        var needsClickListener = false;
+        if (this.columnsWithExpandButtons_.length)
+          needsClickListener = true;
+        else if (tableSection == this.$.body)
+          needsClickListener = true;
+
+        if (needsClickListener) {
+          tr.addEventListener('click', function(e) {
+            e.stopPropagation();
+            if (e.target.tagName == 'EXPAND-BUTTON') {
+              this.setExpandedForUserRow_(
+                  tableSection, rowInfoMap,
+                  rowInfo.userRow, !rowInfo.isExpanded);
+              return;
+            }
+
+            if (this.supportsSelection_) {
+              if (this.selectedTableRowInfo_ === rowInfo) {
+                if (rowInfo.userRow.subRows && rowInfo.userRow.subRows.length) {
+                  this.setExpandedForUserRow_(
+                      tableSection, rowInfoMap,
+                      rowInfo.userRow, !rowInfo.isExpanded);
+                }
+              } else {
+                this.didTableRowInfoGetClicked_(rowInfo);
+              }
+            } else {
+              if (rowInfo.userRow.subRows && rowInfo.userRow.subRows.length) {
+                this.setExpandedForUserRow_(
+                    tableSection, rowInfoMap,
+                    rowInfo.userRow, !rowInfo.isExpanded);
+              }
+            }
+          }.bind(this));
+        }
+
+        return rowInfo.htmlNode;
       },
 
-      addToggleListenerForRowToButton_: function(tableSection, row, button) {
-        button.parentElement.addEventListener('click', function() {
-          row.isExpanded = !row.isExpanded;
+      removeSubNodes_: function(tableSection, rowInfo, rowInfoMap) {
+        if (rowInfo.userRow.subRows === undefined)
+          return;
+        for (var i = 0; i < rowInfo.userRow.subRows.length; i++) {
+          var subRow = rowInfo.userRow.subRows[i];
+          var subRowInfo = rowInfoMap.get(subRow);
+          if (!subRowInfo)
+            continue;
 
-          if (row.isExpanded) {
-            button.classList.add('button-expanded');
-            // Before adding the expanded nodes, sort them if we can.
-            if (this.sortColumnIndex_ !== undefined)
-              this.sortRows_(row.subRows);
-            var sibling = row.htmlNode;
-            this.generateTableRowNodes_(tableSection,
-                row.subRows, row.indentation + 1, sibling);
-          } else {
-            button.classList.remove('button-expanded');
-            this.removeSubNodes_(tableSection, row);
-          }
-        }.bind(this));
-      },
-
-      removeSubNodes_: function(tableSection, row) {
-        for (var i = 0; i < row.subRows.length; i++) {
-          var subNode = row.subRows[i].htmlNode;
+          var subNode = subRowInfo.htmlNode;
           if (subNode && subNode.parentNode === tableSection) {
-            tableSection.removeChild(row.subRows[i].htmlNode);
-            this.removeSubNodes_(tableSection, row.subRows[i]);
+            tableSection.removeChild(subNode);
+            this.removeSubNodes_(tableSection, subRowInfo, rowInfoMap);
           }
         }
       },
@@ -528,6 +602,10 @@ found in the LICENSE file.
         }.bind(this), 0);
       },
 
+      rebuildIfNeeded_: function() {
+        this.rebuild();
+      },
+
       rebuild: function() {
         var wasBodyOrHeaderDirty = this.headerDirty_ || this.bodyDirty_;
 
@@ -536,7 +614,10 @@ found in the LICENSE file.
           this.headerDirty_ = false;
         }
         if (this.bodyDirty_) {
-          this.generateTableRowNodes_(this.$.body, this.tableRowsInfo_, 0);
+          this.generateTableRowNodes_(
+              this.$.body,
+              this.tableRows_, this.tableRowsInfo_, 0,
+              undefined, undefined);
           this.bodyDirty_ = false;
         }
 
@@ -544,8 +625,10 @@ found in the LICENSE file.
           this.applySizes_();
 
         if (this.footerDirty_) {
-          this.generateTableRowNodes_(this.$.foot, this.tableFooterRowsInfo_,
-                                      0);
+          this.generateTableRowNodes_(
+              this.$.foot,
+              this.tableFooterRows_, this.tableFooterRowsInfo_, 0,
+              undefined, undefined);
           if (this.tableFooterRowsInfo_.length) {
             this.$.body.classList.add('has-footer');
           } else {
@@ -555,32 +638,241 @@ found in the LICENSE file.
         }
       },
 
-      createTableRowsInfo_: function(rows, containerForResults) {
-        for (var i = 0; i < rows.length; i++) {
-          var subRowsArray = [];
-          if (rows[i].subRows)
-            this.createTableRowsInfo_(rows[i].subRows, subRowsArray);
-
-          containerForResults.push({
-            userRow: rows[i],
-            htmlNode: undefined,
-            subRows: subRowsArray,
-            isExpanded: rows[i].isExpanded || false
-          });
-        }
-      },
-
-      appendElementAfter_: function(parent, element, opt_prevSibling) {
-        var nodeAfter = undefined;
-        if (opt_prevSibling)
-          nodeAfter = opt_prevSibling.nextSibling;
-        parent.insertBefore(element, nodeAfter);
-      },
-
-      appendNewElementAfter_: function(parent, tagName, opt_prevSibling) {
+      appendNewElement_: function(parent, tagName) {
         var element = parent.ownerDocument.createElement(tagName);
-        this.appendElementAfter_(parent, element, opt_prevSibling);
+        parent.appendChild(element);
         return element;
+      },
+
+      getExpandedForTableRow: function(userRow) {
+        this.rebuildIfNeeded_();
+        var rowInfo = this.tableRowsInfo_.get(userRow);
+        if (rowInfo === undefined)
+          throw new Error('Row has not been seen, must expand its parents');
+        return rowInfo.isExpanded;
+      },
+
+      setExpandedForTableRow: function(userRow, expanded) {
+        this.rebuildIfNeeded_();
+        var rowInfo = this.tableRowsInfo_.get(userRow);
+        if (rowInfo === undefined)
+          throw new Error('Row has not been seen, must expand its parents');
+        return this.setExpandedForUserRow_(this.$.body, this.tableRowsInfo_,
+                                           userRow, expanded);
+      },
+
+      setExpandedForUserRow_: function(tableSection, rowInfoMap,
+                                       userRow, expanded) {
+        this.rebuildIfNeeded_();
+
+        var rowInfo = rowInfoMap.get(userRow);
+        if (rowInfo === undefined)
+          throw new Error('Row has not been seen, must expand its parents');
+
+        rowInfo.isExpanded = !!expanded;
+        // If no node, then nothing further needs doing.
+        if (rowInfo.htmlNode === undefined)
+          return;
+
+        // If its detached, then nothing needs doing.
+        if (rowInfo.htmlNode.parentElement !== tableSection)
+          return;
+
+        // Otherwise, rebuild.
+        var expandButton = rowInfo.htmlNode.querySelector('expand-button');
+        if (rowInfo.isExpanded) {
+          expandButton.classList.add('button-expanded');
+          var lastAddedRow = rowInfo.htmlNode;
+          if (rowInfo.userRow.subRows) {
+            this.generateTableRowNodes_(
+                tableSection,
+                rowInfo.userRow.subRows, rowInfoMap,
+                rowInfo.indentation + 1,
+                lastAddedRow, rowInfo);
+          }
+        } else {
+          expandButton.classList.remove('button-expanded');
+          this.removeSubNodes_(tableSection, rowInfo, rowInfoMap);
+        }
+
+        this.maybeUpdateSelectedRow_();
+      },
+
+      get supportsSelection() {
+        return this.supportsSelection_;
+      },
+
+      set supportsSelection(supportsSelection) {
+        this.rebuildIfNeeded_();
+        this.supportsSelection_ = !!supportsSelection;
+        for (var i = 0; i < this.$.body.children.length; i++) {
+          if (this.supportsSelection_)
+            this.$.body.children[i].tabIndex = 0;
+          else
+            this.$.body.children[i].removeAttribute('tabIndex');
+        }
+        this.maybeUpdateSelectedRow_();
+      },
+
+      maybeUpdateSelectedRow_: function() {
+        if (this.selectedTableRowInfo_ === undefined)
+          return;
+
+        // SupportsSelection may be off.
+        if (!this.supportsSelection_) {
+          if (!this.selectedTableRowInfo_)
+            return;
+          this.selectedTableRowInfo_.htmlNode.removeAttribute('selected');
+          this.selectedTableRowInfo_ = undefined;
+          return;
+        }
+
+        // selectedUserRow may not be visible
+        function isVisible(rowInfo) {
+          if (!rowInfo.htmlNode)
+            return false;
+          return !!rowInfo.htmlNode.parentElement;
+        }
+        if (isVisible(this.selectedTableRowInfo_)) {
+          this.selectedTableRowInfo_.htmlNode.setAttribute('selected', true);
+          return;
+        }
+
+        this.selectedTableRowInfo_.htmlNode.removeAttribute('selected');
+        var curRowInfo = this.selectedTableRowInfo_;
+        while (curRowInfo && !isVisible(curRowInfo))
+          curRowInfo = curRowInfo.parentRowInfo;
+
+        this.selectedTableRowInfo_ = curRowInfo;
+        if (this.selectedTableRowInfo_)
+          this.selectedTableRowInfo_.htmlNode.setAttribute('selected', true);
+      },
+
+      didTableRowInfoGetClicked_: function(rowInfo) {
+        if (!this.supportsSelection_)
+          return;
+        if (this.selectedTableRowInfo_ === rowInfo)
+          return;
+
+        this.selectedTableRow = rowInfo.userRow;
+      },
+
+      get selectedTableRow() {
+        if (!this.selectedTableRowInfo_)
+          return undefined;
+        return this.selectedTableRowInfo_.userRow;
+      },
+
+      set selectedTableRow(userRow) {
+        this.rebuildIfNeeded_();
+        if (!this.supportsSelection_)
+          throw new Error('Selection is off. Set supportsSelection=true.');
+
+        var previousSelectedRowInfo = this.selectedTableRowInfo_;
+
+        var rowInfo = this.tableRowsInfo_.get(userRow);
+        if (rowInfo === undefined)
+          throw new Error('Row has not been seen, must expand its parents');
+
+        if (this.selectedTableRowInfo_)
+          this.selectedTableRowInfo_.htmlNode.removeAttribute('selected');
+        this.selectedTableRowInfo_ = rowInfo;
+        if (this.selectedTableRowInfo_)
+          this.selectedTableRowInfo_.htmlNode.setAttribute('selected', true);
+
+        var e = new Event('selection-changed', false, false);
+        if (previousSelectedRowInfo)
+          e.previousSelectedTableRow = previousSelectedRowInfo.userRow;
+        else
+          e.previousSelectedTableRow = undefined;
+        this.dispatchEvent(e);
+      },
+
+      onKeyDown_: function(e) {
+        if (this.supportsSelection_ === false)
+          return;
+        if (this.selectedTableRowInfo_ === undefined)
+          return;
+
+        var code_to_command_names = {
+          37: 'ARROW_LEFT',
+          38: 'ARROW_UP',
+          39: 'ARROW_RIGHT',
+          40: 'ARROW_DOWN'
+        };
+        var cmdName = code_to_command_names[e.keyCode];
+        if (cmdName === undefined)
+          return;
+
+        e.stopPropagation();
+        e.preventDefault();
+        this.performKeyCommand_(cmdName);
+      },
+
+      performKeyCommand_: function(cmdName) {
+        this.rebuildIfNeeded_();
+
+        var rowInfo = this.selectedTableRowInfo_;
+        var htmlNode = rowInfo.htmlNode;
+        if (cmdName === 'ARROW_UP') {
+          var prev = htmlNode.previousElementSibling;
+          if (prev) {
+            tv.b.scrollIntoViewIfNeeded(prev);
+            this.selectedTableRow = prev.rowInfo.userRow;
+            this.focusSelected_();
+            return;
+          }
+          return;
+        }
+
+        if (cmdName === 'ARROW_DOWN') {
+          var next = htmlNode.nextElementSibling;
+          if (next) {
+            tv.b.scrollIntoViewIfNeeded(next);
+            this.selectedTableRow = next.rowInfo.userRow;
+            this.focusSelected_();
+            return;
+          }
+          return;
+        }
+
+        if (cmdName === 'ARROW_RIGHT') {
+          if (rowInfo.userRow.subRows === undefined)
+            return;
+          if (rowInfo.userRow.subRows.length === 0)
+            return;
+
+          if (!rowInfo.isExpanded)
+            this.setExpandedForTableRow(rowInfo.userRow, true);
+          this.selectedTableRow = rowInfo.userRow.subRows[0];
+          this.focusSelected_();
+          return;
+        }
+
+        if (cmdName === 'ARROW_LEFT') {
+          if (rowInfo.isExpanded) {
+            this.setExpandedForTableRow(rowInfo.userRow, false);
+            this.focusSelected_();
+            return;
+          }
+
+          // Not expanded. Select parent...
+          var parentRowInfo = rowInfo.parentRowInfo;
+          if (parentRowInfo) {
+            this.selectedTableRow = parentRowInfo.userRow;
+            this.focusSelected_();
+            return;
+          }
+
+          return;
+        }
+        throw new Error('Unrecognized command');
+      },
+
+      focusSelected_: function() {
+        if (!this.selectedTableRowInfo_)
+          return;
+        this.selectedTableRowInfo_.htmlNode.focus();
       }
     });
   })();

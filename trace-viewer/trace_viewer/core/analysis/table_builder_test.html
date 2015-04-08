@@ -264,6 +264,37 @@ tv.b.unittest.testSuite(function() {
   });
 
 
+  test('subRowsThatAreRetrievedOnDemand', function() {
+    var columns = [
+      {
+        title: 'a',
+        value: function(row) { return row.a; },
+        width: '150px'
+      }
+    ];
+
+    var rows = [
+      {
+        a: 'row1',
+        subRows: [
+          {
+            b: 'row1.1',
+            get subRows() {
+              throw new Error('Shold not be called');
+            }
+          }
+        ]
+      }
+    ];
+
+    var table = document.createElement('tracing-analysis-nested-table');
+    table.tableColumns = columns;
+    table.tableRows = rows;
+    table.rebuild();
+    this.addHTMLOutput(table);
+  });
+
+
   test('instantiateTableWithHiddenHeader', function() {
     var columns = [
       {
@@ -369,6 +400,259 @@ tv.b.unittest.testSuite(function() {
     var h2FirstCol = table2.$.body.children[0].children[0];
     assert.equal(h1FirstCol.getBoundingClientRect().width,
                  h2FirstCol.getBoundingClientRect().width);
+  });
+
+  test('programmaticSorting', function() {
+    var table = document.createElement('tracing-analysis-nested-table');
+
+    var columns = [
+      {
+        title: 'Column',
+        value: function(row) { return row.value; },
+        cmp: function(rowA, rowB) {
+          return rowA.value.toString().localeCompare(
+              rowB.value.toString());
+        }
+      }
+    ];
+
+    var rows = [
+      {
+        value: 'A1',
+        subRows: [
+          {
+            value: 'A1.1'
+          },
+          {
+            value: 'A1.2',
+            subRows: [
+              {
+                value: 'A1.2.1'
+              },
+              {
+                value: 'A1.2.2'
+              }
+            ]
+          },
+          {
+            value: 'A1.3'
+          }
+        ]
+      },
+      {
+        value: 'A2'
+      }
+    ];
+
+    table.tableColumns = columns;
+    table.tableRows = rows;
+    table.rebuild();
+
+    this.addHTMLOutput(table);
+
+    table.sortDescending = true;
+    table.sortColumnIndex = 0;
+    table.rebuild();
+    var r0 = table.$.body.children[0];
+    assert.equal(r0.rowInfo.userRow, rows[1]);
+
+    var r1 = table.$.body.children[1];
+    assert.equal(r1.rowInfo.userRow, rows[0]);
+  });
+
+  test('sortingAfterExpand', function() {
+    var table = document.createElement('tracing-analysis-nested-table');
+
+    var columns = [
+      {
+        title: 'Column',
+        value: function(row) { return row.value; },
+        cmp: function(rowA, rowB) {
+          return rowA.value.toString().localeCompare(
+              rowB.value.toString());
+        }
+      }
+    ];
+
+    var rows = [
+      {
+        value: 'A1',
+        isExpanded: true,
+        subRows: [
+          {
+            value: 'A1.1'
+          },
+          {
+            value: 'A1.2',
+            subRows: [
+              {
+                value: 'A1.2.1'
+              },
+              {
+                value: 'A1.2.2'
+              }
+            ]
+          },
+          {
+            value: 'A1.3'
+          }
+        ]
+      },
+      {
+        value: 'A2'
+      }
+    ];
+
+    table.tableColumns = columns;
+    table.tableRows = rows;
+    table.rebuild();
+
+    this.addHTMLOutput(table);
+
+    table.sortDescending = true;
+    table.sortColumnIndex = 0;
+    table.rebuild();
+    var r0 = table.$.body.children[0];
+    assert.equal(r0.rowInfo.userRow, rows[1]);
+
+    var r1 = table.$.body.children[1];
+    assert.equal(r1.rowInfo.userRow, rows[0]);
+
+    var r2 = table.$.body.children[2];
+    assert.equal(r2.rowInfo.userRow, rows[0].subRows[2]);
+
+    assert.isFalse(r0.hasAttribute('tabIndex'));
+  });
+
+  function createSimpleOneColumnNestedTable() {
+    var table = document.createElement('tracing-analysis-nested-table');
+
+    var columns = [
+      {
+        title: 'Column',
+        value: function(row) { return row.value; },
+        cmp: function(rowA, rowB) {
+          return rowA.value.toString().localeCompare(
+              rowB.value.toString());
+        }
+      }
+    ];
+
+    var rows = [
+      {
+        value: 'A1',
+        subRows: [
+          {
+            value: 'A1.1'
+          },
+          {
+            value: 'A1.2',
+            subRows: [
+              {
+                value: 'A1.2.1'
+              },
+              {
+                value: 'A1.2.2'
+              }
+            ]
+          },
+          {
+            value: 'A1.3'
+          }
+        ]
+      },
+      {
+        value: 'A2'
+      }
+    ];
+
+    table.tableColumns = columns;
+    table.tableRows = rows;
+    return table;
+  }
+
+  test('expandAfterRebuild', function() {
+    var table = createSimpleOneColumnNestedTable();
+    table.rebuild();
+    var rows = table.tableRows;
+
+    this.addHTMLOutput(table);
+
+    table.rebuild();
+    assert.isFalse(table.getExpandedForTableRow(rows[0]));
+    table.setExpandedForTableRow(rows[0], true);
+    assert.isTrue(table.getExpandedForTableRow(rows[0]));
+
+    var r1 = table.$.body.children[1];
+    assert.equal(r1.rowInfo.userRow, rows[0].subRows[0]);
+  });
+
+  test('tableSelection', function() {
+    var table = createSimpleOneColumnNestedTable();
+    var rows = table.tableRows;
+
+    table.supportsSelection = true;
+    table.selectedTableRow = rows[0];
+
+    table.setExpandedForTableRow(rows[0], true);
+    table.selectedTableRow = rows[0].subRows[1];
+    assert.equal(table.selectedTableRow, rows[0].subRows[1]);
+
+    table.setExpandedForTableRow(rows[0], false);
+    assert.equal(table.selectedTableRow, rows[0]);
+
+    table.supportsSelection = false;
+    assert.equal(table.selectedTableRow, undefined);
+
+    table.supportsSelection = true;
+    table.setExpandedForTableRow(rows[0].subRows[1], true);
+    this.addHTMLOutput(table);
+
+    var r0 = table.$.body.children[0];
+    assert.isTrue(r0.hasAttribute('tabIndex'));
+  });
+
+
+  test('keyMovement', function() {
+    var table = createSimpleOneColumnNestedTable();
+    table.supportsSelection = true;
+    this.addHTMLOutput(table);
+
+    var rows = table.tableRows;
+    table.selectedTableRow = rows[0];
+
+    table.performKeyCommand_('ARROW_DOWN');
+    assert.equal(table.selectedTableRow, rows[1]);
+
+    table.performKeyCommand_('ARROW_UP');
+    assert.equal(table.selectedTableRow, rows[0]);
+
+    // Arrow right on collapsed row should expand.
+    table.selectedTableRow = rows[0];
+    table.performKeyCommand_('ARROW_RIGHT');
+    assert.equal(table.selectedTableRow, rows[0].subRows[0]);
+    assert.isTrue(table.getExpandedForTableRow(rows[0]));
+
+    table.performKeyCommand_('ARROW_DOWN');
+    assert.equal(table.selectedTableRow, rows[0].subRows[1]);
+
+    // ARrow left on collapsed item should select parent.
+    table.performKeyCommand_('ARROW_LEFT');
+    assert.equal(table.selectedTableRow, rows[0]);
+    assert.isTrue(table.getExpandedForTableRow(rows[0]));
+
+    // Arrow right on expanded row should select first child.
+    table.selectedTableRow = rows[0];
+    table.setExpandedForTableRow(rows[0], true);
+    table.performKeyCommand_('ARROW_RIGHT');
+    assert.equal(table.selectedTableRow, rows[0].subRows[0]);
+
+    // Arrow right on a non-expandable row should do nothing.
+    table.selectedTableRow = rows[1];
+    assert.equal(table.selectedTableRow, rows[1]);
+    table.performKeyCommand_('ARROW_RIGHT');
+    assert.equal(table.selectedTableRow, rows[1]);
+    assert.isFalse(table.getExpandedForTableRow(rows[1]));
   });
 });
 </script>
