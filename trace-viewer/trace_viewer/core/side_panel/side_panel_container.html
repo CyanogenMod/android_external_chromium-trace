@@ -27,6 +27,10 @@ found in the LICENSE file.
       display: none;
     }
 
+    active-panel-container {
+      display: flex;
+    }
+
     tab-strip {
       -webkit-flex: 0 0 auto;
       -webkit-flex-direction: column;
@@ -176,6 +180,7 @@ found in the LICENSE file.
         } else {
           labelEl.title = 'Not supported for the current trace: ' +
               supported.reason;
+          labelEl.style.display = 'none';
         }
         this.tabStrip_.appendChild(labelEl);
       }, this);

@@ -309,6 +309,7 @@ tv.exportTo('tv.c', function() {
     },
 
     removeAnnotation: function(annotation) {
+      this.annotationsByGuid_[annotation.guid].onRemove();
       delete this.annotationsByGuid_[annotation.guid];
       tv.b.dispatchSimpleEvent(this, 'annotationChange');
     },
@@ -687,8 +688,9 @@ tv.exportTo('tv.c', function() {
         this.processes[pid].iterateAllEvents(callback, opt_this);
 
       this.samples.forEach(callback, opt_this);
-
       this.globalMemoryDumps.forEach(callback, opt_this);
+      this.alerts.forEach(callback, opt_this);
+      this.interaction_records.forEach(callback, opt_this);
     },
 
     /**
