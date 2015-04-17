@@ -6,10 +6,24 @@ found in the LICENSE file.
 -->
 
 <link rel="import" href="/core/analysis/analysis_sub_view.html">
-<link rel="import" href="/core/analysis/generic_object_view.html">
+<link rel="import" href="/core/analysis/size_span.html">
+<link rel="import" href="/core/analysis/table_builder.html">
 
 <polymer-element name="tv-c-single-global-memory-dump-sub-view"
     extends="tracing-analysis-sub-view">
+  <template>
+    <style>
+    :host {
+      display: flex;
+    }
+    #table {
+      flex: 1 1 auto;
+      align-self: stretch;
+    }
+    </style>
+    <tracing-analysis-nested-table id="table">
+    </tracing-analysis-nested-table>
+  </template>
   <script>
   'use strict';
 
@@ -32,19 +46,90 @@ found in the LICENSE file.
 
     setSelectionWithoutErrorChecks: function(selection) {
       this.currentSelection_ = selection;
-      this.textContent = '';
+      this.updateContents_();
+    },
 
-      var pidToProcessMemoryMap = {};
-      var gd = this.currentSelection_[0];
-      for (var pid in gd.processMemoryDumps) {
-        var pd = gd.processMemoryDumps[pid];
-        pidToProcessMemoryMap[pid] = pd.args;
+    updateContents_: function() {
+      var selection = this.currentSelection_;
+
+      var pidToProcessMemoryDump;
+      if (selection)
+        pidToProcessMemoryDump = selection[0].processMemoryDumps;
+      else
+        pidToProcessMemoryDump = {};
+
+      var rows = [];
+      tv.b.iterItems(pidToProcessMemoryDump, function(pid, processMemoryDump) {
+        rows.push({
+          title: processMemoryDump.process.userFriendlyName,
+          proportionalResident:
+              processMemoryDump.totalProportionalResidentSizeInBytes,
+          privateResident:
+              processMemoryDump.totalPrivateResidentSizeInBytes,
+          sharedResident:
+              processMemoryDump.totalSharedResidentSizeInBytes
+        });
+      }, this);
+      this.$.table.tableRows = rows;
+
+      this.updateColumns_();
+
+      this.$.table.rebuild();
+    },
+
+    updateColumns_: function() {
+      function createResidentSizeColumn(title, rowKey) {
+        return {
+          title: title,
+          value: function(row) {
+            // TODO(petrcermak): Show the most recently measured size instead
+            // of '<unknown>'.
+            var size = row[rowKey];
+            if (size === undefined)
+              return '<unknown>';
+            var sizeEl = document.createElement('tv-c-a-size-span');
+            sizeEl.numBytes = size;
+            return sizeEl;
+          },
+          width: '<upated further down>',
+          cmp: function(rowA, rowB) {
+            var sizeA = rowA[rowKey];
+            var sizeB = rowB[rowKey];
+            if (sizeA === undefined && sizeB === undefined)
+              return 0;
+            if (sizeA === undefined)
+              return -1;
+            if (sizeB === undefined)
+              return 1;
+            return sizeA - sizeB;
+          }
+        };
       }
 
-      var objectView =
-          document.createElement('tv-c-analysis-generic-object-view');
-      objectView.object = pidToProcessMemoryMap;
-      this.appendChild(objectView);
+      var columns = [
+        {
+          title: 'Process',
+          value: function(row) {
+            return row.title;
+          },
+          width: '350px',
+          cmp: function(rowA, rowB) {
+            return rowA.title.localeCompare(rowB.title);
+          }
+        },
+        createResidentSizeColumn(
+            'Proportional Set Size', 'proportionalResident'),
+        createResidentSizeColumn(
+            'Private Memory', 'privateResident'),
+        createResidentSizeColumn(
+            'Shared Memory', 'sharedResident')
+      ];
+
+      var columnWidth = (100 / (columns.length - 1)).toFixed(3) + '%';
+      for (var i = 1; i < columns.length; i++)
+        columns[i].width = columnWidth;
+
+      this.$.table.tableColumns = columns;
     }
   });
   </script>

@@ -59,13 +59,12 @@ tv.exportTo('tv.c.tracks', function() {
      */
     var genericColorId = tv.b.ui.getColorIdForReservedName('generic_work');
     var pushRect = function(start, end, slice) {
-      rects.push({
-        start: start,
-        end: end,
-        duration: end - start,
-        colorId: slice ? slice.colorId : genericColorId,
-        title: slice ? slice.title : undefined
-      });
+      rects.push(new tv.c.tracks.Rect(
+          slice, /* modelItem: show selection state of slice if present */
+          slice ? slice.title : '', /* title */
+          slice ? slice.colorId : genericColorId, /* colorId */
+          start, /* start */
+          end - start /* duration */));
     }
     var depth = 0;
     var currentSlice = undefined;
@@ -110,7 +109,6 @@ tv.exportTo('tv.c.tracks', function() {
 
     decorate: function(viewport) {
       tv.c.tracks.RectTrack.prototype.decorate.call(this, viewport);
-      this.classList.add('inverse-expand');
     },
 
     get process() {
@@ -120,11 +118,6 @@ tv.exportTo('tv.c.tracks', function() {
     set process(process) {
       this.process_ = process;
       this.rects = ProcessSummaryTrack.buildRectsFromProcess(process);
-    },
-
-    getModelEventFromItem: function(thing) {
-      // Do nothing, since not selectable
-      return undefined;
     }
   };
 

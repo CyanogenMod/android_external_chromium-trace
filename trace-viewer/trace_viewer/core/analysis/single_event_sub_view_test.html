@@ -77,11 +77,10 @@ tv.b.unittest.testSuite(function() {
   test('alerts', function() {
     var slice = newSliceNamed('b', 0, 0.002);
 
-    var ALERT_SEVERITY = tv.c.trace_model.ALERT_SEVERITY;
-    var ALERT_TYPE_1 = new tv.c.trace_model.AlertType(
-        'Alert 1', 'Critical alert', ALERT_SEVERITY.CRITICAL);
+    var ALERT_INFO_1 = new tv.c.trace_model.EventInfo(
+        'Alert 1', 'Critical alert');
 
-    var alert = new tv.c.trace_model.Alert(ALERT_TYPE_1, 5, [slice]);
+    var alert = new tv.c.trace_model.Alert(ALERT_INFO_1, 5, [slice]);
 
     var selection = new tv.c.Selection();
     selection.push(slice);
@@ -240,6 +239,19 @@ tv.b.unittest.testSuite(function() {
     var analysisLink = tv.b.findDeepElementMatching(subView,
                                                     'tv-c-analysis-link');
     assert.isDefined(analysisLink);
+  });
+
+  test('instantiate_withSingleSliceContainingInfo', function() {
+    var slice = newSliceNamed('b', 0, 1);
+    slice.info = new tv.c.trace_model.EventInfo(
+        'Info title', 'Description');
+
+    var selection = new tv.c.Selection();
+    selection.push(slice);
+
+    var analysisEl = document.createElement('tv-c-a-single-event-sub-view');
+    analysisEl.selection = selection;
+    this.addHTMLOutput(analysisEl);
   });
 });
 </script>
