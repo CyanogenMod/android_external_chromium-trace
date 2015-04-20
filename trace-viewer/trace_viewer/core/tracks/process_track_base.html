@@ -67,14 +67,7 @@ tv.exportTo('tv.c.tracks', function() {
 
       if (this.processBase_) {
         var modelSettings = new TraceModelSettings(this.processBase_.model);
-        var defaultValue;
-        if (this.processBase_.labels !== undefined &&
-            this.processBase_.labels.length == 1 &&
-            this.processBase_.labels[0] == 'chrome://tracing') {
-          defaultValue = false;
-        } else {
-          defaultValue = true;
-        }
+        var defaultValue = this.processBase_.important;
         this.expanded = modelSettings.getSettingFor(
             this.processBase_, 'expanded', defaultValue);
       }
@@ -104,6 +97,7 @@ tv.exportTo('tv.c.tracks', function() {
 
       var modelSettings = new TraceModelSettings(this.processBase_.model);
       modelSettings.setSettingFor(this.processBase_, 'expanded', expanded);
+      this.updateContents_();
     },
 
     get hasVisibleContent() {
@@ -131,11 +125,14 @@ tv.exportTo('tv.c.tracks', function() {
 
       // Create the object instance tracks for this process.
       this.willAppendTracks_();
-      this.appendSummaryTrack_();
-      this.appendObjectInstanceTracks_();
-      this.appendCounterTracks_();
-      this.appendFrameTrack_();
-      this.appendThreadTracks_();
+      if (this.expanded) {
+        this.appendObjectInstanceTracks_();
+        this.appendCounterTracks_();
+        this.appendFrameTrack_();
+        this.appendThreadTracks_();
+      } else {
+        this.appendSummaryTrack_();
+      }
       this.didAppendTracks_();
     },
 

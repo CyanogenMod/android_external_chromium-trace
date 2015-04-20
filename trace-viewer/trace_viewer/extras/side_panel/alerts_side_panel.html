@@ -51,6 +51,10 @@ found in the LICENSE file.
       this.updateContents_();
     },
 
+    get listeningToKeys() {
+      return false;
+    },
+
     set selection(selection) {
     },
 
@@ -79,11 +83,10 @@ found in the LICENSE file.
     alertsByType_: function(alerts) {
       var alertsByType = {};
       alerts.forEach(function(alert) {
-        var title = alert.type.title;
-        if (!alertsByType[title])
-          alertsByType[title] = [];
+        if (!alertsByType[alert.title])
+          alertsByType[alert.title] = [];
 
-        alertsByType[title].push(alert);
+        alertsByType[alert.title].push(alert);
       });
       return alertsByType;
     },
@@ -142,6 +145,11 @@ found in the LICENSE file.
         return {
           supported: false,
           reason: 'Unknown tracing model'
+        };
+      } else if (m.alerts.length === 0) {
+        return {
+          supported: false,
+          reason: 'No alerts in tracing model'
         };
       }
 
