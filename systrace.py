@@ -110,13 +110,13 @@ def main():
     parser.error('--link-assets and --asset-dir is deprecated.')
 
   if options.list_categories:
-    atrace_args = ['adb', 'shell', 'atrace', '--list_categories']
+    tracer_args = ['adb', 'shell', 'atrace --list_categories']
     expect_trace = False
   elif options.from_file is not None:
-    atrace_args = ['cat', options.from_file]
+    tracer_args = ['cat', options.from_file]
     expect_trace = True
   else:
-    atrace_args = ['adb', 'shell', 'atrace', '-z']
+    atrace_args = ['atrace', '-z']
     expect_trace = True
 
     if options.trace_time is not None:
@@ -143,15 +143,16 @@ def main():
 
     if options.fix_threads:
       atrace_args.extend([';', 'ps', '-t'])
+    tracer_args = ['adb', 'shell', ' '.join(atrace_args)]
 
-  if atrace_args[0] == 'adb':
-    add_adb_serial(atrace_args, options.device_serial)
+  if tracer_args[0] == 'adb':
+    add_adb_serial(tracer_args, options.device_serial)
 
   script_dir = os.path.dirname(os.path.abspath(sys.argv[0]))
 
   html_filename = options.output_file
 
-  adb = subprocess.Popen(atrace_args, stdout=subprocess.PIPE,
+  adb = subprocess.Popen(tracer_args, stdout=subprocess.PIPE,
                          stderr=subprocess.PIPE)
 
   result = None
