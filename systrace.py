@@ -93,6 +93,8 @@ def main():
                     'list of app cmdlines')
   parser.add_option('--no-fix-threads', dest='fix_threads', default=True,
                     action='store_false', help='don\'t fix missing or truncated thread names')
+  parser.add_option('--no-fix-circular', dest='fix_circular', default=True,
+                    action='store_false', help='don\'t fix truncated circular traces')
 
   parser.add_option('--link-assets', dest='link_assets', default=False,
                     action='store_true', help='link to original CSS or JS resources '
@@ -256,6 +258,9 @@ def main():
             return m.group(0)
         out = re.sub(r'^\s*(\S+)-(\d+)', repl, out, flags=re.MULTILINE)
 
+      if options.fix_circular:
+        out = fix_circular_traces(out)
+
       html_prefix = read_asset(script_dir, 'prefix.html')
       html_suffix = read_asset(script_dir, 'suffix.html')
       trace_viewer_html = read_asset(script_dir, 'systrace_trace_viewer.html')
@@ -280,6 +285,36 @@ def main():
 def read_asset(src_dir, filename):
   return open(os.path.join(src_dir, filename)).read()
 
+def fix_circular_traces(out):
+  """Fix inconsistentcies in traces due to circular buffering.
+
+  The circular buffers are kept per CPU, so it is not guaranteed that the
+  beginning of a slice is overwritten before the end. To work around this, we
+  throw away the prefix of the trace where not all CPUs have events yet."""
+
+  # If any of the CPU's buffers have filled up and
+  # older events have been dropped, the kernel
+  # emits markers of the form '##### CPU 2 buffer started ####' on
+  # the line before the first event in the trace on that CPU.
+  #
+  # No such headers are emitted if there were no overflows or the trace
+  # was captured with non-circular buffers.
+  buffer_start_re = re.compile(r'^#+ CPU \d+ buffer started', re.MULTILINE)
+
+  start_of_full_trace = 0
+
+  while True:
+    result = buffer_start_re.search(out, start_of_full_trace + 1)
+    if result:
+      start_of_full_trace = result.start()
+    else:
+      break
+
+  if start_of_full_trace > 0:
+    # Need to keep the header intact to make the importer happy.
+    end_of_header = re.search(r'^[^#]', out, re.MULTILINE).start()
+    out = out[:end_of_header] + out[start_of_full_trace:]
+  return out
 
 if __name__ == '__main__':
   main()
