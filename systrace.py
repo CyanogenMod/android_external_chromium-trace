@@ -229,7 +229,7 @@ def main():
       # Extract the thread list dumped by ps.
       threads = {}
       if options.fix_threads:
-        parts = data.split('USER     PID   PPID  VSIZE  RSS     WCHAN    PC        NAME', 1)
+        parts = re.split('USER +PID +PPID +VSIZE +RSS +WCHAN +PC +NAME', data, 1)
         if len(parts) == 2:
           data = parts[0]
           for line in parts[1].splitlines():
