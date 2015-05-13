@@ -35,11 +35,13 @@ found in the LICENSE file.
         vertical-align: text-top;
       }
 
-      tr:focus {
+      tr:focus,
+      td:focus {
         outline: 1px dotted rgba(0,0,0,0.1);
         outline-offset: 0;
       }
-      tr[selected] {
+      tr[selected],
+      td[selected] {
         background-color: rgb(103, 199, 165);
       }
 
@@ -81,12 +83,21 @@ found in the LICENSE file.
         font-weight: bold;
       }
 
-      table > tbody > tr:hover[selected] {
+      table > tbody.row-selection-mode > tr:hover[selected],
+      table > tbody.cell-selection-mode > tr > td:hover[selected] {
         background-color: rgb(171, 217, 202);
       }
-      table > tbody > tr:hover,
+      table > tbody.row-selection-mode > tr:hover:not(.empty-row),
+      table > tbody.cell-selection-mode > tr:not(.empty-row) >
+          td.supports-selection:hover,
       table > tfoot > tr:hover {
         background-color: #e6e6e6
+      }
+
+      table > tbody > tr.empty-row > td {
+        color: #666;
+        font-style: italic;
+        text-align: center;
       }
 
       table > tbody.has-footer > tr:last-child > td {
@@ -131,7 +142,10 @@ found in the LICENSE file.
     Polymer({
       created: function() {
         this.supportsSelection_ = false;
+        this.cellSelectionMode_ = false;
         this.selectedTableRowInfo_ = undefined;
+        this.selectedColumnIndex_ = undefined;
+
         this.tableColumns_ = [];
         this.tableRows_ = [];
         this.tableRowsInfo_ = [];
@@ -141,6 +155,7 @@ found in the LICENSE file.
         this.columnsWithExpandButtons_ = [];
         this.headerCells_ = [];
         this.showHeader_ = true;
+        this.emptyValue_ = undefined;
       },
 
       ready: function() {
@@ -150,7 +165,10 @@ found in the LICENSE file.
 
       clear: function() {
         this.supportsSelection_ = false;
+        this.cellSelectionMode_ = false;
         this.selectedTableRowInfo_ = undefined;
+        this.selectedColumnIndex_ = undefined;
+
         this.textContent = '';
         this.tableColumns_ = [];
         this.tableRows_ = [];
@@ -170,6 +188,17 @@ found in the LICENSE file.
       set showHeader(showHeader) {
         this.showHeader_ = showHeader;
         this.scheduleRebuildHeaders_();
+      },
+
+      get emptyValue() {
+        return this.emptyValue_;
+      },
+
+      set emptyValue(emptyValue) {
+        var previousEmptyValue = this.emptyValue_;
+        this.emptyValue_ = emptyValue;
+        if (this.tableRows_.length === 0 && emptyValue !== previousEmptyValue)
+          this.scheduleRebuildBody_();
       },
 
       /**
@@ -217,6 +246,7 @@ found in the LICENSE file.
 
         // Commit the change.
         this.tableColumns_ = columns;
+        this.headerCells_ = [];
         this.columnsWithExpandButtons_ = columnsWithExpandButtons;
         this.sortColumnIndex = undefined;
         this.scheduleRebuildHeaders_();
@@ -237,6 +267,7 @@ found in the LICENSE file.
        */
       set tableRows(rows) {
         this.selectedTableRowInfo_ = undefined;
+        this.selectedColumnIndex_ = undefined;
         this.maybeUpdateSelectedRow_();
         this.tableRows_ = rows;
         this.tableRowsInfo_ = new WeakMap();
@@ -358,7 +389,7 @@ found in the LICENSE file.
       },
 
       applySizes_: function() {
-        if (this.tableRows_.length === 0)
+        if (this.tableRows_.length === 0 && !this.showHeader)
           return;
         var rowToRemoveSizing;
         var rowToSize;
@@ -449,10 +480,7 @@ found in the LICENSE file.
             var nextSiblingOfLastAdded = lastAddedRow.nextSibling;
             tableSection.insertBefore(htmlNode, nextSiblingOfLastAdded);
           }
-          if (this.supportsSelection_)
-            htmlNode.tabIndex = 0;
-          else
-            htmlNode.removeAttribute('tabIndex');
+          this.updateTabIndexForTableRowNode_(htmlNode);
 
           lastAddedRow = htmlNode;
           if (!rowInfo.isExpanded)
@@ -494,10 +522,15 @@ found in the LICENSE file.
 
         for (var i = 0; i < this.tableColumns_.length;) {
           var td = this.appendNewElement_(tr, 'td');
+          td.columnIndex = i;
+
           var column = this.tableColumns_[i];
           var value = column.value(rowInfo.userRow);
           var colSpan = column.colSpan ? column.colSpan : 1;
           td.style.colSpan = colSpan;
+
+          if (this.doesColumnIndexSupportSelection(i))
+            td.classList.add('supports-selection');
 
           if (this.columnsWithExpandButtons_.indexOf(i) != -1) {
             if (rowInfo.userRow.subRows &&
@@ -537,15 +570,33 @@ found in the LICENSE file.
               return;
             }
 
+            function getTD(cur) {
+              if (cur == tr)
+                throw new Error('woah');
+              if (cur.parentElement === tr)
+                return cur;
+              return getTD(cur.parentElement);
+            }
+
             if (this.supportsSelection_) {
-              if (this.selectedTableRowInfo_ === rowInfo) {
+              var isAlreadySelected = false;
+              var tdThatWasClicked = getTD(e.target);
+              if (!this.cellSelectionMode_) {
+                isAlreadySelected = this.selectedTableRowInfo_ === rowInfo;
+              } else {
+                isAlreadySelected = this.selectedTableRowInfo_ === rowInfo;
+                isAlreadySelected &= (this.selectedColumnIndex_ ===
+                                      tdThatWasClicked.columnIndex);
+              }
+              if (isAlreadySelected) {
                 if (rowInfo.userRow.subRows && rowInfo.userRow.subRows.length) {
                   this.setExpandedForUserRow_(
                       tableSection, rowInfoMap,
                       rowInfo.userRow, !rowInfo.isExpanded);
                 }
               } else {
-                this.didTableRowInfoGetClicked_(rowInfo);
+                this.didTableRowInfoGetClicked_(
+                    rowInfo, tdThatWasClicked.columnIndex);
               }
             } else {
               if (rowInfo.userRow.subRows && rowInfo.userRow.subRows.length) {
@@ -619,6 +670,19 @@ found in the LICENSE file.
               this.$.body,
               this.tableRows_, this.tableRowsInfo_, 0,
               undefined, undefined);
+          if (this.tableRows_.length === 0 && this.emptyValue_ !== undefined) {
+            var tr = this.ownerDocument.createElement('tr');
+            this.$.body.appendChild(tr);
+            tr.classList.add('empty-row');
+            var td = this.ownerDocument.createElement('td');
+            tr.appendChild(td);
+            td.colSpan = this.tableColumns_.length;
+            var emptyValue = this.emptyValue_;
+            if (emptyValue instanceof HTMLElement)
+              td.appendChild(emptyValue);
+            else
+              td.appendChild(this.ownerDocument.createTextNode(emptyValue));
+          }
           this.bodyDirty_ = false;
         }
 
@@ -707,12 +771,35 @@ found in the LICENSE file.
       set supportsSelection(supportsSelection) {
         this.rebuildIfNeeded_();
         this.supportsSelection_ = !!supportsSelection;
-        for (var i = 0; i < this.$.body.children.length; i++) {
-          if (this.supportsSelection_)
-            this.$.body.children[i].tabIndex = 0;
-          else
-            this.$.body.children[i].removeAttribute('tabIndex');
+        this.didSelectionStateChange_();
+      },
+
+      get cellSelectionMode() {
+        return this.cellSelectionMode_;
+      },
+
+      set cellSelectionMode(cellSelectionMode) {
+        this.rebuildIfNeeded_();
+        this.cellSelectionMode_ = !!cellSelectionMode;
+        this.didSelectionStateChange_();
+      },
+
+      didSelectionStateChange_: function() {
+        if (!this.supportsSelection_) {
+          // Selection disabled.
+          this.$.body.classList.remove('cell-selection-mode');
+          this.$.body.classList.remove('row-selection-mode');
+        } else if (!this.cellSelectionMode_) {
+          // Row selection mode.
+          this.$.body.classList.remove('cell-selection-mode');
+          this.$.body.classList.add('row-selection-mode');
+        } else {
+          // Cell selection mode.
+          this.$.body.classList.add('cell-selection-mode');
+          this.$.body.classList.remove('row-selection-mode');
         }
+        for (var i = 0; i < this.$.body.children.length; i++)
+          this.updateTabIndexForTableRowNode_(this.$.body.children[i]);
         this.maybeUpdateSelectedRow_();
       },
 
@@ -750,13 +837,20 @@ found in the LICENSE file.
           this.selectedTableRowInfo_.htmlNode.setAttribute('selected', true);
       },
 
-      didTableRowInfoGetClicked_: function(rowInfo) {
+      didTableRowInfoGetClicked_: function(rowInfo, columnIndex) {
         if (!this.supportsSelection_)
           return;
-        if (this.selectedTableRowInfo_ === rowInfo)
-          return;
 
-        this.selectedTableRow = rowInfo.userRow;
+        if (this.cellSelectionMode_) {
+          if (!this.doesColumnIndexSupportSelection(columnIndex))
+            return;
+        }
+
+        if (this.selectedTableRowInfo_ !== rowInfo)
+          this.selectedTableRow = rowInfo.userRow;
+
+        if (this.selectedColumnIndex !== columnIndex)
+          this.selectedColumnIndex = columnIndex;
       },
 
       get selectedTableRow() {
@@ -770,23 +864,126 @@ found in the LICENSE file.
         if (!this.supportsSelection_)
           throw new Error('Selection is off. Set supportsSelection=true.');
 
-        var previousSelectedRowInfo = this.selectedTableRowInfo_;
-
         var rowInfo = this.tableRowsInfo_.get(userRow);
         if (rowInfo === undefined)
           throw new Error('Row has not been seen, must expand its parents');
 
-        if (this.selectedTableRowInfo_)
-          this.selectedTableRowInfo_.htmlNode.removeAttribute('selected');
+        var e = this.prepareToChangeSelection_();
         this.selectedTableRowInfo_ = rowInfo;
-        if (this.selectedTableRowInfo_)
-          this.selectedTableRowInfo_.htmlNode.setAttribute('selected', true);
+        if (this.cellSelectionMode_) {
+          if (this.selectedTableRowInfo_ &&
+              this.selectedColumnIndex_ === undefined) {
+            var i = this.getFirstSelectableColumnIndex_();
+            if (i == -1)
+              throw new Error('nope');
+            this.selectedColumnIndex_ = i;
+          }
+        } else {
+          this.selectedColumnIndex_ = undefined;
+        }
 
+        this.updateSelectedState_();
+
+        this.dispatchEvent(e);
+      },
+
+      updateTabIndexForTableRowNode_: function(row) {
+        if (this.supportsSelection_) {
+          if (!this.cellSelectionMode_) {
+            row.tabIndex = 0;
+          } else {
+            for (var i = 0; i < this.tableColumns_.length; i++) {
+              if (!this.doesColumnIndexSupportSelection(i))
+                continue;
+              row.children[i].tabIndex = 0;
+            }
+          }
+        } else {
+          if (!this.cellSelectionMode_) {
+            row.removeAttribute('tabIndex');
+          } else {
+            for (var i = 0; i < this.tableColumns_.length; i++) {
+              if (!this.doesColumnIndexSupportSelection(i))
+                continue;
+              row.children[i].removeAttribute('tabIndex');
+            }
+          }
+        }
+      },
+
+      prepareToChangeSelection_: function() {
         var e = new Event('selection-changed', false, false);
+        var previousSelectedRowInfo = this.selectedTableRowInfo_;
         if (previousSelectedRowInfo)
           e.previousSelectedTableRow = previousSelectedRowInfo.userRow;
         else
           e.previousSelectedTableRow = undefined;
+
+        if (this.selectedTableRowInfo_) {
+          var node = this.getSelectableNodeGivenTableRowNode_(
+              this.selectedTableRowInfo_.htmlNode);
+          node.removeAttribute('selected');
+        }
+
+        return e;
+      },
+
+      updateSelectedState_: function() {
+        if (this.selectedTableRowInfo_ === undefined)
+          return;
+        var node = this.getSelectableNodeGivenTableRowNode_(
+          this.selectedTableRowInfo_.htmlNode);
+        node.setAttribute('selected', true);
+      },
+
+      doesColumnIndexSupportSelection(columnIndex) {
+        var columnInfo = this.tableColumns_[columnIndex];
+        var scs = columnInfo.supportsCellSelection;
+        if (scs === false)
+          return false;
+        return true;
+      },
+
+      getFirstSelectableColumnIndex_: function() {
+        for (var i = 0; i < this.tableColumns_.length; i++) {
+          if (this.doesColumnIndexSupportSelection(i))
+            return i;
+        }
+        return -1;
+      },
+
+      getSelectableNodeGivenTableRowNode_: function(htmlNode) {
+        if (!this.cellSelectionMode_) {
+          return htmlNode;
+        } else {
+          return htmlNode.children[this.selectedColumnIndex_];
+        }
+      },
+
+      get selectedColumnIndex() {
+        if (!this.supportsSelection_)
+          return undefined;
+        if (!this.cellSelectionMode_)
+          return undefined;
+        return this.selectedColumnIndex_;
+      },
+
+      set selectedColumnIndex(selectedColumnIndex) {
+        this.rebuildIfNeeded_();
+        if (!this.supportsSelection_)
+          throw new Error('Selection is off. Set supportsSelection=true.');
+        if (selectedColumnIndex < 0 ||
+            selectedColumnIndex >= this.tableColumns_.length)
+          throw new Error('Invalid index');
+        if (!this.doesColumnIndexSupportSelection(selectedColumnIndex))
+          throw new Error('Selection is not supported on this column');
+
+        var e = this.prepareToChangeSelection_();
+        this.selectedColumnIndex_ = selectedColumnIndex;
+        if (this.selectedColumnIndex_ === undefined)
+          this.selectedTableRowInfo_ = undefined;
+        this.updateSelectedState_();
+
         this.dispatchEvent(e);
       },
 
@@ -839,34 +1036,57 @@ found in the LICENSE file.
         }
 
         if (cmdName === 'ARROW_RIGHT') {
-          if (rowInfo.userRow.subRows === undefined)
-            return;
-          if (rowInfo.userRow.subRows.length === 0)
+          if (this.cellSelectionMode_) {
+            var newIndex = this.selectedColumnIndex_ + 1;
+            if (newIndex >= this.tableColumns_.length)
+              return;
+            if (!this.doesColumnIndexSupportSelection(newIndex))
+              return;
+            this.selectedColumnIndex = newIndex;
+            this.focusSelected_();
             return;
 
-          if (!rowInfo.isExpanded)
-            this.setExpandedForTableRow(rowInfo.userRow, true);
-          this.selectedTableRow = rowInfo.userRow.subRows[0];
-          this.focusSelected_();
-          return;
+          } else {
+            if (rowInfo.userRow.subRows === undefined)
+              return;
+            if (rowInfo.userRow.subRows.length === 0)
+              return;
+
+            if (!rowInfo.isExpanded)
+              this.setExpandedForTableRow(rowInfo.userRow, true);
+            this.selectedTableRow = rowInfo.userRow.subRows[0];
+            this.focusSelected_();
+            return;
+          }
         }
 
         if (cmdName === 'ARROW_LEFT') {
-          if (rowInfo.isExpanded) {
-            this.setExpandedForTableRow(rowInfo.userRow, false);
+          if (this.cellSelectionMode_) {
+            var newIndex = this.selectedColumnIndex_ - 1;
+            if (newIndex < 0)
+              return;
+            if (!this.doesColumnIndexSupportSelection(newIndex))
+              return;
+            this.selectedColumnIndex = newIndex;
             this.focusSelected_();
             return;
-          }
 
-          // Not expanded. Select parent...
-          var parentRowInfo = rowInfo.parentRowInfo;
-          if (parentRowInfo) {
-            this.selectedTableRow = parentRowInfo.userRow;
-            this.focusSelected_();
+          } else {
+            if (rowInfo.isExpanded) {
+              this.setExpandedForTableRow(rowInfo.userRow, false);
+              this.focusSelected_();
+              return;
+            }
+
+            // Not expanded. Select parent...
+            var parentRowInfo = rowInfo.parentRowInfo;
+            if (parentRowInfo) {
+              this.selectedTableRow = parentRowInfo.userRow;
+              this.focusSelected_();
+              return;
+            }
             return;
           }
-
-          return;
         }
         throw new Error('Unrecognized command');
       },
@@ -874,7 +1094,9 @@ found in the LICENSE file.
       focusSelected_: function() {
         if (!this.selectedTableRowInfo_)
           return;
-        this.selectedTableRowInfo_.htmlNode.focus();
+        var node = this.getSelectableNodeGivenTableRowNode_(
+            this.selectedTableRowInfo_.htmlNode);
+        node.focus();
       }
     });
   })();
@@ -906,7 +1128,7 @@ found in the LICENSE file.
     }
   </style>
 
-    <span>{{ cellTitle_ }}</span><side-element id="side"></side-element>
+    <span id="title"></span><side-element id="side"></side-element>
   </template>
 
   <script>
@@ -920,6 +1142,15 @@ found in the LICENSE file.
 
     set cellTitle(value) {
       this.cellTitle_ = value;
+
+      var titleNode;
+      if (this.cellTitle_ instanceof Node)
+        titleNode = this.cellTitle_;
+      else
+        titleNode = this.ownerDocument.createTextNode(this.cellTitle_);
+
+      this.$.title.innerText = '';
+      this.$.title.appendChild(titleNode);
     },
 
     get cellTitle() {

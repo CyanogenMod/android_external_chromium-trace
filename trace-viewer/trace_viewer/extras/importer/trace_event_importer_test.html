@@ -1189,6 +1189,63 @@ tv.b.unittest.testSuite(function() { // @suppress longLineCheck
     assert.isTrue(m.hasImportWarnings);
   });
 
+  test('asyncSliceWithoutCPUDuration', function() {
+    var events = [
+      // Async slice without tts field.
+      {name: 'a', args: {params: ''}, pid: 52, ts: 10, cat: 'foo', tid: 53,
+        id: 72, ph: 'b'},
+      {name: 'a', args: {params: ''}, pid: 52, ts: 20, cat: 'foo', tid: 53,
+        id: 72, ph: 'e'},
+      // Async slice with tts field but without use_async_tts marker field.
+      {name: 'b', args: {params: ''}, pid: 52, ts: 30, cat: 'foo', tid: 53,
+        id: 72, ph: 'b', tts: 30000},
+      {name: 'b', args: {params: ''}, pid: 52, ts: 40, cat: 'foo', tid: 53,
+        id: 72, ph: 'e', tts: 40000},
+      // Async slice with tts field but with use_async_tts marker set to 0.
+      {name: 'c', args: {params: ''}, pid: 52, ts: 50000, cat: 'foo', tid: 53,
+       id: 72, ph: 'b', tts: 50000, use_async_tts: 0},
+      {name: 'c', args: {params: ''}, pid: 52, ts: 60000, cat: 'foo', tid: 53,
+        id: 72, ph: 'e', tts: 60000, use_async_tts: 0}
+    ];
+
+    var m = new tv.c.TraceModel(events);
+    var t = m.processes[52].threads[53];
+    assert.isDefined(t);
+    assert.equal(t.asyncSliceGroup.slices.length, 3);
+
+    var noTTSNoField = t.asyncSliceGroup.slices[0];
+    assert.isUndefined(noTTSNoField.cpuStart);
+    assert.isUndefined(noTTSNoField.cpuDuration);
+
+    var TTSNoField = t.asyncSliceGroup.slices[1];
+    assert.isUndefined(TTSNoField.cpuStart);
+    assert.isUndefined(TTSNoField.cpuDuration);
+
+    var TTSZeroField = t.asyncSliceGroup.slices[2];
+    assert.isUndefined(TTSZeroField.cpuStart);
+    assert.isUndefined(TTSZeroField.cpuDuration);
+  });
+
+  test('asyncSliceWithCPUDuration', function() {
+    var events = [
+      {name: 'a', args: {params: ''}, pid: 52, ts: 50000, cat: 'foo', tid: 53,
+       id: 72, ph: 'b', tts: 100000, use_async_tts: 1},
+      {name: 'a', args: {params: ''}, pid: 52, ts: 60000, cat: 'foo', tid: 53,
+        id: 72, ph: 'e', tts: 105000, use_async_tts: 1}
+    ];
+
+    var m = new tv.c.TraceModel(events);
+    var t = m.processes[52].threads[53];
+    assert.isDefined(t);
+    assert.equal(t.asyncSliceGroup.slices.length, 1);
+
+    var asyncSlice = t.asyncSliceGroup.slices[0];
+    assert.isDefined(asyncSlice);
+    assert.equal(asyncSlice.duration, 10);
+    assert.equal(asyncSlice.cpuStart, 100);
+    assert.equal(asyncSlice.cpuDuration, 5);
+  });
+
   test('nestableAsyncBasic', function() {
     var events = [
       {name: 'a', args: {}, pid: 52, ts: 524, cat: 'foo', tid: 53,
@@ -1903,9 +1960,17 @@ tv.b.unittest.testSuite(function() { // @suppress longLineCheck
 
   test('importFlowEvent', function() {
     var events = [
+      { name: 'aSlice', cat: 'foo', id: 72, pid: 52, tid: 53, ts: 547, ph: 'B', args: {} },  // @suppress longLineCheck
       { name: 'a', cat: 'foo', id: 72, pid: 52, tid: 53, ts: 548, ph: 's', args: {} },  // @suppress longLineCheck
+      { id: 72, pid: 52, tid: 53, ts: 549, ph: 'E', args: {} },  // @suppress longLineCheck
+
+      { name: 'bSlice', cat: 'foo', id: 72, pid: 52, tid: 53, ts: 559, ph: 'B', args: {} },  // @suppress longLineCheck
       { name: 'a', cat: 'foo', id: 72, pid: 52, tid: 53, ts: 560, ph: 't', args: {} },  // @suppress longLineCheck
-      { name: 'a', cat: 'foo', id: 72, pid: 52, tid: 53, ts: 580, ph: 'f', args: {} }   // @suppress longLineCheck
+      { id: 72, pid: 52, tid: 53, ts: 561, ph: 'E', args: {} },  // @suppress longLineCheck
+
+      { name: 'a', cat: 'foo', id: 72, pid: 52, tid: 53, ts: 580, ph: 'f', args: {} },   // @suppress longLineCheck
+      { name: 'cSlice', cat: 'foo', id: 72, pid: 52, tid: 53, ts: 581, ph: 'B', args: {} },  // @suppress longLineCheck
+      { id: 72, pid: 52, tid: 53, ts: 582, ph: 'E', args: {} }  // @suppress longLineCheck
     ];
 
     var m = new tv.c.TraceModel(events);
@@ -1919,8 +1984,10 @@ tv.b.unittest.testSuite(function() { // @suppress longLineCheck
     assert.equal(f0.title, 'a');
     assert.equal(f0.category, 'foo');
     assert.equal(f0.id, 72);
-    assert.equal(f0.start, 0);
+    assert.closeTo(f0.start, 0.001, 1e-5);
     assert.closeTo(12 / 1000, f0.duration, 1e-5);
+    assert.equal(f0.startSlice.title, 'aSlice');
+    assert.equal(f0.endSlice.title, 'bSlice');
 
     // TODO(nduca): Replace this assertion with something better when
     // flow events don't create synthetic slices on their own.
@@ -1933,17 +2000,22 @@ tv.b.unittest.testSuite(function() { // @suppress longLineCheck
     assert.equal(f1.id, f0.id);
     assert.closeTo(20 / 1000, f1.duration, 1e-5);
 
-    // TODO(nduca): Replace this assertion with something better when
-    // flow events don't create synthetic slices on their own.
-    assert.isDefined(f1.startSlice);
-    assert.isDefined(f1.endSlice);
+    assert.equal(f1.startSlice.title, 'bSlice');
+    assert.equal(f1.endSlice.title, 'cSlice');
+
+    assert.deepEqual(f0.startSlice.outFlowEvents, [f0]);
+    assert.deepEqual(f0.endSlice.inFlowEvents, [f0]);
+    assert.deepEqual(f1.startSlice.outFlowEvents, [f1]);
+    assert.deepEqual(f1.endSlice.inFlowEvents, [f1]);
   });
 
   // This test creates a flow event that stops on the same timestamp that
   // the 'X' event which it triggers begins.
   test('importFlowEventOverlaps', function() {
     var events = [
+      { name: 'SomeTask', cat: 'foo', pid: 52, tid: 53, ts: 547, ph: 'X', 'dur': 100},   // @suppress longLineCheck
       { name: 'PostTask', cat: 'foo', id: 72, pid: 52, tid: 53, ts: 548, ph: 's', args: {}},  // @suppress longLineCheck
+
       { name: 'PostTask', cat: 'foo', id: 72, pid: 70, tid: 71, ts: 580, ph: 'f', args: { 'queue_duration': 0}},   // @suppress longLineCheck
       // Note that RunTask has the same time-stamp as PostTask 'f'
       { name: 'RunTask', cat: 'foo', pid: 70, tid: 71, ts: 580, ph: 'X', args: {'src_func': 'PostRunTask'}, 'dur': 1000}   // @suppress longLineCheck
@@ -1957,7 +2029,7 @@ tv.b.unittest.testSuite(function() { // @suppress longLineCheck
     assert.equal(startT.sliceGroup.slices.length, 1);
 
     assert.isDefined(endT);
-    assert.equal(endT.sliceGroup.slices.length, 2);
+    assert.equal(endT.sliceGroup.slices.length, 1);
 
     assert.equal(m.flowEvents.length, 1);
 
@@ -1969,6 +2041,10 @@ tv.b.unittest.testSuite(function() { // @suppress longLineCheck
     assert.equal(f0.id, 72);
     assert.equal(f0.start, .548);
     assert.closeTo(32 / 1000, f0.duration, 1e-5);
+    assert.equal(f0.startSlice.title, 'SomeTask');
+    assert.deepEqual(f0.startSlice.outFlowEvents, [f0]);
+    assert.equal(f0.endSlice.title, 'RunTask');
+    assert.deepEqual(f0.endSlice.inFlowEvents, [f0]);
 
     // TODO(nduca): Add assertions about the flow slices, esp that they were
     // found correctly.
@@ -1976,11 +2052,20 @@ tv.b.unittest.testSuite(function() { // @suppress longLineCheck
 
   test('importOutOfOrderFlowEvent', function() {
     var events = [
+      { name: 'SomeTask', cat: 'foo', pid: 52, tid: 53, ts: 548, ph: 'X', 'dur': 10},   // @suppress longLineCheck
       { name: 'a', cat: 'foo', id: 72, pid: 52, tid: 53, ts: 548, ph: 's', args: {} },  // @suppress longLineCheck
+
+      { name: 'SomeTask', cat: 'foo', pid: 52, tid: 53, ts: 148, ph: 'X', 'dur': 10},   // @suppress longLineCheck
       { name: 'b', cat: 'foo', id: 73, pid: 52, tid: 53, ts: 148, ph: 's', args: {} },  // @suppress longLineCheck
+
       { name: 'b', cat: 'foo', id: 73, pid: 52, tid: 53, ts: 570, ph: 'f', args: {} },   // @suppress longLineCheck
+      { name: 'SomeTask', cat: 'foo', pid: 52, tid: 53, ts: 571, ph: 'X', 'dur': 10},   // @suppress longLineCheck
+
+      { name: 'SomeTask', cat: 'foo', pid: 52, tid: 53, ts: 560, ph: 'X', 'dur': 10},   // @suppress longLineCheck
       { name: 'a', cat: 'foo', id: 72, pid: 52, tid: 53, ts: 560, ph: 't', args: {} },  // @suppress longLineCheck
-      { name: 'a', cat: 'foo', id: 72, pid: 52, tid: 53, ts: 580, ph: 'f', args: {} }   // @suppress longLineCheck
+
+      { name: 'a', cat: 'foo', id: 72, pid: 52, tid: 53, ts: 580, ph: 'f', args: {} },   // @suppress longLineCheck
+      { name: 'SomeTask', cat: 'foo', pid: 52, tid: 53, ts: 581, ph: 'X', 'dur': 10}   // @suppress longLineCheck
     ];
 
     var expected = [0.4, 0.0, 0.412];
@@ -2249,7 +2334,7 @@ tv.b.unittest.testSuite(function() { // @suppress longLineCheck
       {
         name: 'a',
         pid: 42,
-        ts: 10,
+        ts: 10000,
         cat: 'test',
         tid: 53,
         ph: 'v',
@@ -2265,7 +2350,7 @@ tv.b.unittest.testSuite(function() { // @suppress longLineCheck
       {
         name: 'b',
         pid: 43,
-        ts: 11,
+        ts: 11000,
         cat: 'test',
         tid: 54,
         ph: 'v',
@@ -2282,7 +2367,7 @@ tv.b.unittest.testSuite(function() { // @suppress longLineCheck
       {
         name: 'c',
         pid: 44,
-        ts: 12,
+        ts: 12000,
         cat: 'test',
         tid: 55,
         ph: 'V',
@@ -2292,7 +2377,7 @@ tv.b.unittest.testSuite(function() { // @suppress longLineCheck
       {
         name: 'd',
         pid: 42,
-        ts: 13,
+        ts: 13000,
         cat: 'test',
         tid: 56,
         ph: 'v',
@@ -2367,9 +2452,9 @@ tv.b.unittest.testSuite(function() { // @suppress longLineCheck
     var d = p.memoryDumps[0];
 
     assert.equal(d.totalResidentBytes, 9007199254740991);
-    assert.isUndefined(d.vmRegions);
-    assert.equal(d.memoryAllocatorDumps.length, 0);
-    assert.equal(Object.keys(d.memoryAllocatorDumpsByFullName).length, 0);
+    assert.isUndefined(d.mostRecentVmRegions);
+    assert.isUndefined(d.memoryAllocatorDumps);
+    assert.isUndefined(d.memoryAllocatorDumpsByFullName);
   });
 
   test('importMemoryDumps_vmRegions', function() {
@@ -2421,9 +2506,9 @@ tv.b.unittest.testSuite(function() { // @suppress longLineCheck
     var p = m.getProcess(42);
     var d = p.memoryDumps[0];
 
-    assert.equal(d.vmRegions.length, 2);
+    assert.equal(d.mostRecentVmRegions.length, 2);
 
-    var vr1 = d.vmRegions[0];
+    var vr1 = d.mostRecentVmRegions[0];
     assert.equal(vr1.startAddress, 240);
     assert.equal(vr1.sizeInBytes, 336);
     assert.equal(vr1.protectionFlags, 6);
@@ -2434,7 +2519,7 @@ tv.b.unittest.testSuite(function() { // @suppress longLineCheck
     assert.equal(vr1.byteStats.proportionalResident, 158);
     assert.equal(vr1.byteStats.totalResident, 176);
 
-    var vr2 = d.vmRegions[1];
+    var vr2 = d.mostRecentVmRegions[1];
     assert.equal(vr2.startAddress, 848);
     assert.equal(vr2.sizeInBytes, 592);
     assert.equal(vr2.protectionFlags, 5);
@@ -2446,11 +2531,11 @@ tv.b.unittest.testSuite(function() { // @suppress longLineCheck
     assert.equal(vr2.byteStats.totalResident, 205);
 
     assert.equal(d.totalResidentBytes, 0);
-    assert.equal(d.memoryAllocatorDumps.length, 0);
-    assert.equal(Object.keys(d.memoryAllocatorDumpsByFullName).length, 0);
+    assert.isUndefined(d.memoryAllocatorDumps);
+    assert.isUndefined(d.memoryAllocatorDumpsByFullName);
   });
 
-  test('importMemoryDumps_allocatorMemoryDumps', function() {
+  test('importMemoryDumps_explicitAllocatorMemoryDumps', function() {
     var events = [
       {
         name: 'a',
@@ -2467,37 +2552,49 @@ tv.b.unittest.testSuite(function() { // @suppress longLineCheck
             },
             allocators: {
               'oilpan': {
-                allocated_objects_count: '2f',
-                allocated_objects_size_in_bytes: '1000',
-                physical_size_in_bytes: '4000',
-                args: {}
+                attrs: {
+                  objects_count: {
+                    type: 'scalar', units: 'objects', value: '2f'
+                  },
+                  inner_size: {type: 'scalar', units: 'bytes', value: '1000'},
+                  outer_size: {type: 'scalar', units: 'bytes', value: '4000'}
+                }
               },
               'oilpan/heap1': {
-                parent: 'oilpan',
-                allocated_objects_count: '3f',
-                allocated_objects_size_in_bytes: '3000',
-                physical_size_in_bytes: '4000',
-                args: {}
+                attrs: {
+                  objects_count: {
+                    type: 'scalar', units: 'objects', value: '3f'
+                  },
+                  inner_size: {type: 'scalar', units: 'bytes', value: '3000'},
+                  outer_size: {type: 'scalar', units: 'bytes', value: '4000'}
+                }
               },
               'oilpan/heap2': {
-                parent: 'oilpan',
-                allocated_objects_count: '4f',
-                allocated_objects_size_in_bytes: '4000',
-                physical_size_in_bytes: '4000',
-                args: {}
+                attrs: {
+                  objects_count: {
+                    type: 'scalar', units: 'objects', value: '4f'
+                  },
+                  inner_size: {type: 'scalar', units: 'bytes', value: '4000'},
+                  outer_size: {type: 'scalar', units: 'bytes', value: '4000'}
+                }
               },
               'oilpan/heap2/bucket1': {
-                parent: 'oilpan/heap2',
-                allocated_objects_count: '1f',
-                allocated_objects_size_in_bytes: '2000',
-                physical_size_in_bytes: '2000',
-                args: {}
+                attrs: {
+                  objects_count: {
+                    type: 'scalar', units: 'objects', value: '1f'
+                  },
+                  inner_size: {type: 'scalar', units: 'bytes', value: '2000'},
+                  outer_size: {type: 'scalar', units: 'bytes', value: '2000'}
+                }
               },
               'v8': {
-                allocated_objects_count: '5f',
-                allocated_objects_size_in_bytes: '5000',
-                physical_size_in_bytes: '6000',
-                args: {}
+                attrs: {
+                  objects_count: {
+                    type: 'scalar', units: 'objects', value: '5f'
+                  },
+                  inner_size: {type: 'scalar', units: 'bytes', value: '5000'},
+                  outer_size: {type: 'scalar', units: 'bytes', value: '6000'}
+                }
               }
             }
           }
@@ -2508,29 +2605,28 @@ tv.b.unittest.testSuite(function() { // @suppress longLineCheck
     var p = m.getProcess(42);
     var d = p.memoryDumps[0];
 
-    assert.equal(Object.keys(d.memoryAllocatorDumpsByFullName).length, 5);
     assert.equal(d.memoryAllocatorDumps.length, 2);
 
-    var oilpanRoot = d.memoryAllocatorDumpsByFullName['oilpan'];
-    var v8Root = d.memoryAllocatorDumpsByFullName['v8'];
+    var oilpanRoot = d.getMemoryAllocatorDumpByFullName('oilpan');
+    var v8Root = d.getMemoryAllocatorDumpByFullName('v8');
     assert.isDefined(oilpanRoot);
     assert.isDefined(v8Root);
     assert.include(d.memoryAllocatorDumps, oilpanRoot);
     assert.include(d.memoryAllocatorDumps, v8Root);
 
-    assert.equal(oilpanRoot.allocatedObjectsCount, 47);
-    assert.equal(oilpanRoot.physicalSizeInBytes, 16384);
-    assert.equal(oilpanRoot.allocatedObjectsSizeInBytes, 4096);
+    assert.equal(oilpanRoot.attributes['objects_count'].value, 47);
+    assert.equal(oilpanRoot.attributes['outer_size'].value, 16384);
+    assert.equal(oilpanRoot.attributes['inner_size'].value, 4096);
     assert.equal(oilpanRoot.children.length, 2);
 
-    var oilpanBucket1 = d.memoryAllocatorDumpsByFullName[
-        'oilpan/heap2/bucket1'];
+    var oilpanBucket1 = d.getMemoryAllocatorDumpByFullName(
+        'oilpan/heap2/bucket1');
     assert.isDefined(oilpanBucket1);
     assert.equal(oilpanBucket1.fullName, 'oilpan/heap2/bucket1');
     assert.equal(oilpanBucket1.name, 'bucket1');
-    assert.equal(oilpanBucket1.allocatedObjectsCount, 31);
-    assert.equal(oilpanBucket1.physicalSizeInBytes, 8192);
-    assert.equal(oilpanBucket1.allocatedObjectsSizeInBytes, 8192);
+    assert.equal(oilpanBucket1.attributes['objects_count'].value, 31);
+    assert.equal(oilpanBucket1.attributes['outer_size'].value, 8192);
+    assert.equal(oilpanBucket1.attributes['inner_size'].value, 8192);
     assert.equal(oilpanBucket1.children.length, 0);
 
     assert.isDefined(oilpanBucket1.parent);
@@ -2542,7 +2638,95 @@ tv.b.unittest.testSuite(function() { // @suppress longLineCheck
     assert.strictEqual(oilpanBucket1.parent.parent, oilpanRoot);
 
     assert.equal(d.totalResidentBytes, 256);
-    assert.isUndefined(d.vmRegions);
+    assert.isUndefined(d.mostRecentVmRegions);
+  });
+
+  test('importMemoryDumps_implicitAllocatorMemoryDumps', function() {
+    var events = [
+      {
+        name: 'a',
+        pid: 42,
+        ts: 10,
+        cat: 'test',
+        tid: 53,
+        ph: 'v',
+        id: '0x0001',
+        args: {
+          dumps: {
+            process_totals: {
+              resident_set_bytes: '100'
+            },
+            allocators: {
+              'oilpan/heap1': {
+                attrs: {
+                  objects_count: {
+                    type: 'scalar', units: 'objects', value: '3f'
+                  },
+                  inner_size: {type: 'scalar', units: 'bytes', value: '3000'},
+                  outer_size: {type: 'scalar', units: 'bytes', value: '4000'}
+                }
+              },
+              'oilpan/heap2/bucket1': {
+                attrs: {
+                  objects_count: {
+                    type: 'scalar', units: 'objects', value: '1f'
+                  },
+                  inner_size: {type: 'scalar', units: 'bytes', value: '2000'},
+                  outer_size: {type: 'scalar', units: 'bytes', value: '2000'}
+                }
+              },
+              'v8': {
+                attrs: {
+                  objects_count: {
+                    type: 'scalar', units: 'objects', value: '5f'
+                  },
+                  inner_size: {type: 'scalar', units: 'bytes', value: '5000'},
+                  outer_size: {type: 'scalar', units: 'bytes', value: '6000'}
+                }
+              }
+            }
+          }
+        }
+      }
+    ];
+    var m = new tv.c.TraceModel(events, false);
+    var p = m.getProcess(42);
+    var d = p.memoryDumps[0];
+
+    assert.equal(d.memoryAllocatorDumps.length, 2);
+
+    var oilpanRoot = d.getMemoryAllocatorDumpByFullName('oilpan');
+    var v8Root = d.getMemoryAllocatorDumpByFullName('v8');
+    assert.isDefined(oilpanRoot);
+    assert.isDefined(v8Root);
+    assert.include(d.memoryAllocatorDumps, oilpanRoot);
+    assert.include(d.memoryAllocatorDumps, v8Root);
+
+    assert.equal(oilpanRoot.attributes['objects_count'].value, 94);
+    assert.equal(oilpanRoot.attributes['outer_size'].value, 24576);
+    assert.equal(oilpanRoot.attributes['inner_size'].value, 20480);
+    assert.equal(oilpanRoot.children.length, 2);
+
+    var oilpanBucket1 = d.getMemoryAllocatorDumpByFullName(
+        'oilpan/heap2/bucket1');
+    assert.isDefined(oilpanBucket1);
+    assert.equal(oilpanBucket1.fullName, 'oilpan/heap2/bucket1');
+    assert.equal(oilpanBucket1.name, 'bucket1');
+    assert.equal(oilpanBucket1.attributes['objects_count'].value, 31);
+    assert.equal(oilpanBucket1.attributes['outer_size'].value, 8192);
+    assert.equal(oilpanBucket1.attributes['inner_size'].value, 8192);
+    assert.equal(oilpanBucket1.children.length, 0);
+
+    assert.isDefined(oilpanBucket1.parent);
+    assert.equal(oilpanBucket1.parent.fullName, 'oilpan/heap2');
+    assert.equal(oilpanBucket1.parent.name, 'heap2');
+    assert.include(oilpanBucket1.parent.children, oilpanBucket1);
+
+    assert.isDefined(oilpanBucket1.parent.parent);
+    assert.strictEqual(oilpanBucket1.parent.parent, oilpanRoot);
+
+    assert.equal(d.totalResidentBytes, 256);
+    assert.isUndefined(d.mostRecentVmRegions);
   });
 
   test('importThreadInstantSliceWithStackFrame', function() {
