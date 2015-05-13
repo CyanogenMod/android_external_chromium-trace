@@ -6,6 +6,7 @@ found in the LICENSE file.
 -->
 
 <link rel="import" href="/core/analysis/analysis_link.html">
+<link rel="import" href="/base/time.html">
 <link rel="import" href="/base/utils.html">
 <link rel="import" href="/base/ui.html">
 
@@ -24,6 +25,28 @@ found in the LICENSE file.
 
   <script>
   'use strict';
+
+  function isTable(object) {
+    if (!(object instanceof Array) ||
+        (object.length < 2)) return false;
+    for (var colName in object[0]) {
+      if (typeof colName !== 'string') return false;
+    }
+    for (var i = 0; i < object.length; ++i) {
+      if (!(object[i] instanceof Object)) return false;
+      for (var colName in object[i]) {
+        if (i && (object[0][colName] === undefined)) return false;
+        var cellType = typeof object[i][colName];
+        if (cellType !== 'string' && cellType != 'number') return false;
+      }
+      if (i) {
+        for (var colName in object[0]) {
+          if (object[i][colName] === undefined) return false;
+        }
+      }
+    }
+    return true;
+  }
 
   Polymer({
     ready: function() {
@@ -74,9 +97,40 @@ found in the LICENSE file.
             } catch (e) {
             }
           }
-          if (!objectReplaced)
-            return this.appendSimpleText_(
-                label, indent, '"' + object + '"', suffix);
+          if (!objectReplaced) {
+            if (object.indexOf('\n') !== -1) {
+              var lines = object.split('\n');
+              lines.forEach(function(line, i) {
+                var text, ioff, ll, ss;
+                if (i == 0) {
+                  text = '"' + line;
+                  ioff = 0;
+                  ll = label;
+                  ss = '';
+                } else if (i < lines.length - 1) {
+                  text = line;
+                  ioff = 1;
+                  ll = '';
+                  ss = '';
+                } else {
+                  text = line + '"';
+                  ioff = 1;
+                  ll = '';
+                  ss = suffix;
+                }
+
+                var el = this.appendSimpleText_(
+                    ll, indent + ioff * label.length + ioff, text, ss);
+                el.style.whiteSpace = 'pre';
+                return el;
+              }, this);
+              return;
+            } else {
+              this.appendSimpleText_(
+                  label, indent, '"' + object + '"', suffix);
+              return;
+            }
+          }
           else {
             /* Fall through to the flow below */
           }
@@ -104,6 +158,20 @@ found in the LICENSE file.
         return;
       }
 
+      if (object instanceof tv.b.TimeDuration) {
+        var el = this.ownerDocument.createElement('tv-c-a-time-span');
+        el.duration = object.duration;
+        this.appendElementWithLabel_(label, indent, el, suffix);
+        return;
+      }
+
+      if (object instanceof tv.b.TimeStamp) {
+        var el = this.ownerDocument.createElement('tv-c-a-time-stamp');
+        el.timestamp = object.timestamp;
+        this.appendElementWithLabel_(label, indent, el, suffix);
+        return;
+      }
+
       if (object instanceof Array) {
         this.appendElementsForArray_(
             label, object, indent, depth, maxDepth, suffix);
@@ -118,6 +186,32 @@ found in the LICENSE file.
         label, object, indent, depth, maxDepth, suffix) {
       if (object.length == 0) {
         this.appendSimpleText_(label, indent, '[]', suffix);
+        return;
+      }
+
+      if (isTable(object)) {
+        var table = document.createElement('table');
+        var tr = document.createElement('tr');
+        table.appendChild(tr);
+        var columns = [];
+        for (var colName in object[0]) {
+          columns.push(colName);
+          var th = document.createElement('th');
+          th.textContent = colName;
+          tr.appendChild(th);
+        }
+        object.forEach(function(row) {
+          var tr = document.createElement('tr');
+          table.appendChild(tr);
+          columns.forEach(function(colName) {
+            var cell = row[colName];
+            var td = document.createElement('td');
+            td.textContent = cell;
+            td.style.textAlign = isNaN(parseFloat(cell)) ? 'left' : 'right';
+            tr.appendChild(td);
+          });
+        });
+        this.appendElementWithLabel_(label, indent, table, suffix);
         return;
       }
 

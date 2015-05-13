@@ -14,16 +14,21 @@ found in the LICENSE file.
 'use strict';
 
 tv.b.unittest.testSuite(function() {
-  var Model = tv.c.TraceModel;
+  var TraceModel = tv.c.TraceModel;
   var Selection = tv.c.Selection;
-  var trace_model = tv.c.trace_model;
+  var GlobalMemoryDump = tv.c.trace_model.GlobalMemoryDump;
 
   test('basic', function() {
     var m = new tv.c.TraceModel();
-    var d1 = new tv.c.trace_model.GlobalMemoryDump(m, 5);
-    var d2 = new tv.c.trace_model.GlobalMemoryDump(m, 20);
-    m.globalMemoryDumps.push(d1);
-    m.globalMemoryDumps.push(d2);
+
+    function addGlobalMemoryDump(timestamp) {
+      var gmd = new GlobalMemoryDump(m, timestamp);
+      m.globalMemoryDumps.push(gmd);
+      return gmd;
+    }
+
+    var d1 = addGlobalMemoryDump(5);
+    var d2 = addGlobalMemoryDump(20);
 
     var selection = new Selection();
     selection.push(d1);

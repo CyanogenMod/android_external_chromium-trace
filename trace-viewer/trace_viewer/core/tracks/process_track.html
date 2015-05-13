@@ -5,6 +5,7 @@ Use of this source code is governed by a BSD-style license that can be
 found in the LICENSE file.
 -->
 
+<link rel="import" href="/core/tracks/process_memory_dump_track.html">
 <link rel="import" href="/core/tracks/process_track_base.html">
 <link rel="import" href="/core/draw_helpers.html">
 
@@ -112,7 +113,16 @@ tv.exportTo('tv.c.tracks', function() {
       });
     },
 
-    addIntersectingItemsInRangeToSelectionInWorldSpace: function(
+    appendMemoryDumpTrack_: function() {
+      var processMemoryDumps = this.process.memoryDumps;
+      if (processMemoryDumps.length) {
+        var pmdt = new tv.c.tracks.ProcessMemoryDumpTrack(this.viewport_);
+        pmdt.memoryDumps = processMemoryDumps;
+        this.appendChild(pmdt);
+      }
+    },
+
+    addIntersectingEventsInRangeToSelectionInWorldSpace: function(
         loWX, hiWX, viewPixWidthWorld, selection) {
       function onPickHit(instantEvent) {
         selection.push(instantEvent);
@@ -124,7 +134,7 @@ tv.exportTo('tv.c.tracks', function() {
           onPickHit.bind(this));
 
       tv.c.tracks.ContainerTrack.prototype.
-          addIntersectingItemsInRangeToSelectionInWorldSpace.
+          addIntersectingEventsInRangeToSelectionInWorldSpace.
           apply(this, arguments);
     },
 

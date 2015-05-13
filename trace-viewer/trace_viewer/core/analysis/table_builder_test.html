@@ -14,6 +14,65 @@ found in the LICENSE file.
 tv.b.unittest.testSuite(function() {
   var THIS_DOC = document._currentScript.ownerDocument;
 
+  test('instantiateEmptyTable_withoutEmptyValue', function() {
+    var columns = [
+      {
+        title: 'First Column',
+        value: function(row) { return row.firstData; },
+        width: '300px'
+      },
+      {
+        title: 'Second Column',
+        value: function(row) { return row.secondData; }
+      }
+    ];
+
+    var table = document.createElement('tracing-analysis-nested-table');
+    table.tableColumns = columns;
+    table.tableRows = [];
+    table.rebuild();
+
+    this.addHTMLOutput(table);
+
+    // Check that the width of the first column was set correctly (despite no
+    // body rows).
+    var firstColumnHeader = table.$.head.children[0].children[0];
+    assert.closeTo(firstColumnHeader.offsetWidth, 300, 20);
+
+    // Check that empty value was not appended.
+    assert.lengthOf(table.$.body.children, 0);
+  });
+
+  test('instantiateEmptyTable_withEmptyValue', function() {
+    var columns = [
+      {
+        title: 'First Column',
+        value: function(row) { return row.firstData; },
+        width: '300px'
+      },
+      {
+        title: 'Second Column',
+        value: function(row) { return row.secondData; }
+      }
+    ];
+
+    var table = document.createElement('tracing-analysis-nested-table');
+    table.tableColumns = columns;
+    table.tableRows = [];
+    table.emptyValue = 'This table is left intentionally empty';
+    table.rebuild();
+
+    this.addHTMLOutput(table);
+
+    // Check that the width of the first column was set correctly (despite no
+    // body rows).
+    var firstColumnHeader = table.$.head.children[0].children[0];
+    assert.closeTo(firstColumnHeader.offsetWidth, 300, 20);
+
+    // Check that empty value was appended.
+    assert.lengthOf(table.$.body.children, 1);
+  });
+
   test('instantiateNestedTableNoNests', function() {
     var columns = [
       {
@@ -41,9 +100,13 @@ tv.b.unittest.testSuite(function() {
     var table = document.createElement('tracing-analysis-nested-table');
     table.tableColumns = columns;
     table.tableRows = rows;
+    table.emptyValue = 'THIS SHOULD NOT BE VISIBLE!!!';
     table.rebuild();
 
     this.addHTMLOutput(table);
+
+    // Check that empty value was not appended.
+    assert.lengthOf(table.$.body.children, 2);
   });
 
   test('sequentialRebuildsBehaveSanely', function() {
@@ -699,6 +762,131 @@ tv.b.unittest.testSuite(function() {
     table.performKeyCommand_('ARROW_RIGHT');
     assert.equal(table.selectedTableRow, rows[1]);
     assert.isFalse(table.getExpandedForTableRow(rows[1]));
+  });
+
+  test('reduceNumberOfColumnsAfterRebuild', function() {
+    // Create a table with two columns.
+    var table = document.createElement('tracing-analysis-nested-table');
+    table.tableColumns = [
+      {
+        title: 'First Column',
+        value: function(row) { return row.firstData; },
+        width: '100px'
+      },
+      {
+        title: 'Second Column',
+        value: function(row) { return row.secondData; },
+        width: '100px'
+      }
+    ];
+
+    // Build the table.
+    table.rebuild();
+
+    // Check that reducing the number of columns doesn't throw an exception.
+    table.tableColumns = [
+      {
+        title: 'First Column',
+        value: function(row) { return row.firstData; },
+        width: '200px'
+      }
+    ];
+  });
+
+  test('cellSelectionBasic', function() {
+    var columns = [
+      {
+        title: 'Title',
+        value: function(row) { return row.a; },
+        width: '150px',
+        supportsCellSelection: false
+      },
+      {
+        title: 'Col1',
+        value: function(row) { return row.b; },
+        width: '33%'
+      },
+      {
+        title: 'Col2',
+        value: function(row) { return row.b * 2; },
+        width: '33%'
+      },
+      {
+        title: 'Col3',
+        value: function(row) { return row.b * 3; },
+        width: '33%'
+      }
+    ];
+
+    var table = document.createElement('tracing-analysis-nested-table');
+    table.showHeader = true;
+    table.supportsSelection = true;
+    table.cellSelectionMode = true;
+    table.tableColumns = columns;
+    table.tableRows = [
+      {
+        a: 'first',
+        b: '1'
+      },
+      {
+        a: 'second',
+        b: '2'
+      }
+    ];
+    table.rebuild();
+    this.addHTMLOutput(table);
+
+    table.selectedTableRow = table.tableRows[0];
+    assert.equal(table.selectedColumnIndex, 1);
+
+    table.performKeyCommand_('ARROW_DOWN');
+    table.performKeyCommand_('ARROW_RIGHT');
+    table.performKeyCommand_('ARROW_RIGHT');
+    table.performKeyCommand_('ARROW_LEFT');
+    assert.equal(table.selectedTableRow, table.tableRows[1]);
+    assert.equal(table.selectedColumnIndex, 2);
+  });
+
+  test('headersWithHtmlElements', function() {
+    var firstColumnTitle = document.createTextNode('First Column');
+    var secondColumnTitle = document.createElement('span');
+    secondColumnTitle.innerText = 'Second Column';
+    secondColumnTitle.style.color = 'blue';
+
+    var columns = [
+      {
+        title: firstColumnTitle,
+        value: function(row) { return row.firstData; },
+        width: '200px'
+      },
+      {
+        title: secondColumnTitle,
+        value: function(row) { return row.secondData; }
+      }
+    ];
+
+    var rows = [
+      {
+        firstData: 'A1',
+        secondData: 'A2'
+      },
+      {
+        firstData: 'B1',
+        secondData: 'B2'
+      }
+    ];
+
+    var table = document.createElement('tracing-analysis-nested-table');
+    table.tableColumns = columns;
+    table.tableRows = rows;
+    table.rebuild();
+
+    this.addHTMLOutput(table);
+
+    var firstColumnHeader = table.$.head.children[0].children[0].children[0];
+    var secondColumnHeader = table.$.head.children[0].children[1].children[0];
+    assert.equal(firstColumnHeader.cellTitle.textContent, 'First Column');
+    assert.equal(secondColumnHeader.cellTitle.textContent, 'Second Column');
   });
 });
 </script>

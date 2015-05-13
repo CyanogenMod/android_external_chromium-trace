@@ -38,7 +38,11 @@ and updates the table internally.
           width: '350px'
         }
       ];
-      table.tableRows = [];
+      this.clear();
+    },
+
+    clear: function() {
+      this.$.table.tableRows = [];
     },
 
     addColumnIfNeeded_: function(columnName) {
@@ -49,6 +53,8 @@ and updates the table internally.
       var column = {
         title: columnName,
         value: function(row) {
+          if (row[columnName] === undefined)
+            return '';
           return row[columnName];
         }
       };
@@ -71,8 +77,15 @@ and updates the table internally.
 
     getRowForPage_: function(page) {
       if (!this.pageToRowMap_.has(page)) {
+        var i = page.url.lastIndexOf('/');
+        var baseName = page.url.substring(i+1);
+
+        var link = document.createElement('a');
+        link.href = 'trace_viewer.html#' + page.url;
+        link.textContent = baseName;
+
         var row = {
-          label: getUserFriendlyNameForFilename(page.url),
+          label: link,
           value: '',
           subRows: [],
           isExpanded: true

@@ -17,42 +17,38 @@ found in the LICENSE file.
 <link rel="import" href="/extras/tquery/filter_has_title.html">
 <link rel="import" href="/extras/tquery/filter_is_top_level.html">
 
-<polymer-element name='tv-e-tquery' extends='tv-c-scripting-object'>
-  <script>
-  'use strict';
+<script>
+'use strict';
 
-  Polymer({
-    ready: function() {
-      this.timeline_ = undefined;
-      this.parent_ = undefined;
-      this.filterExpression_ = undefined;
-      // Memoized filtering result.
+tv.exportTo('tv.e.tquery', function() {
+  function TQuery(selectionController) {
+    tv.c.ScriptingObject.call(this);
+
+    this.selectionController_ = selectionController;
+    this.parent_ = undefined;
+    this.filterExpression_ = undefined;
+    // Memoized filtering result.
+    this.selection_ = undefined;
+  };
+
+  TQuery.prototype = {
+    __proto__: tv.c.ScriptingObject.prototype,
+
+    onModelChanged: function() {
       this.selection_ = undefined;
     },
 
-    get scriptName() {
-      return '$t';
-    },
-
-    onTimelineChanged: function(t) {
-      this.timeline_ = t;
-      this.selection_ = undefined;
-    },
-
-    get timeline() {
-      return this.timeline_;
+    get selectionController() {
+      return this.selectionController_;
     },
 
     // Append a new filter expression to this query and return a query node
     // that represents the result.
     filter: function(filterExpression) {
-      var result = document.createElement('tv-e-tquery');
-      result.timeline_ = this.timeline;
+      var result = new TQuery(this.selectionController_);
       result.parent_ = this;
-      // TODO(skyostil): Can we use a static helper function for this?
       result.filterExpression_ =
-          document.createElement('tv-e-tquery-filter').
-              normalizeFilterExpression(filterExpression);
+          tv.e.tquery.Filter.normalizeFilterExpression(filterExpression);
       return result;
     },
 
@@ -85,7 +81,7 @@ found in the LICENSE file.
         node.selection_ = new tv.c.Selection();
         if (node.parent_ === undefined) {
           // If this is the root, start by collecting all objects from the
-          // timeline.
+          // selection controller.
           lastTask = lastTask.after(
               this.selectEverythingAsTask_(node.selection_));
         } else {
@@ -111,7 +107,7 @@ found in the LICENSE file.
     evaluateFilterExpression_: function(inputSelection, outputSelection) {
       var seenEvents = {};
       inputSelection.forEach(function(event) {
-        var context = document.createElement('tv-e-tquery-context');
+        var context = new tv.e.tquery.Context();
         context.event = event;
         this.evaluateFilterExpressionForEvent_(
             context, inputSelection, outputSelection, seenEvents);
@@ -137,23 +133,24 @@ found in the LICENSE file.
       }
     },
 
-    // Show the result of this query as a highlight on the timeline. Returns a
+    // Show the result as a highlight on the selection controller. Returns a
     // {Task} which runs the query and sets the highlight.
     show: function() {
       var graph = this.createFilterTaskGraph_();
 
       graph.lastTask = graph.lastTask.after(function() {
-        this.timeline.setHighlightAndClearSelection(graph.lastNode.selection_);
+        this.selectionController.showScriptControlSelection(
+            graph.lastNode.selection_);
       }, this);
       return graph.rootTask;
     },
 
-    // Returns a task that fills the given selection with everything in the
-    // timeline.
+    // Returns a task that fills the given selection with everything reachable
+    // by the selection controller.
     selectEverythingAsTask_: function(selection) {
       var passThroughFilter = new tv.c.Filter();
       var filterTask =
-        this.timeline.addAllObjectsMatchingFilterToSelectionAsTask(
+        this.selectionController.addAllEventsMatchingFilterToSelectionAsTask(
             passThroughFilter, selection);
       return filterTask;
     },
@@ -165,6 +162,16 @@ found in the LICENSE file.
       }
       return this.selection_;
     }
-  });
-  </script>
-</polymer-element>
+  };
+  tv.c.ScriptingObjectRegistry.register(
+      new TQuery(),
+      {
+        name: '$t'
+      }
+  );
+
+  return {
+    TQuery: TQuery
+  };
+});
+</script>

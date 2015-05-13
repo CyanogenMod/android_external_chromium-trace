@@ -6,8 +6,8 @@ found in the LICENSE file.
 -->
 
 <link rel="import" href="/core/analysis/analysis_sub_view.html">
-<link rel="import" href="/core/analysis/size_span.html">
-<link rel="import" href="/core/analysis/table_builder.html">
+<link rel="import" href="/core/analysis/memory_dump_overview_pane.html">
+<link rel="import" href="/core/analysis/memory_dump_details_pane.html">
 
 <polymer-element name="tv-c-single-global-memory-dump-sub-view"
     extends="tracing-analysis-sub-view">
@@ -15,14 +15,13 @@ found in the LICENSE file.
     <style>
     :host {
       display: flex;
-    }
-    #table {
-      flex: 1 1 auto;
-      align-self: stretch;
+      flex-direction: column;
     }
     </style>
-    <tracing-analysis-nested-table id="table">
-    </tracing-analysis-nested-table>
+    <tv-c-memory-dump-overview-pane id="overview_pane">
+    </tv-c-memory-dump-overview-pane>
+    <tv-c-memory-dump-details-pane id="details_pane">
+    </tv-c-memory-dump-details-pane>
   </template>
   <script>
   'use strict';
@@ -30,6 +29,14 @@ found in the LICENSE file.
   Polymer({
     created: function() {
       this.currentSelection_ = undefined;
+    },
+
+    ready: function() {
+      this.$.overview_pane.addEventListener(
+          'selected-memory-dump-changed', function(e) {
+        this.$.details_pane.memoryDump =
+            this.$.overview_pane.selectedMemoryDump;
+      }.bind(this));
     },
 
     set selection(selection) {
@@ -44,93 +51,16 @@ found in the LICENSE file.
       return this.currentSelection_;
     },
 
+    get requiresTallView() {
+      return true;
+    },
+
     setSelectionWithoutErrorChecks: function(selection) {
       this.currentSelection_ = selection;
-      this.updateContents_();
-    },
-
-    updateContents_: function() {
-      var selection = this.currentSelection_;
-
-      var pidToProcessMemoryDump;
-      if (selection)
-        pidToProcessMemoryDump = selection[0].processMemoryDumps;
-      else
-        pidToProcessMemoryDump = {};
-
-      var rows = [];
-      tv.b.iterItems(pidToProcessMemoryDump, function(pid, processMemoryDump) {
-        rows.push({
-          title: processMemoryDump.process.userFriendlyName,
-          proportionalResident:
-              processMemoryDump.totalProportionalResidentSizeInBytes,
-          privateResident:
-              processMemoryDump.totalPrivateResidentSizeInBytes,
-          sharedResident:
-              processMemoryDump.totalSharedResidentSizeInBytes
-        });
-      }, this);
-      this.$.table.tableRows = rows;
-
-      this.updateColumns_();
-
-      this.$.table.rebuild();
-    },
-
-    updateColumns_: function() {
-      function createResidentSizeColumn(title, rowKey) {
-        return {
-          title: title,
-          value: function(row) {
-            // TODO(petrcermak): Show the most recently measured size instead
-            // of '<unknown>'.
-            var size = row[rowKey];
-            if (size === undefined)
-              return '<unknown>';
-            var sizeEl = document.createElement('tv-c-a-size-span');
-            sizeEl.numBytes = size;
-            return sizeEl;
-          },
-          width: '<upated further down>',
-          cmp: function(rowA, rowB) {
-            var sizeA = rowA[rowKey];
-            var sizeB = rowB[rowKey];
-            if (sizeA === undefined && sizeB === undefined)
-              return 0;
-            if (sizeA === undefined)
-              return -1;
-            if (sizeB === undefined)
-              return 1;
-            return sizeA - sizeB;
-          }
-        };
-      }
-
-      var columns = [
-        {
-          title: 'Process',
-          value: function(row) {
-            return row.title;
-          },
-          width: '350px',
-          cmp: function(rowA, rowB) {
-            return rowA.title.localeCompare(rowB.title);
-          }
-        },
-        createResidentSizeColumn(
-            'Proportional Set Size', 'proportionalResident'),
-        createResidentSizeColumn(
-            'Private Memory', 'privateResident'),
-        createResidentSizeColumn(
-            'Shared Memory', 'sharedResident')
-      ];
-
-      var columnWidth = (100 / (columns.length - 1)).toFixed(3) + '%';
-      for (var i = 1; i < columns.length; i++)
-        columns[i].width = columnWidth;
-
-      this.$.table.tableColumns = columns;
+      this.$.overview_pane.processMemoryDumps = tv.b.dictionaryValues(
+          selection[0].processMemoryDumps);
+      this.$.details_pane.memoryDump = undefined;
     }
   });
   </script>
-</polymer>
+</polymer-element>
