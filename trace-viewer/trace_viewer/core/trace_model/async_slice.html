@@ -24,7 +24,7 @@ tv.exportTo('tv.c.trace_model', function() {
    * @constructor
    */
   function AsyncSlice(category, title, colorId, start, args, duration,
-                      opt_isTopLevel) {
+                      opt_isTopLevel, opt_cpuStart, opt_cpuDuration) {
     tv.c.trace_model.TimedEvent.call(this, start);
 
     this.category = category || '';
@@ -40,11 +40,19 @@ tv.exportTo('tv.c.trace_model', function() {
     this.id = undefined;
     this.startThread = undefined;
     this.endThread = undefined;
+    this.cpuStart = undefined;
+    this.cpuDuration = undefined;
 
     this.duration = duration;
 
     // TODO(nduca): Forgive me for what I must do.
     this.isTopLevel = (opt_isTopLevel === true);
+
+    if (opt_cpuStart !== undefined)
+      this.cpuStart = opt_cpuStart;
+
+    if (opt_cpuDuration !== undefined)
+      this.cpuDuration = opt_cpuDuration;
   };
 
   AsyncSlice.prototype = {
@@ -61,6 +69,30 @@ tv.exportTo('tv.c.trace_model', function() {
     get userFriendlyName() {
       return 'Async slice ' + this.title + ' at ' +
           tv.c.analysis.tsString(this.start);
+    },
+
+    findDescendentSlice: function(targetTitle) {
+      if (!this.subSlices)
+        return undefined;
+
+      for (var i = 0; i < this.subSlices.length; i++) {
+        if (this.subSlices[i].title == targetTitle)
+          return this.subSlices[i];
+        var slice = this.subSlices[i].findDescendentSlice(targetTitle);
+        if (slice) return slice;
+      }
+      return undefined;
+    },
+
+    iterateAllDescendents: function(callback, opt_this) {
+      this.subSlices.forEach(callback, opt_this);
+      this.subSlices.forEach(function(subSlice) {
+        subSlice.iterateAllDescendents(callback, opt_this);
+      }, opt_this);
+    },
+
+    compareTo: function(that) {
+      return this.title.localeCompare(that.title);
     }
   };
 

@@ -6,10 +6,10 @@ found in the LICENSE file.
 -->
 
 <link rel="import" href="/core/trace_model/event_container.html">
-<link rel="import" href="/core/trace_model/slice.html">
 <link rel="import" href="/core/filter.html">
 <link rel="import" href="/base/ui/color_scheme.html">
 <link rel="import" href="/base/guid.html">
+<link rel="import" href="/base/sorted_array_utils.html">
 
 <script>
 'use strict';
@@ -19,6 +19,14 @@ found in the LICENSE file.
  */
 tv.exportTo('tv.c.trace_model', function() {
   var Slice = tv.c.trace_model.Slice;
+
+  function getSliceLo(s) {
+    return s.start;
+  }
+
+  function getSliceHi(s) {
+    return s.end;
+  }
 
   /**
    * A group of Slices, plus code to create them from B/E events, as
@@ -253,12 +261,13 @@ tv.exportTo('tv.c.trace_model', function() {
       return newSlice;
     },
 
-    iterateAllEvents: function(callback, opt_this) {
-      this.slices.forEach(callback, opt_this);
+    iterateAllEventsInThisContainer: function(eventTypePredicate,
+                                              callback, opt_this) {
+      if (eventTypePredicate.call(opt_this, this.sliceConstructor))
+        this.slices.forEach(callback, opt_this);
     },
 
-    iterateAllEventContainers: function(callback) {
-      callback(this);
+    iterateAllChildEventContainers: function(callback, opt_this) {
     },
 
     getSlicesOfName: function(title) {
@@ -286,6 +295,46 @@ tv.exportTo('tv.c.trace_model', function() {
       return ret;
     },
 
+    findSliceAtTs: function(ts) {
+      if (!this.haveTopLevelSlicesBeenBuilt)
+        throw new Error('Nope');
+      var i = tv.b.findIndexInSortedClosedIntervals(
+          this.topLevelSlices,
+          getSliceLo, getSliceHi,
+          ts);
+      if (i == -1 || i == this.topLevelSlices.length)
+        return undefined;
+
+      var curSlice = this.topLevelSlices[i];
+
+      // Now recurse on slice looking for subSlice of given ts.
+      while (true) {
+        var i = tv.b.findIndexInSortedClosedIntervals(
+            curSlice.subSlices,
+            getSliceLo, getSliceHi,
+            ts);
+        if (i == -1 || i == curSlice.subSlices.length)
+          return curSlice;
+        curSlice = curSlice.subSlices[i];
+      }
+    },
+
+    findNextSliceAfter: function(ts, refGuid) {
+      var i = tv.b.findLowIndexInSortedArray(
+          this.slices, getSliceLo, ts);
+      if (i === this.slices.length)
+        return undefined;
+      for (; i < this.slices.length; i++) {
+        var slice = this.slices[i];
+        if (slice.start > ts)
+          return slice;
+        if (slice.guid <= refGuid)
+          continue;
+        return slice;
+      }
+      return undefined;
+    },
+
     /**
      * Construct subSlices for this group.
      * Populate the group topLevelSlices, parent slices get a subSlices[],
@@ -295,7 +344,8 @@ tv.exportTo('tv.c.trace_model', function() {
     createSubSlices: function() {
       this.haveTopLevelSlicesBeenBuilt = true;
       this.createSubSlicesImpl_();
-
+      if (this.parentThread.timeSlices)
+        this.addCpuTimeToSubslices_(this.parentThread.timeSlices);
       this.slices.forEach(function(slice) {
         var selfTime = slice.duration;
         for (var i = 0; i < slice.subSlices.length; i++)
@@ -344,10 +394,10 @@ tv.exportTo('tv.c.trace_model', function() {
         ops.push(i);
       }
 
-      var groupSlices = this.slices;
+      var originalSlices = this.slices;
       ops.sort(function(ix, iy) {
-        var x = groupSlices[ix];
-        var y = groupSlices[iy];
+        var x = originalSlices[ix];
+        var y = originalSlices[iy];
         if (x.start != y.start)
           return x.start - y.start;
 
@@ -358,16 +408,74 @@ tv.exportTo('tv.c.trace_model', function() {
         return ix - iy;
       });
 
-      var rootSlice = this.slices[ops[0]];
+      var slices = new Array(this.slices.length);
+      for (var i = 0; i < ops.length; i++) {
+        slices[i] = originalSlices[ops[i]];
+      }
+
+      // Actually build the subrows.
+      var rootSlice = slices[0];
       this.topLevelSlices = [];
       this.topLevelSlices.push(rootSlice);
-      for (var i = 1; i < ops.length; i++) {
-        var slice = this.slices[ops[i]];
+      for (var i = 1; i < slices.length; i++) {
+        var slice = slices[i];
         if (!addSliceIfBounds(rootSlice, slice)) {
           rootSlice = slice;
           this.topLevelSlices.push(rootSlice);
         }
       }
+
+      // Keep the slices in sorted form.
+      this.slices = slices;
+    },
+    addCpuTimeToSubslices_: function(timeSlices) {
+      var SCHEDULING_STATE = tv.c.trace_model.SCHEDULING_STATE;
+      var sliceIdx = 0;
+      timeSlices.forEach(function(timeSlice) {
+        if (timeSlice.schedulingState == SCHEDULING_STATE.RUNNING) {
+          while (sliceIdx < this.topLevelSlices.length) {
+            if (this.addCpuTimeToSubslice_(this.topLevelSlices[sliceIdx],
+                timeSlice)) {
+              // The current top-level slice and children are fully
+              // accounted for, proceed to next top-level slice.
+              sliceIdx++;
+            } else {
+              // The current top-level runs beyond the time slice, break out
+              // so we can potentially add more time slices to it
+              break;
+            }
+          }
+        }
+      }, this);
+    },
+    /* Add run-time of this timeSlice to the passed in slice
+     * and all of it's children (recursively).
+     * Returns whether the slice ends before or at the end of the
+     * time slice, signaling we are done with this slice.
+     */
+    addCpuTimeToSubslice_: function(slice, timeSlice) {
+      // Make sure they overlap
+      if (slice.start > timeSlice.end || slice.end < timeSlice.start)
+        return slice.end <= timeSlice.end;
+
+      // Compute actual overlap
+      var duration = timeSlice.duration;
+      if (slice.start > timeSlice.start)
+        duration -= slice.start - timeSlice.start;
+      if (timeSlice.end > slice.end)
+        duration -= timeSlice.end - slice.end;
+
+      if (slice.cpuDuration) {
+        slice.cpuDuration += duration;
+      } else {
+        slice.cpuDuration = duration;
+      }
+
+      for (var i = 0; i < slice.subSlices.length; i++) {
+        this.addCpuTimeToSubslice_(slice.subSlices[i], timeSlice);
+      }
+
+      return slice.end <= timeSlice.end;
     }
   };
 
