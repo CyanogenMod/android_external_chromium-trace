@@ -1,0 +1,172 @@
+<!DOCTYPE html>
+<!--
+Copyright (c) 2015 The Chromium Authors. All rights reserved.
+Use of this source code is governed by a BSD-style license that can be
+found in the LICENSE file.
+-->
+
+<link rel="import" href="/base/base.html">
+<script>
+'use strict';
+
+/**
+ * @fileoverview Helper code for memory dump sub-views.
+ */
+tv.exportTo('tv.c.analysis', function() {
+
+  /**
+   * A table builder column for displaying memory dump data.
+   *
+   * @constructor
+   */
+  function MemoryColumn(title, units, cellGetter) {
+    this.title = title;
+    this.units = units;
+    this.cell = cellGetter;
+  }
+
+  MemoryColumn.fromRows = function(rows, cellKey) {
+    var columnTraits = {};
+
+    function gatherTraits(row) {
+      if (row === undefined)
+        return;
+      var attrCells = row[cellKey];
+      tv.b.iterItems(attrCells, function(attrName, attrCell) {
+        if (attrCell === undefined)
+          return;
+        var attrValue = attrCell.attr;
+        if (attrValue === undefined)
+          return;
+        var existingTraits = columnTraits[attrName];
+        if (existingTraits === undefined) {
+          columnTraits[attrName] = {
+            constructor: attrValue.constructor,
+            units: attrValue.units
+          };
+          return;
+        }
+        if (existingTraits.constructor !== attrValue.constructor ||
+            existingTraits.units !== attrValue.units) {
+          existingTraits.constructor = tv.c.trace_model.UnknownAttribute;
+          existingTraits.units = undefined;
+        }
+      });
+      if (row.subRows !== undefined)
+        row.subRows.forEach(gatherTraits);
+    };
+    rows.forEach(gatherTraits);
+
+    var columns = [];
+    tv.b.iterItems(columnTraits, function(columnName, columnTraits) {
+      var cellGetter = fieldGetter(cellKey, columnName);
+      columns.push(MemoryColumn.fromAttributeTraits(
+          columnName, columnTraits, cellGetter));
+    });
+
+    return columns;
+  };
+
+  MemoryColumn.fromAttributeTraits = function(title, traits, cellGetter) {
+    var constructor;
+    if (traits.constructor === tv.c.trace_model.ScalarAttribute)
+      constructor = ScalarMemoryColumn;
+    else
+      constructor = MemoryColumn;
+    return new constructor(title, traits.units, cellGetter);
+  };
+
+  MemoryColumn.spaceEqually = function(columns) {
+    var columnWidth = (100 / columns.length).toFixed(3) + '%';
+    columns.forEach(function(column) {
+      column.width = columnWidth;
+    });
+  };
+
+  MemoryColumn.prototype = {
+    attr: function(row) {
+      var cell = this.cell(row);
+      if (cell === undefined)
+        return undefined;
+      return cell.attr;
+    },
+
+    value: function(row) {
+      var attr = this.attr(row);
+      if (attr === undefined)
+        return '';
+      return this.formatDefinedAttribute(attr);
+    },
+
+    formatDefinedAttribute: function(attr) {
+      return String(attr.value);
+    },
+
+    cmp: function(rowA, rowB) {
+      var attrA = this.attr(rowA);
+      var attrB = this.attr(rowB);
+      if (attrA === undefined && attrB === undefined)
+        return 0;
+      if (attrA === undefined)
+        return -1;
+      if (attrB === undefined)
+        return 1;
+      return this.compareDefinedAttributes(attrA, attrB);
+    },
+
+    compareDefinedAttributes: function(attrA, attrB) {
+      var strA = String(attrA.value);
+      var strB = String(attrB.value);
+      return strA.localeCompare(strB);
+    }
+  };
+
+  /**
+   * @constructor
+   */
+  function ScalarMemoryColumn(title, units, cellGetter) {
+    MemoryColumn.call(this, title, units, cellGetter);
+  }
+
+  ScalarMemoryColumn.prototype = {
+    __proto__: MemoryColumn.prototype,
+
+    formatDefinedAttribute: function(attr) {
+      if (this.units === 'bytes') {
+        var sizeEl = document.createElement('tv-c-a-size-span');
+        sizeEl.numBytes = attr.value;
+        return sizeEl;
+      }
+      return MemoryColumn.prototype.formatDefinedAttribute.call(this, attr);
+    },
+
+    compareDefinedAttributes: function(attrA, attrB) {
+      return attrA.value - attrB.value;
+    }
+  };
+
+  /**
+   * @constructor
+   */
+  function MemoryCell(attr) {
+    this.attr = attr;
+  }
+
+  function fieldGetter(/* fields */) {
+    var fields = tv.b.asArray(arguments);
+    return function(row) {
+      var value = row;
+      for (var i = 0; i < fields.length; i++)
+        value = value[fields[i]];
+      return value;
+    };
+  }
+
+  return {
+    MemoryColumn: MemoryColumn,
+    ScalarMemoryColumn: ScalarMemoryColumn,
+    MemoryCell: MemoryCell,
+    fieldGetter: fieldGetter
+  };
+});
+</script>

@@ -57,6 +57,9 @@ tv.exportTo('tv.c.tracks', function() {
     return mrt;
   }
 
+  var SelectionState = tv.c.trace_model.SelectionState;
+  var EventPresenter = tv.c.EventPresenter;
+
   /**
    * Visualizes a Model by building ProcessTracks and
    * CpuTracks.
@@ -216,6 +219,8 @@ tv.exportTo('tv.c.tracks', function() {
 
     drawTrack: function(type) {
       var ctx = this.context();
+      if (!this.model_)
+        return;
 
       var pixelRatio = window.devicePixelRatio || 1;
       var bounds = this.getBoundingClientRect();
@@ -316,23 +321,46 @@ tv.exportTo('tv.c.tracks', function() {
       var startTrack = this.viewport.trackForEvent(flowEvent.startSlice);
       var endTrack = this.viewport.trackForEvent(flowEvent.endSlice);
 
+      // TODO(nduca): Figure out how to draw flow arrows even when
+      // processes are collapsed, bug #931.
+      if (startTrack === undefined || endTrack === undefined)
+        return;
+
       var startBounds = startTrack.getBoundingClientRect();
       var endBounds = endTrack.getBoundingClientRect();
 
-      if (flowEvent.startSlice.selected || flowEvent.endSlice.selected) {
+      if (flowEvent.selectionState == SelectionState.SELECTED) {
         ctx.shadowBlur = 1;
         ctx.shadowColor = 'red';
         ctx.shadowOffsety = 2;
         ctx.strokeStyle = 'red';
-      } else if (flowEvent.selected) {
+      } else if (flowEvent.selectionState == SelectionState.HIGHLIGHTED) {
         ctx.shadowBlur = 1;
-        ctx.shadowColor = 'orange';
+        ctx.shadowColor = 'red';
         ctx.shadowOffsety = 2;
-        ctx.strokeStyle = 'orange';
-      } else {
+        ctx.strokeStyle = 'red';
+      } else if (flowEvent.selectionState == SelectionState.DIMMED) {
         ctx.shadowBlur = 0;
         ctx.shadowOffsetX = 0;
-        ctx.strokeStyle = 'rgba(0, 0, 0, 0.4)';
+        ctx.strokeStyle = 'rgba(0, 0, 0, 0.2)';
+      } else {
+        var hasBoost = false;
+        var startSlice = flowEvent.startSlice;
+        hasBoost |= startSlice.selectionState === SelectionState.SELECTED;
+        hasBoost |= startSlice.selectionState === SelectionState.HIGHLIGHTED;
+        var endSlice = flowEvent.endSlice;
+        hasBoost |= endSlice.selectionState === SelectionState.SELECTED;
+        hasBoost |= endSlice.selectionState === SelectionState.HIGHLIGHTED;
+        if (hasBoost) {
+          ctx.shadowBlur = 1;
+          ctx.shadowColor = 'rgba(255, 0, 0, 0.4)';
+          ctx.shadowOffsety = 2;
+          ctx.strokeStyle = 'rgba(255, 0, 0, 0.4)';
+        } else {
+          ctx.shadowBlur = 0;
+          ctx.shadowOffsetX = 0;
+          ctx.strokeStyle = 'rgba(0, 0, 0, 0.4)';
+        }
       }
 
       var startSize = startBounds.left + startBounds.top +
@@ -382,7 +410,7 @@ tv.exportTo('tv.c.tracks', function() {
       return bounds.top - canvasBounds.top + (bounds.height / 2);
     },
 
-    addIntersectingItemsInRangeToSelectionInWorldSpace: function(
+    addIntersectingEventsInRangeToSelectionInWorldSpace: function(
         loWX, hiWX, viewPixWidthWorld, selection) {
       function onPickHit(instantEvent) {
         selection.push(instantEvent);
@@ -394,7 +422,7 @@ tv.exportTo('tv.c.tracks', function() {
           onPickHit.bind(this));
 
       tv.c.tracks.ContainerTrack.prototype.
-          addIntersectingItemsInRangeToSelectionInWorldSpace.
+          addIntersectingEventsInRangeToSelectionInWorldSpace.
           apply(this, arguments);
     },
 

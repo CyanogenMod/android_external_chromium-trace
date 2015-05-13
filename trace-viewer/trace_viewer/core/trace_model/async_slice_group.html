@@ -129,21 +129,26 @@ tv.exportTo('tv.c.trace_model', function() {
           subGroupsByTitle[subGroupTitle].slices.push(slice);
         }
         this.viewSubGroups_ = tv.b.dictionaryValues(subGroupsByTitle);
+        this.viewSubGroups_.sort(function(a, b) {
+          return a.slices[0].compareTo(b.slices[0]);
+        });
       }
       return this.viewSubGroups_;
     },
 
-    iterateAllEvents: function(callback, opt_this) {
-      for (var i = 0; i < this.slices.length; i++) {
-        var slice = this.slices[i];
-        callback.call(opt_this, slice);
-        if (slice.subSlices)
-          slice.subSlices.forEach(callback, opt_this);
+    iterateAllEventsInThisContainer: function(eventTypePredicate,
+                                              callback, opt_this) {
+      if (eventTypePredicate.call(opt_this, tv.c.trace_model.AsyncSlice)) {
+        for (var i = 0; i < this.slices.length; i++) {
+          var slice = this.slices[i];
+          callback.call(opt_this, slice);
+          if (slice.subSlices)
+            slice.subSlices.forEach(callback, opt_this);
+        }
       }
     },
 
-    iterateAllEventContainers: function(callback) {
-      callback(this);
+    iterateAllChildEventContainers: function(callback, opt_this) {
     }
   };
 

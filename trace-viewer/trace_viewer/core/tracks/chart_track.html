@@ -128,8 +128,6 @@ tv.exportTo('tv.c.tracks', function() {
       // Pre-multiply all device-independent pixel parameters with the pixel
       // ratio to avoid unnecessary recomputation in the performance-critical
       // drawing code.
-      var timelineTransform = displayTransform.clone();
-      timelineTransform.scaleX *= pixelRatio;
       var width = bounds.width * pixelRatio;
       var height = bounds.height * pixelRatio;
       var topPadding = this.topPadding_ * pixelRatio;
@@ -144,7 +142,7 @@ tv.exportTo('tv.c.tracks', function() {
       // Draw all series in the increasing z-order.
       this.series_.forEach(function(series) {
         var chartTransform = new tv.c.tracks.ChartTransform(
-            timelineTransform, series.axis, width, height, topPadding,
+            displayTransform, series.axis, width, height, topPadding,
             bottomPadding, pixelRatio);
         series.draw(ctx, chartTransform, highDetails);
       }, this);
@@ -163,24 +161,24 @@ tv.exportTo('tv.c.tracks', function() {
       }, this);
     },
 
-    addIntersectingItemsInRangeToSelectionInWorldSpace: function(
+    addIntersectingEventsInRangeToSelectionInWorldSpace: function(
         loWX, hiWX, viewPixWidthWorld, selection) {
       this.series_.forEach(function(series) {
-        series.addIntersectingItemsInRangeToSelectionInWorldSpace(
+        series.addIntersectingEventsInRangeToSelectionInWorldSpace(
             loWX, hiWX, viewPixWidthWorld, selection);
       }, this);
     },
 
-    addItemNearToProvidedEventToSelection: function(event, offset, selection) {
+    addEventNearToProvidedEventToSelection: function(event, offset, selection) {
       var foundItem = false;
       this.series_.forEach(function(series) {
-        foundItem = foundItem || series.addItemNearToProvidedEventToSelection(
+        foundItem = foundItem || series.addEventNearToProvidedEventToSelection(
             event, offset, selection);
       }, this);
       return foundItem;
     },
 
-    addAllObjectsMatchingFilterToSelection: function(filter, selection) {
+    addAllEventsMatchingFilterToSelection: function(filter, selection) {
       // Do nothing.
     },
 
