@@ -10,11 +10,24 @@ This is a tool for capturing a trace that includes data from both userland and
 the kernel.  It creates an HTML file for visualizing the trace.
 """
 
-import errno, optparse, os, re, select, subprocess, sys, time, zlib
 
-default_categories = 'sched gfx view dalvik webview input disk am wm'.split()
+import optparse
+import os
+import re
+import select
+import subprocess
+import sys
+import time
+import zlib
+
+# If a custom list of categories is not specified, traces will include
+# these categories (if available on the device).
+DEFAULT_CATEGORIES = 'sched gfx view dalvik webview input disk am wm'.split()
+
 
 class OptionParserIgnoreErrors(optparse.OptionParser):
+  """Wrapper for OptionParser that ignores errors and produces no output."""
+
   def error(self, msg):
     pass
 
@@ -30,12 +43,18 @@ class OptionParserIgnoreErrors(optparse.OptionParser):
   def print_version(self):
     pass
 
+
 def get_device_sdk_version():
+  """Uses adb to attempt to determine the SDK version of a running device."""
+
   getprop_args = ['adb', 'shell', 'getprop', 'ro.build.version.sdk']
 
+  # get_device_sdk_version() is called before we even parse our command-line
+  # args.  Therefore, parse just the device serial number part of the
+  # command-line so we can send the adb command to the correct device.
   parser = OptionParserIgnoreErrors()
   parser.add_option('-e', '--serial', dest='device_serial', type='string')
-  options, args = parser.parse_args()
+  options, unused_args = parser.parse_args()
   if options.device_serial is not None:
     getprop_args[1:1] = ['-s', options.device_serial]
 
@@ -54,29 +73,33 @@ def get_device_sdk_version():
   version = int(out)
   return version
 
+
 def add_adb_serial(command, serial):
   if serial is not None:
     command.insert(1, serial)
     command.insert(1, '-s')
 
+
 def get_default_categories():
   list_command = ['adb', 'shell', 'atrace', '--list_categories']
   try:
     categories_output = subprocess.check_output(list_command)
-    categories = [c.split('-')[0].strip() for c in categories_output.splitlines()]
-
-    return [c for c in categories if c in default_categories]
+    categories = [c.split('-')[0].strip()
+                  for c in categories_output.splitlines()]
+    return [c for c in categories if c in DEFAULT_CATEGORIES]
   except:
     return []
+
 
 def main():
   device_sdk_version = get_device_sdk_version()
   if device_sdk_version < 18:
-    legacy_script = os.path.join(os.path.dirname(sys.argv[0]), 'systrace-legacy.py')
+    legacy_script = os.path.join(os.path.dirname(sys.argv[0]),
+                                 'systrace-legacy.py')
     os.execv(legacy_script, sys.argv)
 
-  usage = "Usage: %prog [options] [category1 [category2 ...]]"
-  desc = "Example: %prog -b 32768 -t 15 gfx input view sched freq"
+  usage = 'Usage: %prog [options] [category1 [category2 ...]]'
+  desc = 'Example: %prog -b 32768 -t 15 gfx input view sched freq'
   parser = optparse.OptionParser(usage=usage, description=desc)
   parser.add_option('-o', dest='output_file', help='write HTML to FILE',
                     default='trace.html', metavar='FILE')
@@ -85,31 +108,36 @@ def main():
   parser.add_option('-b', '--buf-size', dest='trace_buf_size', type='int',
                     help='use a trace buffer size of N KB', metavar='N')
   parser.add_option('-k', '--ktrace', dest='kfuncs', action='store',
-                    help='specify a comma-separated list of kernel functions to trace')
-  parser.add_option('-l', '--list-categories', dest='list_categories', default=False,
-                    action='store_true', help='list the available categories and exit')
+                    help='specify a comma-separated list of kernel functions '
+                    'to trace')
+  parser.add_option('-l', '--list-categories', dest='list_categories',
+                    default=False, action='store_true',
+                    help='list the available categories and exit')
   parser.add_option('-a', '--app', dest='app_name', default=None, type='string',
-                    action='store', help='enable application-level tracing for comma-separated ' +
+                    action='store',
+                    help='enable application-level tracing for comma-separated '
                     'list of app cmdlines')
   parser.add_option('--no-fix-threads', dest='fix_threads', default=True,
-                    action='store_false', help='don\'t fix missing or truncated thread names')
+                    action='store_false',
+                    help='don\'t fix missing or truncated thread names')
   parser.add_option('--no-fix-circular', dest='fix_circular', default=True,
-                    action='store_false', help='don\'t fix truncated circular traces')
-
+                    action='store_false',
+                    help='don\'t fix truncated circular traces')
   parser.add_option('--link-assets', dest='link_assets', default=False,
-                    action='store_true', help='link to original CSS or JS resources '
-                    'instead of embedding them')
+                    action='store_true',
+                    help='(deprecated)')
   parser.add_option('--from-file', dest='from_file', action='store',
-                    help='read the trace from a file (compressed) rather than running a live trace')
+                    help='read the trace from a file (compressed) rather than '
+                    'running a live trace')
   parser.add_option('--asset-dir', dest='asset_dir', default='trace-viewer',
-                    type='string', help='')
+                    type='string', help='(deprecated)')
   parser.add_option('-e', '--serial', dest='device_serial', type='string',
                     help='adb device serial number')
 
   options, categories = parser.parse_args()
 
   if options.link_assets or options.asset_dir != 'trace-viewer':
-    parser.error('--link-assets and --asset-dir is deprecated.')
+    parser.error('--link-assets and --asset-dir are deprecated.')
 
   if options.list_categories:
     tracer_args = ['adb', 'shell', 'atrace --list_categories']
@@ -163,7 +191,8 @@ def main():
   # Read the text portion of the output and watch for the 'TRACE:' marker that
   # indicates the start of the trace data.
   while result is None:
-    ready = select.select([adb.stdout, adb.stderr], [], [adb.stdout, adb.stderr])
+    ready = select.select([adb.stdout, adb.stderr], [],
+                          [adb.stdout, adb.stderr])
     if adb.stderr in ready[0]:
       err = os.read(adb.stderr.fileno(), 4096)
       sys.stderr.write(err)
@@ -182,7 +211,7 @@ def main():
 
       if len(parts) == 2:
         data.append(parts[1])
-        sys.stdout.write("downloading trace...")
+        sys.stdout.write('downloading trace...')
         sys.stdout.flush()
         break
 
@@ -190,7 +219,8 @@ def main():
 
   # Read and buffer the data portion of the output.
   while True:
-    ready = select.select([adb.stdout, adb.stderr], [], [adb.stdout, adb.stderr])
+    ready = select.select([adb.stdout, adb.stderr], [],
+                          [adb.stdout, adb.stderr])
     keepReading = False
     if adb.stderr in ready[0]:
       err = os.read(adb.stderr.fileno(), 4096)
@@ -221,17 +251,18 @@ def main():
       data = data[1:]
 
       if not data:
-        print >> sys.stderr, ('No data was captured.  Output file was not ' +
-          'written.')
+        print >> sys.stderr, ('No data was captured.  Output file was not '
+                              'written.')
         sys.exit(1)
       else:
         # Indicate to the user that the data download is complete.
-        print " done\n"
+        print ' done\n'
 
       # Extract the thread list dumped by ps.
       threads = {}
       if options.fix_threads:
-        parts = re.split('USER +PID +PPID +VSIZE +RSS +WCHAN +PC +NAME', data, 1)
+        parts = re.split('USER +PID +PPID +VSIZE +RSS +WCHAN +PC +NAME',
+                         data, 1)
         if len(parts) == 2:
           data = parts[0]
           for line in parts[1].splitlines():
@@ -266,32 +297,39 @@ def main():
       trace_viewer_html = read_asset(script_dir, 'systrace_trace_viewer.html')
 
       html_file = open(html_filename, 'w')
-      html_file.write(
-        html_prefix.replace("{{SYSTRACE_TRACE_VIEWER_HTML}}", trace_viewer_html))
+      html_file.write(html_prefix.replace('{{SYSTRACE_TRACE_VIEWER_HTML}}',
+                                          trace_viewer_html))
 
-      html_file.write('<!-- BEGIN TRACE -->\n' +
-          '  <script class="trace-data" type="application/text">\n')
+      html_file.write('<!-- BEGIN TRACE -->\n'
+                      '  <script class="trace-data" type="application/text">\n')
       html_file.write(out)
       html_file.write('  </script>\n<!-- END TRACE -->\n')
 
       html_file.write(html_suffix)
       html_file.close()
-      print "\n    wrote file://%s\n" % os.path.abspath(options.output_file)
+      print '\n    wrote file://%s\n' % os.path.abspath(options.output_file)
 
-  else: # i.e. result != 0
+  else:  # i.e. result != 0
     print >> sys.stderr, 'adb returned error code %d' % result
     sys.exit(1)
 
+
 def read_asset(src_dir, filename):
   return open(os.path.join(src_dir, filename)).read()
+
 
 def fix_circular_traces(out):
   """Fix inconsistentcies in traces due to circular buffering.
 
   The circular buffers are kept per CPU, so it is not guaranteed that the
   beginning of a slice is overwritten before the end. To work around this, we
-  throw away the prefix of the trace where not all CPUs have events yet."""
+  throw away the prefix of the trace where not all CPUs have events yet.
 
+  Args:
+    out: The data to fix.
+  Returns:
+    The updated trace data.
+  """
   # If any of the CPU's buffers have filled up and
   # older events have been dropped, the kernel
   # emits markers of the form '##### CPU 2 buffer started ####' on
