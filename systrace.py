@@ -27,9 +27,13 @@ import subprocess
 import time
 import zlib
 
+# The adb shell command to initiate a trace.
+ATRACE_BASE_ARGS = ['atrace']
 # If a custom list of categories is not specified, traces will include
 # these categories (if available on the device).
 DEFAULT_CATEGORIES = 'sched gfx view dalvik webview input disk am wm'.split()
+# The command to list trace categories.
+LIST_CATEGORIES_ARGS = ATRACE_BASE_ARGS + ['--list_categories']
 # Plain-text trace data should always start with this string.
 TRACE_TEXT_HEADER = '# tracer'
 
@@ -53,10 +57,55 @@ class OptionParserIgnoreErrors(optparse.OptionParser):
     pass
 
 
+def add_adb_serial(adb_command, device_serial):
+  if device_serial is not None:
+    adb_command.insert(1, device_serial)
+    adb_command.insert(1, '-s')
+
+
+def construct_adb_shell_command(shell_args, device_serial):
+  adb_command = ['adb', 'shell', ' '.join(shell_args)]
+  add_adb_serial(adb_command, device_serial)
+  return adb_command
+
+
+def run_adb_shell(shell_args, device_serial):
+  """Runs "adb shell" with the given arguments.
+
+  Args:
+    shell_args: array of arguments to pass to adb shell.
+    device_serial: if not empty, will add the appropriate command-line
+        parameters so that adb targets the given device.
+  Returns:
+    A tuple containing the adb output (stdout & stderr) and the return code
+    from adb.  Will exit if adb fails to start.
+  """
+  adb_command = construct_adb_shell_command(shell_args, device_serial)
+
+  adb_output = []
+  adb_return_code = 0
+  try:
+    adb_output = subprocess.check_output(adb_command, stderr=subprocess.STDOUT,
+                                         shell=False, universal_newlines=True)
+  except OSError as error:
+    # This usually means that the adb executable was not found in the path.
+    print >> sys.stderr, ('\nThe command "%s" failed with the following error:'
+                          % ' '.join(adb_command))
+    print >> sys.stderr, '    %s\n' % str(error)
+    print >> sys.stderr, 'Is adb in your path?'
+    sys.exit(1)
+  except subprocess.CalledProcessError as error:
+    # The process exited with an error.
+    adb_return_code = error.returncode
+    adb_output = error.output
+
+  return (adb_output, adb_return_code)
+
+
 def get_device_sdk_version():
   """Uses adb to attempt to determine the SDK version of a running device."""
 
-  getprop_args = ['adb', 'shell', 'getprop', 'ro.build.version.sdk']
+  getprop_args = ['getprop', 'ro.build.version.sdk']
 
   # get_device_sdk_version() is called before we even parse our command-line
   # args.  Therefore, parse just the device serial number part of the
@@ -64,40 +113,49 @@ def get_device_sdk_version():
   parser = OptionParserIgnoreErrors()
   parser.add_option('-e', '--serial', dest='device_serial', type='string')
   options, unused_args = parser.parse_args()
-  if options.device_serial is not None:
-    getprop_args[1:1] = ['-s', options.device_serial]
 
-  try:
-    adb = subprocess.Popen(getprop_args, stdout=subprocess.PIPE,
-                           stderr=subprocess.PIPE)
-  except OSError:
-    print 'Missing adb?'
-    sys.exit(1)
-  out, err = adb.communicate()
-  if adb.returncode != 0:
-    print >> sys.stderr, 'Error querying device SDK-version:'
-    print >> sys.stderr, err
+  success = False
+
+  adb_output, adb_return_code = run_adb_shell(getprop_args,
+                                              options.device_serial)
+
+  if adb_return_code == 0:
+    # ADB may print output other than the version number (e.g. it chould
+    # print a message about starting the ADB server).
+    # Break the ADB output into white-space delimited segments.
+    parsed_output = str.split(adb_output)
+    if parsed_output:
+      # Assume that the version number is the last thing printed by ADB.
+      version_string = parsed_output[-1]
+      if version_string:
+        try:
+          # Try to convert the text into an integer.
+          version = int(version_string)
+        except ValueError:
+          version = -1
+        else:
+          success = True
+
+  if not success:
+    print >> sys.stderr, (
+        '\nThe command "%s" failed with the following message:'
+        % ' '.join(getprop_args))
+    print >> sys.stderr, adb_output
     sys.exit(1)
 
-  version = int(out)
   return version
 
 
-def add_adb_serial(command, serial):
-  if serial is not None:
-    command.insert(1, serial)
-    command.insert(1, '-s')
+def get_default_categories(device_serial):
+  categories_output, return_code = run_adb_shell(LIST_CATEGORIES_ARGS,
+                                                 device_serial)
 
-
-def get_default_categories():
-  list_command = ['adb', 'shell', 'atrace', '--list_categories']
-  try:
-    categories_output = subprocess.check_output(list_command)
+  if return_code == 0 and categories_output:
     categories = [c.split('-')[0].strip()
                   for c in categories_output.splitlines()]
     return [c for c in categories if c in DEFAULT_CATEGORIES]
-  except:
-    return []
+
+  return []
 
 
 def main():
@@ -153,13 +211,14 @@ def main():
     parser.error('--link-assets and --asset-dir are deprecated.')
 
   if options.list_categories:
-    tracer_args = ['adb', 'shell', 'atrace --list_categories']
+    tracer_args = construct_adb_shell_command(LIST_CATEGORIES_ARGS,
+                                              options.device_serial)
     expect_trace = False
   elif options.from_file is not None:
     tracer_args = ['cat', options.from_file]
     expect_trace = True
   else:
-    atrace_args = ['atrace']
+    atrace_args = ATRACE_BASE_ARGS
     expect_trace = True
     if options.compress_trace_data:
       atrace_args.extend(['-z'])
@@ -183,15 +242,13 @@ def main():
       atrace_args.extend(['-k', options.kfuncs])
 
     if not categories:
-      categories = get_default_categories()
+      categories = get_default_categories(options.device_serial)
     atrace_args.extend(categories)
 
     if options.fix_threads:
       atrace_args.extend([';', 'ps', '-t'])
-    tracer_args = ['adb', 'shell', ' '.join(atrace_args)]
-
-  if tracer_args[0] == 'adb':
-    add_adb_serial(tracer_args, options.device_serial)
+    tracer_args = construct_adb_shell_command(atrace_args,
+                                              options.device_serial)
 
   script_dir = os.path.dirname(os.path.abspath(sys.argv[0]))
 
