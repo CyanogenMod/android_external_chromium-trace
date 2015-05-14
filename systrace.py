@@ -10,13 +10,20 @@ This is a tool for capturing a trace that includes data from both userland and
 the kernel.  It creates an HTML file for visualizing the trace.
 """
 
+import sys
 
+# Make sure we're using a new enough version of Python.
+# The flags= parameter of re.sub() is new in Python 2.7.
+if sys.version_info[:2] < (2, 7):
+  print >> sys.stderr, '\nThis script requires Python 2.7 or newer.'
+  sys.exit(1)
+
+# pylint: disable=g-bad-import-order,g-import-not-at-top
 import optparse
 import os
 import re
 import select
 import subprocess
-import sys
 import time
 import zlib
 
