@@ -30,6 +30,8 @@ import zlib
 # If a custom list of categories is not specified, traces will include
 # these categories (if available on the device).
 DEFAULT_CATEGORIES = 'sched gfx view dalvik webview input disk am wm'.split()
+# Plain-text trace data should always start with this string.
+TRACE_TEXT_HEADER = '# tracer'
 
 
 class OptionParserIgnoreErrors(optparse.OptionParser):
@@ -130,6 +132,10 @@ def main():
   parser.add_option('--no-fix-circular', dest='fix_circular', default=True,
                     action='store_false',
                     help='don\'t fix truncated circular traces')
+  parser.add_option('--no-compress', dest='compress_trace_data',
+                    default=True, action='store_false',
+                    help='Tell the device not to send the trace data in '
+                    'compressed form.')
   parser.add_option('--link-assets', dest='link_assets', default=False,
                     action='store_true',
                     help='(deprecated)')
@@ -153,8 +159,10 @@ def main():
     tracer_args = ['cat', options.from_file]
     expect_trace = True
   else:
-    atrace_args = ['atrace', '-z']
+    atrace_args = ['atrace']
     expect_trace = True
+    if options.compress_trace_data:
+      atrace_args.extend(['-z'])
 
     if options.trace_time is not None:
       if options.trace_time > 0:
@@ -279,8 +287,14 @@ def main():
               name = cols[8]
               threads[tid] = name
 
-      # Decompress and preprocess the data.
-      out = zlib.decompress(data)
+      if data.startswith(TRACE_TEXT_HEADER):
+        # Plain-text data.
+        out = data
+      else:
+        # No header found, so assume the data is compressed.
+        out = zlib.decompress(data)
+
+      # Preprocess the data.
       if options.fix_threads:
         def repl(m):
           tid = int(m.group(2))
