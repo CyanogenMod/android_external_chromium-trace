@@ -127,6 +127,8 @@ class JSChecker(object):
       affected_files = []
 
     def ShouldCheck(f):
+      if self.input_api.IsIgnoredFile(f):
+        return False
       if f.filename.endswith('.js'):
         return True
       if f.filename.endswith('.html'):
@@ -147,9 +149,7 @@ class JSChecker(object):
       flags.FLAGS.strict = True
       error_handler = ErrorHandlerImpl()
       js_checker = checker.JavaScriptStyleChecker(error_handler)
-      js_checker.Check(os.path.join(
-          self.input_api.repository_root,
-          f.filename))
+      js_checker.Check(f.absolute_path)
 
       for error in error_handler.GetErrors():
         highlight = self.error_highlight(
