@@ -8,6 +8,7 @@ found in the LICENSE file.
 <link rel="import" href="/core/test_utils.html">
 <link rel="import" href="/core/trace_model/attribute.html">
 <link rel="import" href="/core/trace_model/global_memory_dump.html">
+<link rel="import" href="/core/trace_model/memory_allocator_dump.html">
 <link rel="import" href="/core/trace_model/process_memory_dump.html">
 
 <script>
@@ -36,6 +37,7 @@ tv.exportTo('tv.c.analysis', function() {
       var pmd1 = new ProcessMemoryDump(gmd, p1, 41);
       p1.memoryDumps.push(pmd1);
       gmd.processMemoryDumps[p1.pid] = pmd1;
+      pmd1.totalResidentBytes = 31457280 /* 30 MiB */;
       pmd1.vmRegions = [
         VMRegion.fromDict({
             startAddress: 1024,
@@ -55,7 +57,7 @@ tv.exportTo('tv.c.analysis', function() {
       p2.memoryDumps.push(pmd2);
       gmd.processMemoryDumps[p2.pid] = pmd2;
       pmd2.memoryAllocatorDumps = (function() {
-        var oilpanDump = new MemoryAllocatorDump('oilpan');
+        var oilpanDump = new MemoryAllocatorDump(pmd2, 'oilpan');
         oilpanDump.addAttribute('outer_size',
             new ScalarAttribute('bytes', 2147483648) /* 2 GiB */);
         oilpanDump.addAttribute('inner_size',
@@ -63,7 +65,7 @@ tv.exportTo('tv.c.analysis', function() {
         oilpanDump.addAttribute('objects_count',
             new ScalarAttribute('objects', 2015));
 
-        var v8Dump = new MemoryAllocatorDump('v8');
+        var v8Dump = new MemoryAllocatorDump(pmd2, 'v8');
         v8Dump.addAttribute('outer_size',
             new ScalarAttribute('bytes', 1073741824) /* 1 GiB */);
         v8Dump.addAttribute('inner_size',
@@ -78,6 +80,11 @@ tv.exportTo('tv.c.analysis', function() {
     return model.globalMemoryDumps[0];
   }
 
+  function createTestProcessMemoryDumps() {
+    var globalMemoryDump = createTestGlobalMemoryDump();
+    return tv.b.dictionaryValues(globalMemoryDump.processMemoryDumps);
+  }
+
   function createTestProcessMemoryDump() {
     var globalMemoryDump = createTestGlobalMemoryDump();
     return globalMemoryDump.processMemoryDumps[2];
@@ -85,6 +92,7 @@ tv.exportTo('tv.c.analysis', function() {
 
   return {
     createTestGlobalMemoryDump: createTestGlobalMemoryDump,
+    createTestProcessMemoryDumps: createTestProcessMemoryDumps,
     createTestProcessMemoryDump: createTestProcessMemoryDump
   };
 });
