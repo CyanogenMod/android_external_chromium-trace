@@ -1,0 +1,110 @@
+<!DOCTYPE html>
+<!--
+Copyright (c) 2014 The Chromium Authors. All rights reserved.
+Use of this source code is governed by a BSD-style license that can be
+found in the LICENSE file.
+-->
+<link rel="import" href="/base/base.html">
+<link rel="import" href="/base/iteration_helpers.html">
+<link rel="import" href="/extras/chrome/chrome_browser_helper.html">
+<link rel="import" href="/extras/chrome/chrome_renderer_helper.html">
+
+<script>
+'use strict';
+
+/**
+ * @fileoverview Utilities for accessing trace data about the Chrome browser.
+ */
+tv.exportTo('tv.e.audits', function() {
+  function findChromeBrowserProcess(model) {
+    var browserProcesses = [];
+    model.getAllProcesses().forEach(function(process) {
+      if (!tv.e.audits.ChromeBrowserHelper.isBrowserProcess(process))
+        return;
+      browserProcesses.push(process);
+    }, this);
+    if (browserProcesses.length === 0)
+      return undefined;
+    if (browserProcesses.length > 1)
+      return undefined;
+    return browserProcesses[0];
+  }
+
+  function findChromeRenderProcesses(model) {
+    var rendererProcesses = [];
+    model.getAllProcesses().forEach(function(process) {
+      if (!tv.e.audits.ChromeRendererHelper.isRenderProcess(process))
+        return;
+      rendererProcesses.push(process);
+    });
+    return rendererProcesses;
+  }
+
+  /**
+   * @constructor
+   */
+  function ChromeModelHelper(model) {
+    this.model_ = model;
+
+    // Find browser.
+    this.browserProcess_ = findChromeBrowserProcess(model);
+    if (this.browserProcess_) {
+      this.browser_ = new tv.e.audits.ChromeBrowserHelper(
+          this, this.browserProcess_);
+    } else {
+      this.browser_ = undefined;
+    }
+
+    // Find renderers.
+    this.rendererProcesses_ = findChromeRenderProcesses(model);
+
+    this.renderers_ = {};
+    this.rendererProcesses_.forEach(function(renderProcess) {
+      var renderer = new tv.e.audits.ChromeRendererHelper(this, renderProcess);
+      this.renderers_[renderer.pid] = renderer;
+    }, this);
+  }
+
+  ChromeModelHelper.supportsModel = function(model) {
+    if (findChromeBrowserProcess(model) !== undefined)
+      return true;
+    if (findChromeRenderProcesses(model).length)
+      return true;
+    return false;
+  }
+
+  ChromeModelHelper.prototype = {
+    get pid() {
+      throw new Error('woah');
+    },
+
+    get process() {
+      throw new Error('woah');
+    },
+
+    get model() {
+      return this.model_;
+    },
+
+    get browserProcess() {
+      return this.browserProcess_;
+    },
+
+    get browser() {
+      return this.browser_;
+    },
+
+    get rendererProcesses() {
+      return this.rendererProcesses_;
+    },
+
+    get renderers() {
+      return this.renderers_;
+    }
+  };
+
+  return {
+    ChromeModelHelper: ChromeModelHelper
+  };
+});
+</script>

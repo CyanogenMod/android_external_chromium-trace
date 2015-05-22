@@ -6,6 +6,10 @@ found in the LICENSE file.
 -->
 
 <link rel="import" href="/base/ui/color_legend.html">
+<link rel="import"
+    href="/core/analysis/memory_dump_allocator_details_pane.html">
+<link rel="import"
+    href="/core/analysis/memory_dump_vm_regions_details_pane.html">
 <link rel="import" href="/core/analysis/memory_dump_sub_view_util.html">
 <link rel="import" href="/core/analysis/size_span.html">
 <link rel="import" href="/core/analysis/table_builder.html">
@@ -32,7 +36,7 @@ found in the LICENSE file.
       }
 
       #table {
-        flex: 1 1 auto;
+        flex: 1 0 auto;
         align-self: stretch;
       }
     </style>
@@ -57,7 +61,7 @@ found in the LICENSE file.
       this.$.table.cellSelectionMode = true;
       this.$.table.addEventListener('selection-changed', function(tableEvent) {
         tableEvent.stopPropagation();
-        var paneEvent = new Event('selected-memory-dump-changed', false, false);
+        var paneEvent = new Event('selected-memory-cell-changed', false, false);
         this.dispatchEvent(paneEvent);
       }.bind(this));
     },
@@ -71,7 +75,7 @@ found in the LICENSE file.
       return this.processMemoryDumps_;
     },
 
-    get selectedMemoryDump() {
+    get selectedMemoryCell() {
       var selectedTableRow = this.$.table.selectedTableRow;
       if (!selectedTableRow)
         return undefined;
@@ -81,32 +85,34 @@ found in the LICENSE file.
         return undefined;
 
       var selectedColumn = this.$.table.tableColumns[selectedColumnIndex];
-      var selectedCell = selectedColumn.cell(selectedTableRow);
-      if (!selectedCell)
-        return undefined;
-
-      return selectedCell.dump;
+      var selectedMemoryCell = selectedColumn.cell(selectedTableRow);
+      return selectedMemoryCell;
     },
 
     updateContents_: function() {
       var processMemoryDumps = this.processMemoryDumps_ || [];
 
       var rows = processMemoryDumps.map(function(processMemoryDump) {
-        // Used memory (proportional, private, and shared resident)
+        // Used memory (total resident, PSS).
         var usedMemorySizes = {};
-        function addUsedMemorySize(columnKey, dumpKey) {
-          var value = processMemoryDump[dumpKey];
-          if (value !== undefined) {
-            usedMemorySizes[columnKey] = new tv.c.analysis.MemoryCell(
-                new tv.c.trace_model.ScalarAttribute('bytes', value));
-          }
+        var totalResident = processMemoryDump.totalResidentBytes;
+        if (totalResident !== undefined) {
+          usedMemorySizes['Total used memory'] = new tv.c.analysis.MemoryCell(
+              new tv.c.trace_model.ScalarAttribute('bytes', totalResident));
         }
-        addUsedMemorySize('proportional_resident',
-            'mostRecentTotalProportionalResidentSizeInBytes');
-        addUsedMemorySize('private_resident',
-            'mostRecentTotalPrivateResidentSizeInBytes');
-        addUsedMemorySize('shared_resident',
-            'mostRecentTotalSharedResidentSizeInBytes');
+        var pss =
+            processMemoryDump.mostRecentTotalProportionalResidentSizeInBytes;
+        if (pss !== undefined) {
+          var cell = new tv.c.analysis.MemoryCell(
+              new tv.c.trace_model.ScalarAttribute('bytes', pss));
+          cell.buildDetailsPane = function() {
+            var pane = document.createElement(
+                'tv-c-memory-dump-vm-regions-details-pane');
+            pane.vmRegions = processMemoryDump.mostRecentVmRegions;
+            return pane;
+          }
+          usedMemorySizes['Proportional used memory (mmaps)'] = cell;
+        }
 
         // Allocator memory (v8, oilpan, ...).
         var allocatorSizes = {};
@@ -114,7 +120,12 @@ found in the LICENSE file.
           processMemoryDump.memoryAllocatorDumps.forEach(function(dump) {
             var cell = new tv.c.analysis.MemoryCell(
                 dump.attributes['outer_size']);
-            cell.dump = dump;
+            cell.buildDetailsPane = function() {
+              var pane = document.createElement(
+                  'tv-c-memory-dump-allocator-details-pane');
+              pane.memoryAllocatorDump = dump;
+              return pane;
+            };
             allocatorSizes[dump.fullName] = cell;
           }, this);
         }
@@ -150,7 +161,11 @@ found in the LICENSE file.
       var usedMemorySizeColumns = tv.c.analysis.MemoryColumn.fromRows(
           rows, 'usedMemorySizes');
       var allocatorSizeColumns = tv.c.analysis.MemoryColumn.fromRows(
-          rows, 'allocatorSizes');
+          rows, 'allocatorSizes', function(allocatorName) {
+        var titleEl = document.createElement('tv-b-color-legend');
+        titleEl.label = allocatorName;
+        return titleEl;
+      });
 
       var sizeColumns = usedMemorySizeColumns.concat(allocatorSizeColumns);
       tv.c.analysis.MemoryColumn.spaceEqually(sizeColumns);

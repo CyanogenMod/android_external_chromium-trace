@@ -1,38 +1,37 @@
 # Copyright (c) 2015 The Chromium Authors. All rights reserved.
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
-import os
-import re
-import subprocess
-import sys
 
 from trace_viewer import trace_viewer_project
 
-class AffectedFile(object):
-  def __init__(self, input_api, filename):
-    self._filename = filename
-    self._input_api = input_api
+
+class _AffectedFile(object):
+  """Thin wrapper around AffectedFile class from depot_tools.
+
+  See tools/depot_tools/presubmit_support.py in the Chromium tree.
+  """
+  # TODO(petrcermak): Get rid of this class and use the wrapped object directly
+  # (https://github.com/google/trace-viewer/issues/932).
+  def __init__(self, depot_tools_affected_file):
+    self._depot_tools_affected_file = depot_tools_affected_file
     self._cached_contents = None
-    self._cached_changed_contents = None
-    self._cached_new_contents = None
 
   def __repr__(self):
-    return self._filename
+    return self.filename
 
   @property
   def filename(self):
-    return self._filename
+    return self._depot_tools_affected_file.LocalPath()
+
+  @property
+  def absolute_path(self):
+    return self._depot_tools_affected_file.AbsoluteLocalPath()
 
   @property
   def contents(self):
     if self._cached_contents is None:
-      self._cached_contents = self._input_api._git(
-          ['show', ':%s' % self._filename])
+      self._cached_contents = '\n'.join(self.contents_as_lines)
     return self._cached_contents
-
-  @property
-  def is_added(self):
-    return self.fileame in self._input_api.added_files
 
   @property
   def contents_as_lines(self):
@@ -44,9 +43,7 @@ class AffectedFile(object):
     Contents will be empty if the file is a directory or does not exist.
     Note: The carriage returns (LF or CR) are stripped off.
     """
-    if self._cached_new_contents is None:
-      self._cached_new_contents = self.contents.splitlines()
-    return self._cached_new_contents[:]
+    return self._depot_tools_affected_file.NewContents()
 
   @property
   def changed_lines(self):
@@ -57,104 +54,40 @@ class AffectedFile(object):
 
      ^@@ <old line num>,<old size> <new line num>,<new size> @@$
     """
-    if self._cached_changed_contents is not None:
-      return self._cached_changed_contents[:]
-    self._cached_changed_contents = []
-    line_num = 0
-
-    for line in self.GenerateDiff().splitlines():
-      m = re.match(r'^@@ [0-9\,\+\-]+ \+([0-9]+)\,[0-9]+ @@', line)
-      if m:
-        line_num = int(m.groups(1)[0])
-        continue
-      if line.startswith('+') and not line.startswith('++'):
-        self._cached_changed_contents.append((line_num, line[1:]))
-      if not line.startswith('-'):
-        line_num += 1
-    return self._cached_changed_contents[:]
-
-  def GenerateDiff(self):
-    return self._input_api._git([
-        'diff', self._input_api.diff_base, '--cached', self.filename])
+    return self._depot_tools_affected_file.ChangedContents()
 
 
-class InputAPI(object):
-  def __init__(self, tvp, diff_base):
-    self.DEFAULT_BLACK_LIST = []
-    self._tvp = tvp
-    self._filename_statuses = None
-    self._added_files = None
-    self.diff_base = diff_base
+class _InputAPI(object):
+  """Thin wrapper around InputAPI class from depot_tools.
 
-  def _git(self, args):
-    assert isinstance(args, list)
-    args = ['git'] + args
-    p = subprocess.Popen(
-        args,
-        stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
-        cwd=self.repository_root)
-    res = p.communicate()
-    if p.wait() != 0:
-      raise Exception(res[1])
-    return res[0]
+  See tools/depot_tools/presubmit_support.py in the Chromium tree.
+  """
+  # TODO(petrcermak): Get rid of this class and use the wrapped object directly
+  # (https://github.com/google/trace-viewer/issues/932).
+  def __init__(self, depot_tools_input_api):
+    self._depot_tools_input_api = depot_tools_input_api
 
-  @property
-  def repository_root(self):
-    return self._tvp.trace_viewer_path
+  def AffectedFiles(self, *args, **kwargs):
+    return map(_AffectedFile,
+               self._depot_tools_input_api.AffectedFiles(*args, **kwargs))
 
-  @property
-  def added_files(self):
-    if not self._added_files:
-      self._added_files = set()
-      for filename, status_char in filename_statuses:
-        if status_char == 'A':
-          self._added_files.Add(filename)
-    return self._added_files
+  def IsIgnoredFile(self, affected_file):
+    if affected_file.filename.endswith('.png'):
+      return True
 
-  @property
-  def affected_files(self):
-    return self.AffectedFiles(include_deletes=True)
+    if affected_file.filename.endswith('.svg'):
+      return True
 
-  def AffectedFiles(self,
-                    include_deletes=False,
-                    file_filter=lambda t: True):
-    filename_statuses = self._GetFilenameStatuses()
-    for filename, status_char in filename_statuses:
-      if status_char == 'D':
-        if include_deletes:
-          if file_filter(filename):
-            yield AffectedFile(self, filename)
-      else:
-        if file_filter(filename):
-          yield AffectedFile(self, filename)
+    # Is test data?
+    test_data_path = trace_viewer_project.TraceViewerProject.test_data_path
+    if affected_file.absolute_path.startswith(test_data_path):
+      return True
 
-  def _GetFilenameStatuses(self):
-    if self._filename_statuses != None:
-      return self._filename_statuses
-
-    self._filename_statuses = []
-    stdout = self._git([
-        'diff', self.diff_base, '--cached', '--name-status'])
-    for line in stdout.split('\n'):
-      line = line.strip()
-      if len(line) == 0:
-        continue
-      m = re.match('([ACDMRTUXB])\s+(.+)', line)
-      if not m:
-        import pdb; pdb.set_trace()
-        assert m
-
-      status_char = m.group(1)
-      filename = m.group(2)
-      self._filename_statuses.append((filename, status_char))
-    return self._filename_statuses
-
-  def IsTestDataFile(self, affected_file):
-    full_path = os.path.join(self.repository_root, affected_file.filename)
-    return full_path.startswith(self._tvp.test_data_path)
+    return False
 
 
-def RunChecks(input_api):
+def RunChecks(depot_tools_input_api, depot_tools_output_api):
+  input_api = _InputAPI(depot_tools_input_api)
   results = []
 
   from hooks import pre_commit_checks
@@ -178,19 +111,4 @@ def RunChecks(input_api):
   from hooks import js_checks
   results += js_checks.RunChecks(input_api)
 
-  return results
-
-
-def GetResults(diff_base):
-  tvp = trace_viewer_project.TraceViewerProject()
-  input_api = InputAPI(tvp, diff_base)
-  return RunChecks(input_api)
-
-
-def Main(args):
-  results = GetResults('HEAD')
-  print '\n\n'.join(results)
-
-  if len(results):
-    return 255
-  return 0
+  return map(depot_tools_output_api.PresubmitError, results)
