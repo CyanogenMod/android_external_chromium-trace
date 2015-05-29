@@ -264,7 +264,7 @@ def construct_trace_command(options, categories):
     tracer_args = construct_adb_shell_command(atrace_args,
                                               options.device_serial)
 
-    return (tracer_args, expect_trace)
+  return (tracer_args, expect_trace)
 
 
 def collect_trace_data(tracer_args):
