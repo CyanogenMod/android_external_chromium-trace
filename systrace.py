@@ -240,7 +240,7 @@ def status_update(last_update_time):
   return last_update_time
 
 
-def parse_options():
+def parse_options(argv):
   """Parses and checks the command-line options.
 
   Returns:
@@ -287,7 +287,7 @@ def parse_options():
   parser.add_option('-e', '--serial', dest='device_serial', type='string',
                     help='adb device serial number')
 
-  options, categories = parser.parse_args()
+  options, categories = parser.parse_args(argv[1:])
 
   if options.link_assets or options.asset_dir != 'trace-viewer':
     parser.error('--link-assets and --asset-dir are deprecated.')
@@ -631,7 +631,7 @@ def main():
     # execv() does not return.
     os.execv(legacy_script, sys.argv)
 
-  options, categories = parse_options()
+  options, categories = parse_options(sys.argv)
   tracer_args, expect_trace = construct_trace_command(options, categories)
 
   trace_data = collect_trace_data(tracer_args, expect_trace)
