@@ -78,12 +78,23 @@ class _InputAPI(object):
     if affected_file.filename.endswith('.svg'):
       return True
 
+    if (affected_file.filename.endswith('.gypi') or
+        affected_file.filename.endswith('.gyp') or
+        affected_file.filename.endswith('.gn')):
+      return True
+
+    if self.IsThirdParty(affected_file):
+      return True
+
     # Is test data?
     test_data_path = trace_viewer_project.TraceViewerProject.test_data_path
     if affected_file.absolute_path.startswith(test_data_path):
       return True
 
     return False
+
+  def IsThirdParty(self, affected_file):
+    return affected_file.filename.startswith('third_party')
 
 
 def RunChecks(depot_tools_input_api, depot_tools_output_api):
@@ -93,13 +104,8 @@ def RunChecks(depot_tools_input_api, depot_tools_output_api):
   from hooks import pre_commit_checks
   results += pre_commit_checks.RunChecks(input_api)
 
-  from trace_viewer.build import check_gyp
-  err = check_gyp.GypCheck()
-  if err:
-    results += [err]
-
-  from trace_viewer.build import check_gn
-  err = check_gn.GnCheck()
+  from trace_viewer.build import check_gypi
+  err = check_gypi.GypiCheck()
   if err:
     results += [err]
 

@@ -6,30 +6,28 @@ found in the LICENSE file.
 -->
 
 <link rel="import" href="/core/tracks/container_track.html">
-<link rel="import" href="/core/trace_model/trace_model_settings.html">
 <link rel="import" href="/base/sorted_array_utils.html">
 <link rel="import" href="/base/ui.html">
+<link rel="import" href="/model/model_settings.html">
 
 <script>
 'use strict';
 
-tv.exportTo('tv.c.tracks', function() {
-  var TraceModelSettings = tv.c.TraceModelSettings;
-
+tr.exportTo('tr.c.tracks', function() {
   /**
    * A track that displays a group of objects in multiple rows.
    * @constructor
    * @extends {ContainerTrack}
    */
-  var MultiRowTrack = tv.b.ui.define(
-      'multi-row-track', tv.c.tracks.ContainerTrack);
+  var MultiRowTrack = tr.b.ui.define(
+      'multi-row-track', tr.c.tracks.ContainerTrack);
 
   MultiRowTrack.prototype = {
 
-    __proto__: tv.c.tracks.ContainerTrack.prototype,
+    __proto__: tr.c.tracks.ContainerTrack.prototype,
 
     decorate: function(viewport) {
-      tv.c.tracks.ContainerTrack.prototype.decorate.call(this, viewport);
+      tr.c.tracks.ContainerTrack.prototype.decorate.call(this, viewport);
       this.tooltip_ = '';
       this.heading_ = '';
 
@@ -99,7 +97,7 @@ tv.exportTo('tv.c.tracks', function() {
       this.expanded = !this.expanded;
 
       if (this.groupingSource_) {
-        var modelSettings = new TraceModelSettings(
+        var modelSettings = new tr.model.ModelSettings(
             this.groupingSource_.model);
         modelSettings.setSettingFor(this.groupingSource_, 'expanded',
                                     this.expanded);
@@ -111,7 +109,7 @@ tv.exportTo('tv.c.tracks', function() {
     updateExpandedStateFromGroupingSource_: function() {
       if (this.groupingSource_) {
         var numSubRows = this.subRows.length;
-        var modelSettings = new TraceModelSettings(
+        var modelSettings = new tr.model.ModelSettings(
             this.groupingSource_.model);
         if (numSubRows > 1) {
           var defaultExpanded;
@@ -139,7 +137,7 @@ tv.exportTo('tv.c.tracks', function() {
     },
 
     updateContents_: function() {
-      tv.c.tracks.ContainerTrack.prototype.updateContents_.call(this);
+      tr.c.tracks.ContainerTrack.prototype.updateContents_.call(this);
       if (!this.itemsToGroup_) {
         this.updateHeadingAndTooltip_();
         this.currentSubRows_ = [];

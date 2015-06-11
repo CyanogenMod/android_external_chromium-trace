@@ -6,10 +6,13 @@ found in the LICENSE file.
 -->
 <link rel="import" href="/base/base.html">
 <link rel="import" href="/core/auditor.html">
-<link rel="import" href="/core/trace_model/event_info.html">
-<link rel="import" href="/extras/audits/utils.html">
+<link rel="import" href="/model/event_info.html">
+<link rel="import" href="/base/range_utils.html">
 <link rel="import" href="/extras/chrome/chrome_model_helper.html">
-<link rel="import" href="/extras/rail/rail_interaction_record.html">
+<link rel="import" href="/extras/rail/animation_interaction_record.html">
+<link rel="import" href="/extras/rail/idle_interaction_record.html">
+<link rel="import" href="/extras/rail/load_interaction_record.html">
+<link rel="import" href="/extras/rail/response_interaction_record.html">
 
 <script>
 'use strict';
@@ -17,45 +20,37 @@ found in the LICENSE file.
 /**
  * @fileoverview Base class for trace data Auditors.
  */
-tv.exportTo('tv.e.audits', function() {
+tr.exportTo('tr.e.rail', function() {
   function RAILIRFinder(model, modelHelper) {
     this.model = model;
     this.modelHelper = modelHelper;
   };
 
   RAILIRFinder.supportsModelHelper = function(modelHelper) {
-    return modelHelper.browser !== undefined;
+    return modelHelper.browserHelper !== undefined;
   };
 
   RAILIRFinder.prototype = {
     getAllLatencyEvents: function() {
-      return this.modelHelper.browser.getLatencyEventsInRange(
+      return this.modelHelper.browserHelper.getLatencyEventsInRange(
           this.model.bounds);
     },
 
     getAllFrameEvents: function() {
       var frameEvents = [];
-      if (this.modelHelper.browser) {
-        var fe = this.modelHelper.browser.getFrameEventsInRange(
-            tv.e.audits.IMPL_FRAMETIME_TYPE,
+      if (this.modelHelper.browserHelper) {
+        var fe = this.modelHelper.browserHelper.getFrameEventsInRange(
+            tr.e.audits.IMPL_FRAMETIME_TYPE,
             this.model.bounds);
         frameEvents.push.apply(frameEvents, fe);
       }
-      tv.b.iterItems(this.modelHelper.renderers, function(pid, renderer) {
-        var fe = renderer.getFrameEventsInRange(tv.e.audits.IMPL_FRAMETIME_TYPE,
+      tr.b.iterItems(this.modelHelper.rendererHelpers, function(pid, renderer) {
+        var fe = renderer.getFrameEventsInRange(tr.e.audits.IMPL_FRAMETIME_TYPE,
                                                 this.model.bounds);
         frameEvents.push.apply(frameEvents, fe);
       }, this);
       frameEvents.sort(function(x, y) { return x.start - y.start; });
       return frameEvents;
-    },
-
-    getAllLoadAndNetEvents: function() {
-      if (this.modelHelper.browser === undefined)
-        return;
-      var bounds = this.model.bounds;
-      return this.modelHelper.browser.getLoadingEventsInRange(bounds).concat(
-          this.modelHelper.browser.getAllNetworkEventsInRange(bounds));
     },
 
     getAllGestures: function() {
@@ -86,12 +81,12 @@ tv.exportTo('tv.e.audits', function() {
         return gesture;
       }
 
-      return tv.e.audits.mergeEvents(
+      return tr.e.audits.mergeExplicitRanges(
           latencyStartPoints, 250, joinStartPointsIntoGesture);
     },
 
     getAllExpectedFlingingRanges: function() {
-      if (this.modelHelper.browser === undefined)
+      if (this.modelHelper.browserHelper === undefined)
         return;
       var ops = [];
       var FLING_OP_START = 'start';
@@ -121,7 +116,7 @@ tv.exportTo('tv.e.audits', function() {
       });
 
       // Add ops for fling animations.
-      this.modelHelper.browser.getAllAsyncSlicesMatching(function(event) {
+      this.modelHelper.browserHelper.getAllAsyncSlicesMatching(function(event) {
         if (event.title !== 'InputHandlerProxy::HandleGestureFling::started')
           return;
         ops.push({
@@ -191,45 +186,17 @@ tv.exportTo('tv.e.audits', function() {
       // InputLatency:GestureTapDown/
     },
 
-    findAllInteractionRecords: function() {
-      var rirs = [];
-
-      var gestures = this.getAllGestures();
-      var gestureIRs = gestures.map(function gestureToIR(gesture) {
-        var colorId = tv.b.ui.getColorIdForGeneralPurposeString('mt_input');
-        var ir = new tv.e.audits.RAILInteractionRecord(
-            'railInput', colorId,
-            gesture.expectedStart, gesture.expectedEnd - gesture.expectedStart);
-        ir.associatedEvents.push.apply(
-            ir.associatedEvents,
-            gesture.latencyEvents);
-        return ir;
-      });
-      rirs.push.apply(rirs, gestureIRs);
-
-      var flings = this.getAllExpected60Ranges();
-      var flingIRs = flings.map(function flingToIR(e60r) {
-        var colorId = tv.b.ui.getColorIdForGeneralPurposeString('mt_fling');
-        var ir = new tv.e.audits.RAILInteractionRecord(
-            'railFling', colorId,
-            e60r.expectedStart, e60r.expectedEnd - e60r.expectedStart);
-        return ir;
-      });
-      rirs.push.apply(rirs, flingIRs);
-
-      var allLoadAndNetEvents = this.getAllLoadAndNetEvents();
-
-      var allCommitProvisionalLoad =
-        this.modelHelper.browser.getCommitProvisionalLoadEventsInRange(
+    findLoadInteractionRecords: function() {
+      var commits =
+        this.modelHelper.browserHelper.getCommitProvisionalLoadEventsInRange(
             this.model.bounds);
+      var frames = this.getAllFrameEvents();
 
-      var allFrameEvents = this.getAllFrameEvents();
-
-      allCommitProvisionalLoad.forEach(function(commitLoad, commitLoadIndex) {
-        allFrameEvents.some(function(frame) {
+      commits.forEach(function(commitLoad, commitLoadIndex) {
+        frames.some(function(frame) {
           if ((frame.start > commitLoad.start) &&
-              (frame.parentThread.parent.pid ==
-               commitLoad.parentThread.parent.pid)) {
+              (frame.parentContainer.parent.pid ==
+                  commitLoad.parentContainer.parent.pid)) {
             if (frame.commitProvisionalLoad) return true;
             console.log('commit first frame', commitLoad.start, frame.start,
                 frame.start - commitLoad.start);
@@ -244,53 +211,46 @@ tv.exportTo('tv.e.audits', function() {
         }
       });
 
-      var allLatencyEvents = this.getAllLatencyEvents();
-      var allFrameAndLatencyEvents = [];
-      allFrameAndLatencyEvents.push.apply(allFrameAndLatencyEvents,
-                                          allFrameEvents);
-      allFrameAndLatencyEvents.push.apply(allFrameAndLatencyEvents,
-                                          allLatencyEvents);
-
-      function mergeEventsIntoIR(title, colorId, events) {
-        var e0 = events[0];
-        var eN = events[events.length - 1];
-        var ir = new tv.c.trace_model.InteractionRecord(
-            title, colorId,
-            e0.start, eN.end - e0.start);
-        ir.events = events;
-        return ir;
-      }
-
-      allCommitProvisionalLoad.forEach(function(commitLoad, commitLoadIndex) {
-        if (!commitLoad.firstFrame) return;
-        var ir = new tv.c.trace_model.InteractionRecord(
-            'CommitToFirstFrame',
-            tv.b.ui.getColorIdForGeneralPurposeString('mt_loading'),
-            commitLoad.start,
-            commitLoad.firstFrame.end - commitLoad.start);
-        ir.events = [commitLoad, commitLoad.firstFrame];
-        if (!ir.args) ir.args = {};
-        ir.args.url = commitLoad.args.url;
-        rirs.push(ir);
+      var lirs = [];
+      commits.forEach(function(commitLoad, commitLoadIndex) {
+        if (!commitLoad.firstFrame)
+          return;
+        lirs.push(new tr.e.rail.LoadInteractionRecord(
+            commitLoad.start, commitLoad.firstFrame.end - commitLoad.start));
       });
+      return lirs;
+    },
 
-      var mergedLoadIRs = tv.e.audits.mergeEvents(
-          allLoadAndNetEvents, 300,
-          mergeEventsIntoIR.bind(
-              undefined, 'Loading/Net',
-              tv.b.ui.getColorIdForGeneralPurposeString('mt_loading')));
-      mergedLoadIRs.forEach(function(loadIR) {
-        if (!loadIR.args) loadIR.args = {};
-        loadIR.args.url = loadIR.events[0].args.URL;
+    findResponseInteractionRecords: function() {
+      return this.getAllGestures().map(function(gesture) {
+        return new tr.e.rail.ResponseInteractionRecord(
+            gesture.expectedStart, gesture.expectedEnd - gesture.expectedStart);
       });
-      rirs.push.apply(rirs, mergedLoadIRs);
+    },
 
-      var mergedFrameIRs = tv.e.audits.mergeEvents(
-          allFrameEvents, 150,
-          mergeEventsIntoIR.bind(
-              undefined, 'Rendering',
-              tv.b.ui.getColorIdForGeneralPurposeString('mt_rendering')));
-      rirs.push.apply(rirs, mergedFrameIRs);
+    findAnimationInteractionRecords: function() {
+      return this.getAllExpected60Ranges().map(function(fling) {
+        return new tr.e.rail.AnimationInteractionRecord(
+            fling.expectedStart, fling.expectedEnd - fling.expectedStart);
+      });
+    },
+
+    findIdleInteractionRecords: function(otherIRs) {
+      var emptyRanges = tr.e.audits.findEmptyRangesBetweenExplicitRanges(
+          otherIRs, this.model.bounds);
+      return emptyRanges.map(function(range) {
+        return new tr.e.rail.IdleInteractionRecord(
+            range.min, range.max - range.min);
+      });
+    },
+
+    findAllInteractionRecords: function() {
+      var rirs = [];
+      rirs.push.apply(rirs, this.findLoadInteractionRecords());
+      rirs.push.apply(rirs, this.findResponseInteractionRecords());
+      rirs.push.apply(rirs, this.findAnimationInteractionRecords());
+      // TODO(benjhayden): Reintroduce this without reintroducing #1020.
+      // rirs.push.apply(rirs, this.findIdleInteractionRecords(rirs));
       return rirs;
     }
   };

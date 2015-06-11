@@ -1,26 +1,26 @@
 <!DOCTYPE html>
 <!--
-// Copyright (c) 2013 The Chromium Authors. All rights reserved.
-// Use of this source code is governed by a BSD-style license that can be
-// found in the LICENSE file.
+Copyright (c) 2013 The Chromium Authors. All rights reserved.
+Use of this source code is governed by a BSD-style license that can be
+found in the LICENSE file.
 -->
 
 <link rel="stylesheet" href="/extras/system_stats/system_stats_snapshot_view.css">
 <link rel="import" href="/core/analysis/object_snapshot_view.html">
-<link rel="import" href="/core/analysis/util.html">
+<link rel="import" href="/base/units/util.html">
 
 <script>
 'use strict';
 
-tv.exportTo('tv.e.system_stats', function() {
+tr.exportTo('tr.e.system_stats', function() {
   /*
    * Displays a system stats snapshot in a human readable form. @constructor
    */
-  var SystemStatsSnapshotView = tv.b.ui.define('system-stats-snapshot-view',
-      tv.c.analysis.ObjectSnapshotView);
+  var SystemStatsSnapshotView = tr.b.ui.define('system-stats-snapshot-view',
+      tr.c.analysis.ObjectSnapshotView);
 
   SystemStatsSnapshotView.prototype = {
-    __proto__: tv.c.analysis.ObjectSnapshotView.prototype,
+    __proto__: tr.c.analysis.ObjectSnapshotView.prototype,
 
     decorate: function() {
       this.classList.add('system-stats-snapshot-view');
@@ -71,7 +71,7 @@ tv.exportTo('tv.e.system_stats', function() {
     }
   };
 
-  tv.c.analysis.ObjectSnapshotView.register(
+  tr.c.analysis.ObjectSnapshotView.register(
       SystemStatsSnapshotView,
       {typeName: 'base::TraceEventSystemStatsMonitor::SystemStats'});
 

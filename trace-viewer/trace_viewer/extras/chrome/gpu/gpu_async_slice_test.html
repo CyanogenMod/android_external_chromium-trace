@@ -6,14 +6,15 @@ found in the LICENSE file.
 -->
 
 <link rel="import" href="/extras/chrome/gpu/gpu.html">
-<link rel="import" href="/core/trace_model/trace_model.html">
 <link rel="import" href="/extras/importer/trace_event_importer.html">
+<link rel="import" href="/model/model.html">
+
 <script>
 'use strict';
 
-tv.b.unittest.testSuite(function() {
-  var AsyncSlice = tv.c.trace_model.AsyncSlice;
-  var GpuAsyncSlice = tv.e.gpu.GpuAsyncSlice;
+tr.b.unittest.testSuite(function() {
+  var AsyncSlice = tr.model.AsyncSlice;
+  var GpuAsyncSlice = tr.e.gpu.GpuAsyncSlice;
 
   test('construct', function() {
     assert.equal(AsyncSlice.getConstructor('disabled-by-default-gpu.device',
@@ -35,21 +36,6 @@ tv.b.unittest.testSuite(function() {
     assert.equal(s_service.viewSubGroupTitle, 'Service.test_channel2');
   });
 
-  test('color', function() {
-    var s1 = new GpuAsyncSlice('disabled-by-default-gpu.device', 'gpu1',
-                               7, 0, {'channel': 'test_channel1'});
-
-    var s2 = new GpuAsyncSlice('disabled-by-default-gpu.service', 'gpu2',
-                               7, 0, {'channel': 'test_channel2'});
-
-    var s3 = new GpuAsyncSlice('disabled-by-default-gpu.service', 'gpu2',
-                               7, 0, {'channel': 'test_channel1'});
-
-    assert.notEqual(s1.colorId, s2.colorId);
-    assert.notEqual(s2.colorId, s3.colorId);
-    assert.equal(s1.colorId, s3.colorId);
-  });
-
   test('import', function() {
     var events = [
       {name: 'trace1', args: {}, pid: 1, ts: 100,
@@ -65,7 +51,7 @@ tv.b.unittest.testSuite(function() {
       {name: 'trace3', args: {'channel': 'test_channel'}, pid: 1, ts: 200,
        cat: 'disabled-by-default-gpu.device', tid: 2, ph: 'e', id: 73}
     ];
-    var m = new tv.c.TraceModel(events);
+    var m = new tr.Model(events);
     var t2 = m.getOrCreateProcess(1).getOrCreateThread(2);
     assert.equal(t2.asyncSliceGroup.length, 3);
 
@@ -76,8 +62,6 @@ tv.b.unittest.testSuite(function() {
     assert.instanceOf(slice1, GpuAsyncSlice);
     assert.instanceOf(slice2, GpuAsyncSlice);
     assert.instanceOf(slice3, GpuAsyncSlice);
-
-    assert.equal(slice2.colorId, slice3.colorId);
 
     assert.equal(slice1.viewSubGroupTitle, 'trace1');
     assert.equal(slice2.viewSubGroupTitle, 'Service.test_channel');

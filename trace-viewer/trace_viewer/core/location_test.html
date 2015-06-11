@@ -9,29 +9,29 @@ found in the LICENSE file.
 <link rel="import" href="/core/test_utils.html">
 <link rel="import" href="/core/timeline_track_view.html">
 <link rel="import" href="/core/timeline_viewport.html">
-<link rel="import" href="/core/trace_model/trace_model.html">
+<link rel="import" href="/model/model.html">
 
 <script>
 'use strict';
 
-tv.b.unittest.testSuite(function() {
-  var Location = tv.c.Location;
-  var Model = tv.c.TraceModel;
+tr.b.unittest.testSuite(function() {
+  var Location = tr.c.Location;
+  var Model = tr.Model;
 
   test('locationObj', function() {
-    var model = new tv.c.TraceModel();
+    var model = new tr.Model();
     var process = model.getOrCreateProcess(123);
     var thread = process.getOrCreateThread(456);
 
     model.importTraces([], false, false, function() {
       thread.asyncSliceGroup.push(
-        tv.c.test_utils.newAsyncSliceNamed('a', 80, 20, thread, thread));
+        tr.c.test_utils.newAsyncSliceNamed('a', 80, 20, thread, thread));
       thread.asyncSliceGroup.push(
-        tv.c.test_utils.newAsyncSliceNamed('a', 85, 10, thread, thread));
+        tr.c.test_utils.newAsyncSliceNamed('a', 85, 10, thread, thread));
     });
 
-    var timeline = new tv.c.TimelineTrackView();
-    var vp = new tv.c.TimelineViewport(timeline);
+    var timeline = new tr.c.TimelineTrackView();
+    var vp = new tr.c.TimelineViewport(timeline);
     timeline.model = model;
     timeline.focusElement = timeline;
     timeline.tabIndex = 0;
@@ -51,7 +51,7 @@ tv.b.unittest.testSuite(function() {
       },
       addEventListener: function() {},
       canvas: {
-        offsetLeft: tv.c.constants.HEADING_WIDTH,
+        offsetLeft: tr.c.constants.HEADING_WIDTH,
         offsetTop: 0
       }
     };

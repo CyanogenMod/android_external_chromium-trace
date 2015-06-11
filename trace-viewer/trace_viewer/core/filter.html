@@ -8,13 +8,13 @@ found in the LICENSE file.
 <script>
 'use strict';
 
-tv.exportTo('tv.c', function() {
+tr.exportTo('tr.c', function() {
   function matchLower(value, pattern) {
     return value.toLowerCase().indexOf(pattern) !== -1;
   }
 
   /**
-   * @constructor The generic base class for filtering a TraceModel based on
+   * @constructor The generic base class for filtering a Model based on
    * various rules. The base class returns true for everything.
    */
   function Filter() { }

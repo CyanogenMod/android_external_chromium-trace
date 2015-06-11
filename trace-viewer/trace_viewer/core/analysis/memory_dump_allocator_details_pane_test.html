@@ -9,23 +9,23 @@ found in the LICENSE file.
 <link rel="import"
     href="/core/analysis/memory_dump_allocator_details_pane.html">
 <link rel="import" href="/core/test_utils.html">
-<link rel="import" href="/core/trace_model/attribute.html">
-<link rel="import" href="/core/trace_model/container_memory_dump.html">
-<link rel="import" href="/core/trace_model/memory_allocator_dump.html">
+<link rel="import" href="/model/attribute.html">
+<link rel="import" href="/model/container_memory_dump.html">
+<link rel="import" href="/model/memory_allocator_dump.html">
 
 <script>
 'use strict';
 
-tv.b.unittest.testSuite(function() {
-  var Selection = tv.c.Selection;
-  var MemoryAllocatorDump = tv.c.trace_model.MemoryAllocatorDump;
-  var ContainerMemoryDump = tv.c.trace_model.ContainerMemoryDump;
-  var ScalarAttribute = tv.c.trace_model.ScalarAttribute;
+tr.b.unittest.testSuite(function() {
+  var Selection = tr.c.Selection;
+  var MemoryAllocatorDump = tr.model.MemoryAllocatorDump;
+  var ContainerMemoryDump = tr.model.ContainerMemoryDump;
+  var ScalarAttribute = tr.model.ScalarAttribute;
 
   function createMemoryAllocatorDump() {
     var memoryDump = new ContainerMemoryDump(-10);
     var dump = new MemoryAllocatorDump(memoryDump, 'v8');
-    dump.addAttribute('outer_size',
+    dump.addAttribute('size',
         new ScalarAttribute('bytes', 1073741824) /* 1 GiB */);
     dump.addAttribute('inner_size',
         new ScalarAttribute('bytes', 2097152) /* 2 MiB */);
@@ -35,7 +35,7 @@ tv.b.unittest.testSuite(function() {
 
   test('instantiate_empty', function() {
     var viewEl = document.createElement(
-        'tv-c-memory-dump-allocator-details-pane');
+        'tr-c-a-memory-dump-allocator-details-pane');
     this.addHTMLOutput(viewEl);
   });
 
@@ -43,12 +43,12 @@ tv.b.unittest.testSuite(function() {
     var memoryAllocatorDump = createMemoryAllocatorDump();
 
     var viewEl = document.createElement(
-        'tv-c-memory-dump-allocator-details-pane');
+        'tr-c-a-memory-dump-allocator-details-pane');
     viewEl.memoryAllocatorDump = memoryAllocatorDump;
     this.addHTMLOutput(viewEl);
 
-    var table = tv.b.findDeepElementMatching(
-        viewEl, 'tracing-analysis-nested-table');
+    var table = tr.b.findDeepElementMatching(
+        viewEl, 'tr-b-ui-table');
 
     var rows = table.tableRows;
     var columns = table.tableColumns;

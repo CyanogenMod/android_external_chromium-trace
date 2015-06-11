@@ -6,34 +6,34 @@ found in the LICENSE file.
 -->
 
 <link rel="import" href="/extras/chrome/cc/picture.html">
-<link rel="import" href="/core/trace_model/object_instance.html">
+<link rel="import" href="/model/object_instance.html">
 
 <script>
 'use strict';
 
-tv.exportTo('tv.e.cc', function() {
-  var ObjectSnapshot = tv.c.trace_model.ObjectSnapshot;
+tr.exportTo('tr.e.cc', function() {
+  var ObjectSnapshot = tr.model.ObjectSnapshot;
 
   function DisplayItemList(skp64, layerRect) {
-    tv.e.cc.Picture.apply(this, arguments);
+    tr.e.cc.Picture.apply(this, arguments);
   }
 
   DisplayItemList.prototype = {
-    __proto__: tv.e.cc.Picture.prototype
+    __proto__: tr.e.cc.Picture.prototype
   };
 
   /**
    * @constructor
    */
   function DisplayItemListSnapshot() {
-    tv.e.cc.PictureSnapshot.apply(this, arguments);
+    tr.e.cc.PictureSnapshot.apply(this, arguments);
   }
 
   DisplayItemListSnapshot.prototype = {
-    __proto__: tv.e.cc.PictureSnapshot.prototype,
+    __proto__: tr.e.cc.PictureSnapshot.prototype,
 
     initialize: function() {
-      tv.e.cc.PictureSnapshot.prototype.initialize.call(this);
+      tr.e.cc.PictureSnapshot.prototype.initialize.call(this);
       this.displayItems_ = this.args.params.items;
     },
 

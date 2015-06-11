@@ -4,27 +4,16 @@ Copyright (c) 2015 The Chromium Authors. All rights reserved.
 Use of this source code is governed by a BSD-style license that can be
 found in the LICENSE file.
 -->
-<link rel="import" href="/core/trace_model/async_slice.html">
+<link rel="import" href="/model/async_slice.html">
 
 <script>
 'use strict';
 
-tv.exportTo('tv.e.gpu', function() {
-  var AsyncSlice = tv.c.trace_model.AsyncSlice;
-  var ChannelColors = new Object();
-  var ChannelColorID = 1;
+tr.exportTo('tr.e.gpu', function() {
+  var AsyncSlice = tr.model.AsyncSlice;
 
   function GpuAsyncSlice() {
     AsyncSlice.apply(this, arguments);
-
-    // Have service and device channels match color IDs.
-    if (this.args.channel) {
-      var channel = this.args.channel;
-      if (!ChannelColors[channel]) {
-        ChannelColors[channel] = ChannelColorID++;
-      }
-      this.colorId = ChannelColors[channel];
-    }
   }
 
   GpuAsyncSlice.prototype = {
