@@ -21,12 +21,12 @@
 {{SYSTRACE_TRACE_VIEWER_HTML}}
 <script language="javascript">
 document.addEventListener('DOMContentLoaded', function() {
-  var traceViewerEl = new tv.TraceViewer();
+  var traceViewerEl = new tr.TraceViewer();
   traceViewerEl.viewTitle = 'Android System Trace';
   var viewInsertionPt = document.body.querySelector('#trace-viewer-insertion-pt');
   viewInsertionPt.parentElement.replaceChild(traceViewerEl, viewInsertionPt);
 
-  var m = new tv.c.TraceModel();
+  var m = new tr.Model();
 
   var traceDataEls = document.body.querySelectorAll('.trace-data');
   var traces = [];
@@ -46,8 +46,8 @@ document.addEventListener('DOMContentLoaded', function() {
         traceViewerEl.timeline.focusElement = traceViewerEl;
     },
     function(err) {
-      var overlay = new tv.ui.Overlay();
-      overlay.textContent = tv.normalizeException(err).message;
+      var overlay = new tr.b.ui.Overlay();
+      overlay.textContent = tr.b.normalizeException(err).message;
       overlay.title = 'Import error';
       overlay.visible = true;
     });

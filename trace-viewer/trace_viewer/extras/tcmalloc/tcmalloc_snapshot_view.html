@@ -7,22 +7,22 @@ found in the LICENSE file.
 
 <link rel="stylesheet" href="/extras/tcmalloc/tcmalloc_snapshot_view.css">
 <link rel="import" href="/core/analysis/object_snapshot_view.html">
-<link rel="import" href="/core/analysis/util.html">
+<link rel="import" href="/base/units/util.html">
 
 <script>
 'use strict';
 
-tv.exportTo('tv.e.tcmalloc', function() {
+tr.exportTo('tr.e.tcmalloc', function() {
   /*
    * Displays a heap memory snapshot in a human readable form.
    * @constructor
    */
-  var TcmallocSnapshotView = tv.b.ui.define(
+  var TcmallocSnapshotView = tr.b.ui.define(
       'heap-snapshot-view',
-      tv.c.analysis.ObjectSnapshotView);
+      tr.c.analysis.ObjectSnapshotView);
 
   TcmallocSnapshotView.prototype = {
-    __proto__: tv.c.analysis.ObjectSnapshotView.prototype,
+    __proto__: tr.c.analysis.ObjectSnapshotView.prototype,
 
     decorate: function() {
       this.classList.add('tcmalloc-snapshot-view');
@@ -165,7 +165,7 @@ tv.exportTo('tv.e.tcmalloc', function() {
     }
   };
 
-  tv.c.analysis.ObjectSnapshotView.register(
+  tr.c.analysis.ObjectSnapshotView.register(
       TcmallocSnapshotView,
       {typeName: 'memory::Heap'});
 

@@ -7,17 +7,17 @@ found in the LICENSE file.
 
 <link rel="import" href="/base/guid.html">
 <link rel="import" href="/core/selection.html">
-<link rel="import" href="/core/trace_model/selection_state.html">
+<link rel="import" href="/model/selection_state.html">
 
 <script>
 'use strict';
 
-tv.exportTo('tv.c', function() {
-  var Selection = tv.c.Selection;
-  var SelectionState = tv.c.trace_model.SelectionState;
+tr.exportTo('tr.c', function() {
+  var Selection = tr.c.Selection;
+  var SelectionState = tr.model.SelectionState;
 
   function BrushingState() {
-    this.guid_ = tv.b.GUID.allocate();
+    this.guid_ = tr.b.GUID.allocate();
     this.selection_ = new Selection();
     this.findMatches_ = new Selection();
     this.analysisViewRelatedEvents_ = new Selection();

@@ -6,7 +6,7 @@ found in the LICENSE file.
 -->
 
 <link rel="import" href="/base/base.html">
-<link rel="import" href="/core/analysis/size_span.html">
+<link rel="import" href="/base/units/size_in_bytes_span.html">
 
 <script>
 'use strict';
@@ -14,14 +14,15 @@ found in the LICENSE file.
 /**
  * @fileoverview Helper code for memory dump sub-views.
  */
-tv.exportTo('tv.c.analysis', function() {
+tr.exportTo('tr.c.analysis', function() {
 
   /**
    * A table builder column for displaying memory dump data.
    *
    * @constructor
    */
-  function MemoryColumn(title, units, cellGetter) {
+  function MemoryColumn(name, title, units, cellGetter) {
+    this.name = name;
     this.title = title;
     this.units = units;
     this.cell = cellGetter;
@@ -34,7 +35,7 @@ tv.exportTo('tv.c.analysis', function() {
       if (row === undefined)
         return;
       var attrCells = row[cellKey];
-      tv.b.iterItems(attrCells, function(attrName, attrCell) {
+      tr.b.iterItems(attrCells, function(attrName, attrCell) {
         if (attrCell === undefined)
           return;
         var attrValue = attrCell.attr;
@@ -50,7 +51,7 @@ tv.exportTo('tv.c.analysis', function() {
         }
         if (existingTraits.constructor !== attrValue.constructor ||
             existingTraits.units !== attrValue.units) {
-          existingTraits.constructor = tv.c.trace_model.UnknownAttribute;
+          existingTraits.constructor = tr.model.UnknownAttribute;
           existingTraits.units = undefined;
         }
       });
@@ -59,32 +60,93 @@ tv.exportTo('tv.c.analysis', function() {
     };
     rows.forEach(gatherTraits);
 
-    var titleBuilder = opt_titleBuilder || tv.b.identity;
+    var titleBuilder = opt_titleBuilder || tr.b.identity;
 
     var columns = [];
-    tv.b.iterItems(columnTraits, function(columnName, columnTraits) {
+    tr.b.iterItems(columnTraits, function(columnName, columnTraits) {
       var cellGetter = fieldGetter(cellKey, columnName);
       var title = titleBuilder(columnName);
       columns.push(MemoryColumn.fromAttributeTraits(
-          title, columnTraits, cellGetter));
+          columnName, title, columnTraits, cellGetter));
     });
 
     return columns;
   };
 
-  MemoryColumn.fromAttributeTraits = function(title, traits, cellGetter) {
+  MemoryColumn.fromAttributeTraits = function(name, title, traits, cellGetter) {
     var constructor;
-    if (traits.constructor === tv.c.trace_model.ScalarAttribute)
+    if (traits.constructor === tr.model.ScalarAttribute)
       constructor = ScalarMemoryColumn;
     else
       constructor = MemoryColumn;
-    return new constructor(title, traits.units, cellGetter);
+    return new constructor(name, title, traits.units, cellGetter);
   };
 
   MemoryColumn.spaceEqually = function(columns) {
     var columnWidth = (100 / columns.length).toFixed(3) + '%';
     columns.forEach(function(column) {
       column.width = columnWidth;
+    });
+  };
+
+  /**
+   * Sort a list of memory columns according to a list of importance rules.
+   * This function modifies the original array and doesn't return anything.
+   *
+   * The list of importance rules contains objects with mandatory 'importance'
+   * numeric fields and optional 'condition' string or regex fields. Example:
+   *
+   *   var importanceRules = [
+   *     {
+   *       condition: 'page_size',
+   *       importance: 8
+   *     },
+   *     {
+   *       condition: /size/,
+   *       importance: 10
+   *     },
+   *     {
+   *       // No condition: matches all columns.
+   *       importance: 9
+   *     }
+   *   ];
+   *
+   * The importance of a column is determined by the first rule whose condition
+   * matches the column's name, so the rules above will sort a generic list of
+   * columns into three groups as follows:
+   *
+   *      [most important, left in the resulting table]
+   *   1. columns whose name contains 'size' excluding 'page_size' because it
+   *      would have already matched the first rule (Note that string matches
+   *      must be exact so a column named 'page_size2' would not match the
+   *      first rule and would therefore belong to this group).
+   *   2. columns whose name does not contain 'size'.
+   *   3. columns whose name is 'page_size'.
+   *      [least important, right in the resulting table]
+   *
+   * where the order within each group is unmodified (stable sort).
+   */
+  MemoryColumn.sortByImportance = function(columns, importanceRules) {
+    var positions = columns.map(function(column, srcIndex) {
+      return {
+        importance: column.getImportance(importanceRules),
+        srcIndex: srcIndex,
+        column: column
+      };
+    });
+
+    positions.sort(function(a, b) {
+      // Keep existing order of columns if they have the same importance
+      // (stable sort).
+      if (a.importance === b.importance)
+        return a.srcIndex - b.srcIndex;
+
+      // Sort columns in descending order of importance.
+      return b.importance - a.importance;
+    });
+
+    positions.forEach(function(position, dstIndex) {
+      columns[dstIndex] = position.column;
     });
   };
 
@@ -123,14 +185,46 @@ tv.exportTo('tv.c.analysis', function() {
       var strA = String(attrA.value);
       var strB = String(attrB.value);
       return strA.localeCompare(strB);
+    },
+
+    getImportance: function(importanceRules) {
+      if (importanceRules.length === 0)
+        return 0;
+
+      // Find the first matching rule.
+      for (var i = 0; i < importanceRules.length; i++) {
+        var importanceRule = importanceRules[i];
+        if (this.matchesNameCondition(importanceRule.condition))
+          return importanceRule.importance;
+      }
+
+      // No matching rule. Return lower importance than all rules.
+      var minImportance = importanceRules[0].importance;
+      for (var i = 1; i < importanceRules.length; i++) {
+        minImportance = Math.min(minImportance, importanceRules[i].importance);
+      }
+      return minImportance - 1;
+    },
+
+    matchesNameCondition: function(condition) {
+      // Rules without conditions match all columns.
+      if (condition === undefined)
+        return true;
+
+      // String conditions must match the column name exactly.
+      if (typeof(condition) === 'string')
+        return this.name === condition;
+
+      // If the condition is not a string, assume it is a RegExp.
+      return condition.test(this.name);
     }
   };
 
   /**
    * @constructor
    */
-  function ScalarMemoryColumn(title, units, cellGetter) {
-    MemoryColumn.call(this, title, units, cellGetter);
+  function ScalarMemoryColumn(name, title, units, cellGetter) {
+    MemoryColumn.call(this, name, title, units, cellGetter);
   }
 
   ScalarMemoryColumn.prototype = {
@@ -138,7 +232,7 @@ tv.exportTo('tv.c.analysis', function() {
 
     formatDefinedAttribute: function(attr) {
       if (this.units === 'bytes') {
-        var sizeEl = document.createElement('tv-c-a-size-span');
+        var sizeEl = document.createElement('tr-b-u-size-in-bytes-span');
         sizeEl.numBytes = attr.value;
         return sizeEl;
       }
@@ -158,7 +252,7 @@ tv.exportTo('tv.c.analysis', function() {
   }
 
   function fieldGetter(/* fields */) {
-    var fields = tv.b.asArray(arguments);
+    var fields = tr.b.asArray(arguments);
     return function(row) {
       var value = row;
       for (var i = 0; i < fields.length; i++)
@@ -167,11 +261,27 @@ tv.exportTo('tv.c.analysis', function() {
     };
   }
 
+  /** Limit for the number of sub-rows for recursive table row expansion. */
+  var RECURSIVE_EXPANSION_MAX_SUB_ROW_COUNT = 10;
+
+  function expandTableRowsRecursively(table) {
+    function expandRowRecursively(row) {
+      if (row.subRows === undefined || row.subRows.length === 0)
+        return;
+      if (row.subRows.length > RECURSIVE_EXPANSION_MAX_SUB_ROW_COUNT)
+        return;
+      table.setExpandedForTableRow(row, true);
+      row.subRows.forEach(expandRowRecursively);
+    }
+    table.tableRows.forEach(expandRowRecursively);
+  }
+
   return {
     MemoryColumn: MemoryColumn,
     ScalarMemoryColumn: ScalarMemoryColumn,
     MemoryCell: MemoryCell,
-    fieldGetter: fieldGetter
+    fieldGetter: fieldGetter,
+    expandTableRowsRecursively: expandTableRowsRecursively
   };
 });
 </script>

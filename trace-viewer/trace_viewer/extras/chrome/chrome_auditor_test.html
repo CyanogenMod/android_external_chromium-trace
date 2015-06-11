@@ -7,15 +7,15 @@ found in the LICENSE file.
 
 <link rel="import" href="/base/ui/color_scheme.html">
 <link rel="import" href="/extras/chrome/chrome_auditor.html">
-<link rel="import" href="/core/trace_model/trace_model.html">
 <link rel="import" href="/core/test_utils.html">
+<link rel="import" href="/model/model.html">
 
 <script>
 'use strict';
 
-tv.b.unittest.testSuite(function() {
+tr.b.unittest.testSuite(function() {
   function createModelWithChromeAuditor(customizeModelCallback) {
-    return tv.c.test_utils.newModelWithAuditor(function(m) {
+    return tr.c.test_utils.newModelWithAuditor(function(m) {
       m.browserProcess = m.getOrCreateProcess(1);
       m.browserMain = m.browserProcess.getOrCreateThread(2);
       m.browserMain.name = 'CrBrowserMain';
@@ -28,22 +28,22 @@ tv.b.unittest.testSuite(function() {
       m.renderer1Compositor.name = 'Compositor';
 
       customizeModelCallback(m);
-    }, tv.e.audits.ChromeAuditor);
+    }, tr.e.audits.ChromeAuditor);
   }
 
   function newInputLatencyEvent(tsStart, tsEnd, opt_args) {
-    var e = new tv.c.trace_model.AsyncSlice(
+    var e = new tr.model.AsyncSlice(
         'benchmark', 'InputLatency',
-        tv.b.ui.getColorIdForGeneralPurposeString('InputLatency'),
+        tr.b.ui.getColorIdForGeneralPurposeString('InputLatency'),
         tsStart, opt_args);
     e.duration = tsEnd - tsStart;
     return e;
   }
 
   function newImplRenderingStatsEvent(ts, opt_args) {
-    var e = new tv.c.trace_model.ThreadSlice(
+    var e = new tr.model.ThreadSlice(
         'benchmark', 'BenchmarkInstrumentation::ImplThreadRenderingStats',
-        tv.b.ui.getColorIdForGeneralPurposeString('x'),
+        tr.b.ui.getColorIdForGeneralPurposeString('x'),
         ts, opt_args, 0);
     return e;
   }
@@ -59,15 +59,15 @@ tv.b.unittest.testSuite(function() {
       bAsyncSlices.push(newInputLatencyEvent(183, 216));
 
       var rm1Slices = m.renderer1Compositor.sliceGroup;
-      rm1Slices.pushSlices(newImplRenderingStatsEvent(113));
-      rm1Slices.pushSlices(newImplRenderingStatsEvent(130));
-      rm1Slices.pushSlices(newImplRenderingStatsEvent(147));
-      rm1Slices.pushSlices(newImplRenderingStatsEvent(163));
-      rm1Slices.pushSlices(newImplRenderingStatsEvent(180));
-      rm1Slices.pushSlices(newImplRenderingStatsEvent(197));
-      rm1Slices.pushSlices(newImplRenderingStatsEvent(213));
-      rm1Slices.pushSlices(newImplRenderingStatsEvent(230));
-      rm1Slices.pushSlices(newImplRenderingStatsEvent(247));
+      rm1Slices.pushSlice(newImplRenderingStatsEvent(113));
+      rm1Slices.pushSlice(newImplRenderingStatsEvent(130));
+      rm1Slices.pushSlice(newImplRenderingStatsEvent(147));
+      rm1Slices.pushSlice(newImplRenderingStatsEvent(163));
+      rm1Slices.pushSlice(newImplRenderingStatsEvent(180));
+      rm1Slices.pushSlice(newImplRenderingStatsEvent(197));
+      rm1Slices.pushSlice(newImplRenderingStatsEvent(213));
+      rm1Slices.pushSlice(newImplRenderingStatsEvent(230));
+      rm1Slices.pushSlice(newImplRenderingStatsEvent(247));
     });
 
   });

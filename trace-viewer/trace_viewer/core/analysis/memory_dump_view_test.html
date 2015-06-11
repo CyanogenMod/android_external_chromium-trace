@@ -13,40 +13,50 @@ found in the LICENSE file.
 <script>
 'use strict';
 
-tv.b.unittest.testSuite(function() {
-  var createTestProcessMemoryDumps = tv.c.analysis.createTestProcessMemoryDumps;
+tr.b.unittest.testSuite(function() {
+  var createTestProcessMemoryDumps = tr.c.analysis.createTestProcessMemoryDumps;
 
   test('instantiate', function() {
     var processMemoryDumps = createTestProcessMemoryDumps();
 
-    var viewEl = document.createElement('tv-c-memory-dump-view');
+    var viewEl = document.createElement('tr-c-a-memory-dump-view');
     viewEl.processMemoryDumps = processMemoryDumps;
     this.addHTMLOutput(viewEl);
 
-    var overviewPane = tv.b.findDeepElementMatching(
-        viewEl, 'tv-c-memory-dump-overview-pane');
-    var overviewTable = tv.b.findDeepElementMatching(
-        overviewPane, 'tracing-analysis-nested-table');
-    assert.lengthOf(overviewTable.tableRows, 2);
+    var overviewPane = tr.b.findDeepElementMatching(
+        viewEl, 'tr-c-a-memory-dump-overview-pane');
+    var overviewTable = tr.b.findDeepElementMatching(
+        overviewPane, 'tr-b-ui-table');
+    assert.lengthOf(overviewTable.tableRows, 3);
+    assert.lengthOf(overviewTable.tableColumns, 9);
 
-    // Select totals dump of first process.
+    // Select totals of first process.
     overviewTable.selectedTableRow = overviewTable.tableRows[0];
     overviewTable.selectedColumnIndex = 1;
+    var detailsPane = tr.b.findDeepElementMatching(
+        viewEl, 'tr-c-a-memory-dump-vm-regions-details-pane');
+    assert.strictEqual(
+        detailsPane.vmRegions, processMemoryDumps[0].mostRecentVmRegions);
 
-    // Select mmaps dump of first process.
+    // Select PSS of first process.
     overviewTable.selectedColumnIndex = 2;
+    var detailsPane = tr.b.findDeepElementMatching(
+        viewEl, 'tr-c-a-memory-dump-vm-regions-details-pane');
+    assert.strictEqual(
+        detailsPane.vmRegions, processMemoryDumps[0].mostRecentVmRegions);
 
-    // Select mmaps dump of second process.
-    overviewTable.selectedTableRow = overviewTable.tableRows[1];
+    // Select PSS of third process.
+    overviewTable.selectedTableRow = overviewTable.tableRows[2];
+    var detailsPane = tr.b.findDeepElementMatching(
+        viewEl, 'tr-c-a-memory-dump-vm-regions-details-pane');
+    assert.isUndefined(detailsPane);
 
     // Select oilpan dump of second process.
-    overviewTable.selectedColumnIndex = 3;
-
-    // There should now be an allocator details pane containing contain a table.
-    var detailsPane = tv.b.findDeepElementMatching(
-        viewEl, 'tv-c-memory-dump-allocator-details-pane');
-    var detailsTable = tv.b.findDeepElementMatching(
-        detailsPane, 'tracing-analysis-nested-table');
+    overviewTable.selectedColumnIndex = 7;
+    var detailsPane = tr.b.findDeepElementMatching(
+        viewEl, 'tr-c-a-memory-dump-allocator-details-pane');
+    var detailsTable = tr.b.findDeepElementMatching(
+        detailsPane, 'tr-b-ui-table');
     assert.lengthOf(detailsTable.tableRows, 1);
   });
 });

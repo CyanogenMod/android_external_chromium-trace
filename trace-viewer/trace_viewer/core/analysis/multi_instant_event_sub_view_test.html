@@ -8,23 +8,22 @@ found in the LICENSE file.
 <link rel="import" href="/core/analysis/analysis_view.html">
 <link rel="import" href="/core/test_utils.html">
 <link rel="import" href="/core/selection.html">
-<link rel="import" href="/core/trace_model/trace_model.html">
+<link rel="import" href="/model/model.html">
 
 <script>
 'use strict';
 
-tv.b.unittest.testSuite(function() {
-  var Model = tv.c.TraceModel;
-  var Selection = tv.c.Selection;
-  var trace_model = tv.c.trace_model;
+tr.b.unittest.testSuite(function() {
+  var Model = tr.Model;
+  var Selection = tr.c.Selection;
 
   test('analyzeSelectionWithSingleEvent', function() {
     var model = new Model();
     var p52 = model.getOrCreateProcess(52);
     var t53 = p52.getOrCreateThread(53);
 
-    var ie1 = new trace_model.ProcessInstantEvent('cat', 'title', 7, 10, {});
-    var ie2 = new trace_model.ProcessInstantEvent('cat', 'title', 7, 20, {});
+    var ie1 = new tr.model.ProcessInstantEvent('cat', 'title', 7, 10, {});
+    var ie2 = new tr.model.ProcessInstantEvent('cat', 'title', 7, 20, {});
     p52.instantEvents.push(ie1);
     p52.instantEvents.push(ie2);
 
@@ -34,7 +33,7 @@ tv.b.unittest.testSuite(function() {
     selection.push(ie2);
     assert.equal(selection.length, 2);
 
-    var subView = document.createElement('tv-c-multi-instant-event-sub-view');
+    var subView = document.createElement('tr-c-a-multi-instant-event-sub-view');
     subView.selection = selection;
 
     this.addHTMLOutput(subView);

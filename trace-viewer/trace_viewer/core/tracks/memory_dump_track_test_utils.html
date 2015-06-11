@@ -5,12 +5,12 @@ Use of this source code is governed by a BSD-style license that can be
 found in the LICENSE file.
 -->
 
-<link rel="import" href="/core/trace_model/attribute.html">
-<link rel="import" href="/core/trace_model/global_memory_dump.html">
-<link rel="import" href="/core/trace_model/memory_allocator_dump.html">
-<link rel="import" href="/core/trace_model/process_memory_dump.html">
-<link rel="import" href="/core/trace_model/selection_state.html">
-<link rel="import" href="/core/trace_model/trace_model.html">
+<link rel="import" href="/model/attribute.html">
+<link rel="import" href="/model/global_memory_dump.html">
+<link rel="import" href="/model/memory_allocator_dump.html">
+<link rel="import" href="/model/process_memory_dump.html">
+<link rel="import" href="/model/selection_state.html">
+<link rel="import" href="/model/model.html">
 
 <script>
 'use strict';
@@ -18,15 +18,14 @@ found in the LICENSE file.
 /**
  * @fileoverview Helper functions for memory dump track tests.
  */
-tv.exportTo('tv.c.tracks', function() {
-  var ProcessMemoryDump = tv.c.trace_model.ProcessMemoryDump;
-  var GlobalMemoryDump = tv.c.trace_model.GlobalMemoryDump;
-  var MemoryAllocatorDump = tv.c.trace_model.MemoryAllocatorDump;
-  var VMRegion = tv.c.trace_model.VMRegion;
-  var VMRegionByteStats = tv.c.trace_model.VMRegionByteStats;
-  var TraceModel = tv.c.TraceModel;
-  var ScalarAttribute = tv.c.trace_model.ScalarAttribute;
-  var SelectionState = tv.c.trace_model.SelectionState;
+tr.exportTo('tr.c.tracks', function() {
+  var ProcessMemoryDump = tr.model.ProcessMemoryDump;
+  var GlobalMemoryDump = tr.model.GlobalMemoryDump;
+  var MemoryAllocatorDump = tr.model.MemoryAllocatorDump;
+  var VMRegion = tr.model.VMRegion;
+  var VMRegionByteStats = tr.model.VMRegionByteStats;
+  var ScalarAttribute = tr.model.ScalarAttribute;
+  var SelectionState = tr.model.SelectionState;
 
   function createVMRegions(pssValues) {
     return pssValues.map(function(pssValue, i) {
@@ -35,20 +34,20 @@ tv.exportTo('tv.c.tracks', function() {
         sizeInBytes: 1000,
         protectionFlags: VMRegion.PROTECTION_FLAG_READ,
         mappedFile: '[stack' + i + ']',
-        byteStats: VMRegionByteStats.fromDict({
-          privateResident: pssValue / 3,
-          sharedResident: pssValue * 3,
+        byteStats: {
+          privateDirtyResident: pssValue / 3,
+          swapped: pssValue * 3,
           proportionalResident: pssValue
-        })
+        }
       });
     });
   }
 
   function createAllocatorDumps(memoryDump, dumpSizes) {
     var allocatorDumps = [];
-    tv.b.iterItems(dumpSizes, function(allocatorName, size) {
+    tr.b.iterItems(dumpSizes, function(allocatorName, size) {
       var dump = new MemoryAllocatorDump(memoryDump, allocatorName);
-      dump.addAttribute('outer_size', new ScalarAttribute('bytes', size));
+      dump.addAttribute('size', new ScalarAttribute('bytes', size));
       allocatorDumps.push(dump);
     });
     return allocatorDumps;
@@ -72,7 +71,7 @@ tv.exportTo('tv.c.tracks', function() {
     var maybeDumpSizes = function(dumpSizes) {
       return withAllocatorDumps ? dumpSizes : undefined;
     };
-    return tv.c.test_utils.newModel(function(model) {
+    return tr.c.test_utils.newModel(function(model) {
       // Construct a model with three processes.
       var pa = model.getOrCreateProcess(3);
       var pb = model.getOrCreateProcess(6);
@@ -90,7 +89,7 @@ tv.exportTo('tv.c.tracks', function() {
       addProcessMemoryDump(gmd2, pb, 4.99, maybePssValues([100, 50]),
           maybeDumpSizes({v8: 512}));
       addProcessMemoryDump(gmd2, pc, 5.12, undefined,
-          maybeDumpSizes({oilpan: 128, v8: 256}));
+          maybeDumpSizes({oilpan: 128, v8: 256, tracing: 65536}));
 
       var gmd3 = new GlobalMemoryDump(model, 15);
       model.globalMemoryDumps.push(gmd3);

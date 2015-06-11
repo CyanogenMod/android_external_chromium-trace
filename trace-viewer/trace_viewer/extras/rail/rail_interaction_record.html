@@ -7,8 +7,8 @@ found in the LICENSE file.
 <link rel="import" href="/base/base.html">
 <link rel="import" href="/base/statistics.html">
 <link rel="import" href="/core/auditor.html">
-<link rel="import" href="/core/trace_model/trace_model.html">
-<link rel="import" href="/extras/audits/utils.html">
+<link rel="import" href="/model/model.html">
+<link rel="import" href="/base/range_utils.html">
 <link rel="import" href="/extras/chrome/chrome_model_helper.html">
 
 <script>
@@ -17,13 +17,17 @@ found in the LICENSE file.
 /**
  * @fileoverview Base class for trace data Auditors.
  */
-tv.exportTo('tv.e.audits', function() {
-  function RAILInteractionRecord(title, colorId, start, duration) {
-    tv.c.trace_model.InteractionRecord.call(this,
-                                            title, colorId, start, duration);
+tr.exportTo('tr.e.rail', function() {
+
+  function RAILInteractionRecord(title, railTypeName, start, duration) {
+    var colorId = tr.b.ui.getColorIdForReservedName(railTypeName);
+    this.railTypeName_ = railTypeName;
+    tr.model.InteractionRecord.call(this,
+                                    title, colorId, start, duration);
   }
+
   RAILInteractionRecord.prototype = {
-    __proto__: tv.c.trace_model.InteractionRecord.prototype,
+    __proto__: tr.model.InteractionRecord.prototype,
 
     updateArgs: function() {
       var args = {};
@@ -31,7 +35,7 @@ tv.exportTo('tv.e.audits', function() {
       var layoutSlices = this.associatedEvents.filter(function(event) {
         return event.title === 'FrameView::layout';
       });
-      var timeInLayout = tv.b.Statistics.sum(layoutSlices, function(event) {
+      var timeInLayout = tr.b.Statistics.sum(layoutSlices, function(event) {
         return event.duration;
       });
 
@@ -43,13 +47,48 @@ tv.exportTo('tv.e.audits', function() {
     },
 
     get railTypeName() {
-      // At some point, we will subclass RAILInteractionRecord, at which point
-      // this will be overridden by the subclasses.
-      return this.title;
+      return this.railTypeName_;
     },
 
+    /**
+     * Returns the overall rail score, from 0 to 1.
+     *
+     * RAILScore for an interaction merges the user's pain with the
+     * efficiency, in order to create a perception-oriented measure
+     * of how users percieve speed during this interaction.
+     *
+     *  0 means a bad user experience.
+     *  1 means a perfect user experience.
+     */
     get railScore() {
-      return this.duration;
+      // TODO(benjhayden, nduca) Better scoring algorithm.
+      var happiness = 1 - this.normalizedUserPain;
+      return this.normalizedEfficiency * happiness;
+    },
+
+    /**
+     * Measures the pain the user experienced, from 0 to 1.
+     *
+     * A user performs an interaction with an expectation in mind.
+     * When we exceed their expectations, we get zero pain.
+     * When we meet their expectations, we get zero pain.
+     * As we exceed their expectations, pain goes up. Maximum pain
+     * is 1.0, aka "Switch to FireFox".
+     */
+    get normalizedUserPain() {
+      throw new Error('Not implemented');
+    },
+
+    /**
+     * Measures the efficiency of the interaction from 0 to 1.
+     *
+     * Efficiency is a notion of how well we used the machine's limited
+     * resources in service of this interaction. If we used it perfectly,
+     * we would get a 1.0. If we used everything that there was to use ---
+     * power, memory, cpu, then we'd get a zero.
+     */
+    get normalizedEfficiency() {
+      throw new Error('Not implemented');
     }
   };
 

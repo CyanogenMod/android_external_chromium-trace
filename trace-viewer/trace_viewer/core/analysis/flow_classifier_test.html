@@ -9,13 +9,13 @@ found in the LICENSE file.
 <link rel="import" href="/core/test_utils.html">
 <link rel="import" href="/core/selection.html">
 <link rel="import" href="/base/iteration_helpers.html">
-<link rel="import" href="/core/trace_model/trace_model.html">
+<link rel="import" href="/model/model.html">
 
 <script>
 'use strict';
 
-tv.b.unittest.testSuite(function() {
-  var newFlowEventEx = tv.c.test_utils.newFlowEventEx;
+tr.b.unittest.testSuite(function() {
+  var newFlowEventEx = tr.c.test_utils.newFlowEventEx;
 
   test('basic', function() {
     var a = newFlowEventEx({
@@ -27,7 +27,7 @@ tv.b.unittest.testSuite(function() {
     var d = newFlowEventEx({
         'title': 'd', start: 30, end: 35 });
 
-    var fc = new tv.c.analysis.FlowClassifier();
+    var fc = new tr.c.analysis.FlowClassifier();
     fc.addInFlow(a);
 
     fc.addInFlow(b);
@@ -39,7 +39,7 @@ tv.b.unittest.testSuite(function() {
     fc.addOutFlow(d);
 
     function asSortedArray(selection) {
-      var events = tv.b.asArray(selection);
+      var events = tr.b.asArray(selection);
       events.sort(function(a, b) {
         return a.guid - b.guid;
       });

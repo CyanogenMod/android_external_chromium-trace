@@ -73,7 +73,6 @@ class TraceViewerProject(project_module.Project):
 
   def __init__(self, *args, **kwargs):
     super(TraceViewerProject, self).__init__(*args, **kwargs)
-
     self.source_paths.append(self.src_path)
     self.source_paths.append(self.trace_viewer_third_party_path)
     self.source_paths.append(self.jszip_path)

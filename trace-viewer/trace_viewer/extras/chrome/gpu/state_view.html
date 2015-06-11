@@ -7,22 +7,22 @@ found in the LICENSE file.
 
 <link rel="stylesheet" href="/extras/chrome/gpu/state_view.css">
 <link rel="import" href="/core/analysis/object_snapshot_view.html">
-<link rel="import" href="/core/analysis/util.html">
+<link rel="import" href="/base/units/util.html">
 
 <script>
 'use strict';
 
-tv.exportTo('tv.e.gpu', function() {
+tr.exportTo('tr.e.gpu', function() {
   /*
    * Displays a GPU state snapshot in a human readable form.
    * @constructor
    */
-  var StateSnapshotView = tv.b.ui.define(
+  var StateSnapshotView = tr.b.ui.define(
       'gpu-state-snapshot-view',
-      tv.c.analysis.ObjectSnapshotView);
+      tr.c.analysis.ObjectSnapshotView);
 
   StateSnapshotView.prototype = {
-    __proto__: tv.c.analysis.ObjectSnapshotView.prototype,
+    __proto__: tr.c.analysis.ObjectSnapshotView.prototype,
 
     decorate: function() {
       this.classList.add('gpu-state-snapshot-view');
@@ -37,7 +37,7 @@ tv.exportTo('tv.e.gpu', function() {
       }
     }
   };
-  tv.c.analysis.ObjectSnapshotView.register(
+  tr.c.analysis.ObjectSnapshotView.register(
     StateSnapshotView,
     {typeName: 'gpu::State'});
 
