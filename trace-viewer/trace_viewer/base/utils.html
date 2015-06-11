@@ -9,7 +9,7 @@ found in the LICENSE file.
 <script>
 'use strict';
 
-tv.exportTo('tv.b', function() {
+tr.exportTo('tr.b', function() {
   /**
    * Adds a {@code getInstance} static method that always return the same
    * instance object.
@@ -71,20 +71,7 @@ tv.exportTo('tv.b', function() {
       position[1] += node.offsetTop;
       node = node.offsetParent;
     }
-    return tv.b.Rect.fromXYWH(position[0], position[1], size[0], size[1]);
-  }
-
-  function clamp(x, lo, hi) {
-    return Math.min(Math.max(x, lo), hi);
-  }
-
-  function lerp(percentage, lo, hi) {
-    var range = hi - lo;
-    return lo + percentage * range;
-  }
-
-  function deg2rad(deg) {
-    return (Math.PI * deg) / 180.0;
+    return tr.b.Rect.fromXYWH(position[0], position[1], size[0], size[1]);
   }
 
   function scrollIntoViewIfNeeded(el) {
@@ -124,10 +111,6 @@ tv.exportTo('tv.b', function() {
     windowRectForElement: windowRectForElement,
 
     scrollIntoViewIfNeeded: scrollIntoViewIfNeeded,
-
-    clamp: clamp,
-    lerp: lerp,
-    deg2rad: deg2rad,
 
     getUsingPath: getUsingPath
   };

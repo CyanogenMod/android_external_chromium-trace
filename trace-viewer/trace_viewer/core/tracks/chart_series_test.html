@@ -8,7 +8,7 @@ found in the LICENSE file.
 <link rel="import" href="/core/selection.html">
 <link rel="import" href="/core/test_utils.html">
 <link rel="import" href="/core/timeline_display_transform.html">
-<link rel="import" href="/core/trace_model/event.html">
+<link rel="import" href="/model/event.html">
 <link rel="import" href="/core/tracks/chart_axis.html">
 <link rel="import" href="/core/tracks/chart_point.html">
 <link rel="import" href="/core/tracks/chart_series.html">
@@ -17,15 +17,15 @@ found in the LICENSE file.
 <script>
 'use strict';
 
-tv.b.unittest.testSuite(function() {
-  var Selection = tv.c.Selection;
-  var TimelineDisplayTransform = tv.c.TimelineDisplayTransform;
-  var Event = tv.c.trace_model.Event;
-  var ChartAxis = tv.c.tracks.ChartAxis;
-  var ChartPoint = tv.c.tracks.ChartPoint;
-  var ChartSeries = tv.c.tracks.ChartSeries;
-  var ChartTransform = tv.c.tracks.ChartTransform;
-  var ChartSeriesType = tv.c.tracks.ChartSeriesType;
+tr.b.unittest.testSuite(function() {
+  var Selection = tr.c.Selection;
+  var TimelineDisplayTransform = tr.c.TimelineDisplayTransform;
+  var Event = tr.model.Event;
+  var ChartAxis = tr.c.tracks.ChartAxis;
+  var ChartPoint = tr.c.tracks.ChartPoint;
+  var ChartSeries = tr.c.tracks.ChartSeries;
+  var ChartTransform = tr.c.tracks.ChartTransform;
+  var ChartSeriesType = tr.c.tracks.ChartSeriesType;
 
   var CANVAS_WIDTH = 800;
   var CANVAS_HEIGHT = 80;
@@ -35,8 +35,12 @@ tv.b.unittest.testSuite(function() {
     for (var i = 0; i < 60; i++) {
       var event = new Event();
       event.index = i;
-      points.push(new ChartPoint(event, i - 30,
-          Math.sin(i * Math.PI / 15)));
+      var phase = i * Math.PI / 15;
+      var value = Math.sin(phase);
+      var peakIndex = Math.floor((phase + Math.PI / 2) / (2 * Math.PI));
+      var base = peakIndex % 2 === 0 ? undefined : -1 + value / 1.5;
+      var point = new ChartPoint(event, i - 30, value, base);
+      points.push(point);
     }
     var axis = new ChartAxis(-1, 1);
     return new ChartSeries(points, axis, renderingConfig);

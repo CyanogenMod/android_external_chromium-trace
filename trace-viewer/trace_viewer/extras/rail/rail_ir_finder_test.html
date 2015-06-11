@@ -1,0 +1,110 @@
+<!DOCTYPE html>
+<!--
+Copyright (c) 2015 The Chromium Authors. All rights reserved.
+Use of this source code is governed by a BSD-style license that can be
+found in the LICENSE file.
+-->
+
+<link rel="import" href="/extras/rail/rail_ir_finder.html">
+<link rel="import" href="/extras/chrome/chrome_test_utils.html">
+<link rel="import" href="/extras/importer/trace_event_importer.html">
+<link rel="import" href="/core/test_utils.html">
+<link rel="import" href="/model/model.html">
+
+<script>
+'use strict';
+
+tr.b.unittest.testSuite(function() {
+  var audits = tr.e.audits;
+
+  function newRIRF(customizeModelCallback) {
+    var model = tr.e.audits.newChromeModel(customizeModelCallback);
+    var modelHelper = new tr.e.audits.ChromeModelHelper(model);
+    return new tr.e.rail.RAILIRFinder(model, modelHelper);
+  }
+
+  test('twoScrollsNoFling', function() {
+    var rirf = newRIRF(function(model) {
+      audits.addGeneralLatencyInfoEvent(model, {start: 0, end: 100});
+      audits.addGeneralLatencyInfoEvent(model, {start: 16, end: 100});
+      audits.addGeneralLatencyInfoEvent(model, {start: 32, end: 100});
+
+      audits.addGeneralLatencyInfoEvent(model, {start: 300, end: 330});
+      audits.addGeneralLatencyInfoEvent(model, {start: 316, end: 346});
+      audits.addGeneralLatencyInfoEvent(model, {start: 332, end: 368});
+    });
+
+    var gestures = rirf.getAllGestures();
+    assert.equal(gestures.length, 2);
+
+    assert.equal(gestures[0].expectedStart, 0);
+    assert.equal(gestures[0].expectedEnd, 32);
+
+    assert.equal(gestures[1].expectedStart, 300);
+    assert.equal(gestures[1].expectedEnd, 332);
+  });
+
+  test('flingThatIsntstopped', function() {
+    var rirf = newRIRF(function(model) {
+      audits.addGeneralLatencyInfoEvent(model, {start: 0, end: 100});
+      audits.addGeneralLatencyInfoEvent(model, {start: 16, end: 100});
+      audits.addFlingStartLatencyInfoEvent(model, {start: 32, end: 100,
+                                                   flingStart: 38});
+      audits.addFlingAnimationEvent(model, {start: 38, end: 200});
+    });
+
+    var e60ranges = rirf.getAllExpected60Ranges();
+    assert.equal(e60ranges.length, 1);
+
+    var e60r = e60ranges[0];
+    assert.equal(e60r.expectedStart, 32);
+    assert.equal(e60r.expectedEnd, 200);
+  });
+
+  test('flingThatIsStopped', function() {
+    var rirf = newRIRF(function(model) {
+      audits.addGeneralLatencyInfoEvent(model, {start: 0, end: 100});
+      audits.addGeneralLatencyInfoEvent(model, {start: 16, end: 100});
+      audits.addFlingStartLatencyInfoEvent(model, {start: 32, end: 100,
+                                                   flingStart: 38});
+      audits.addFlingAnimationEvent(model, {start: 38, end: 200});
+      audits.addFlingCancelLatencyInfoEvent(model, {start: 100, end: 150,
+                                                    flingCancel: 105});
+
+    });
+
+    assert.equal(6, rirf.getAllLatencyEvents().length);
+
+    var e60ranges = rirf.getAllExpected60Ranges();
+    assert.equal(e60ranges.length, 1);
+
+    var e60r = e60ranges[0];
+    assert.equal(e60r.expectedStart, 32);
+    assert.equal(e60r.expectedEnd, 100);
+  });
+
+  test('FrameEvent', function() {
+    var rirf = newRIRF(function(model) {
+      audits.addGeneralLatencyInfoEvent(model, {start: 0, end: 100});
+      audits.addFrameEvent(model, {start: 1, end: 10});
+    });
+    assert.equal(1, rirf.getAllFrameEvents().length);
+  });
+
+  test('Load', function() {
+    var rirf = newRIRF(function(model) {
+      audits.addProvisionalLoadEvent(model, {start: 1, end: 10});
+      audits.addFrameEvent(model, {start: 11, end: 20});
+    });
+    var loads = rirf.modelHelper.browserHelper.
+      getCommitProvisionalLoadEventsInRange(
+        rirf.model.bounds);
+    assert.equal(1, loads.length);
+    var irs = rirf.findAllInteractionRecords();
+    assert.equal(1, irs.length);
+    assert.equal('Load', irs[0].title);
+    assert.equal(1, irs[0].start);
+    assert.equal(20, irs[0].end);
+  });
+});
+</script>

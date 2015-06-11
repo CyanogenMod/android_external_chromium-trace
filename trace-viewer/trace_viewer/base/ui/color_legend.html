@@ -10,13 +10,18 @@ found in the LICENSE file.
 <!--
 @fileoverview A component used to display a label preceded by a small square
 filled with the label's associated color (as determined by
-tv.b.ui.getColorIdForGeneralPurposeString).
+tr.b.ui.getColorIdForGeneralPurposeString).
 -->
-<polymer-element name="tv-b-color-legend">
+<polymer-element name="tr-b-ui-color-legend">
   <template>
     <style>
     :host {
       display: inline-block;
+    }
+
+    #square {
+      font-size: 150%;  /* Make the square bigger. */
+      line-height: 0%;  /* Prevent the square from increasing legend height. */
     }
     </style>
     <span id="square"></span>
@@ -27,8 +32,8 @@ tv.b.ui.getColorIdForGeneralPurposeString).
 
   Polymer({
     ready: function() {
-      var blackLargeSquareCharCode = 11035;
-      this.$.square.innerText = String.fromCharCode(blackLargeSquareCharCode);
+      var blackSquareCharCode = 9632;
+      this.$.square.innerText = String.fromCharCode(blackSquareCharCode);
       this.label_ = undefined;
     },
 
@@ -45,9 +50,9 @@ tv.b.ui.getColorIdForGeneralPurposeString).
         return;
       }
 
-      var paletteRaw = tv.b.ui.getRawColorPalette();
-      var colorId = tv.b.ui.getColorIdForGeneralPurposeString(this.label_);
-      var color = tv.b.ui.colorToRGBString(paletteRaw[colorId]);
+      var paletteRaw = tr.b.ui.getRawColorPalette();
+      var colorId = tr.b.ui.getColorIdForGeneralPurposeString(this.label_);
+      var color = tr.b.ui.colorToRGBString(paletteRaw[colorId]);
       this.$.square.style.color = color;
       this.$.label.innerText = this.label_;
     }

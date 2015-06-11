@@ -6,12 +6,12 @@ found in the LICENSE file.
 -->
 
 <link rel="import" href="/core/test_utils.html">
-<link rel="import" href="/extras/importer/linux_perf/linux_perf_importer.html">
+<link rel="import" href="/extras/importer/linux_perf/ftrace_importer.html">
 
 <script>
 'use strict';
 
-tv.b.unittest.testSuite(function() { // @suppress longLineCheck
+tr.b.unittest.testSuite(function() { // @suppress longLineCheck
   test('clock', function() {
     var lines = [
       'cfinteractive-23    [000] d..2  8113.233768: clock_set_rate: ' +
@@ -45,7 +45,7 @@ tv.b.unittest.testSuite(function() { // @suppress longLineCheck
           'fout_apll state=500000000 cpu_id=0'
     ];
 
-    var m = new tv.c.TraceModel(lines.join('\n'), false);
+    var m = new tr.Model(lines.join('\n'), false);
     assert.isFalse(m.hasImportWarnings);
 
     var counters = m.getAllCounters();

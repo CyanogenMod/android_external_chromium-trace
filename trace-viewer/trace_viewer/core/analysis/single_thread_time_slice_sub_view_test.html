@@ -5,14 +5,14 @@ Use of this source code is governed by a BSD-style license that can be
 found in the LICENSE file.
 -->
 
-<link rel="import" href="/core/trace_model/trace_model.html">
 <link rel="import" href="/core/analysis/single_thread_time_slice_sub_view.html">
-<link rel="import" href="/extras/importer/linux_perf/linux_perf_importer.html">
+<link rel="import" href="/extras/importer/linux_perf/ftrace_importer.html">
+<link rel="import" href="/model/model.html">
 
 <script>
 'use strict';
 
-tv.b.unittest.testSuite(function() { // @suppress longLineCheck
+tr.b.unittest.testSuite(function() { // @suppress longLineCheck
   function createBasicModel() {
     var lines = [
       'Android.launcher-584   [001] d..3 12622.506890: sched_switch: prev_comm=Android.launcher prev_pid=584 prev_prio=120 prev_state=R+ ==> next_comm=Binder_1 next_pid=217 next_prio=120', // @suppress longLineCheck
@@ -24,7 +24,7 @@ tv.b.unittest.testSuite(function() { // @suppress longLineCheck
       '       Binder_1-217   [001] d..3 12622.507253: sched_switch: prev_comm=Binder_1 prev_pid=217 prev_prio=120 prev_state=S ==> next_comm=Android.launcher next_pid=584 next_prio=120' // @suppress longLineCheck
     ];
 
-    return new tv.c.TraceModel(lines.join('\n'), false);
+    return new tr.Model(lines.join('\n'), false);
   }
 
   test('runningSlice', function() {
@@ -39,8 +39,9 @@ tv.b.unittest.testSuite(function() { // @suppress longLineCheck
 
     var thread = m.findAllThreadsNamed('Binder_1')[0];
 
-    var view = document.createElement('tv-c-single-thread-time-slice-sub-view');
-    var selection = new tv.c.Selection();
+    var view = document.createElement(
+        'tr-c-a-single-thread-time-slice-sub-view');
+    var selection = new tr.c.Selection();
     selection.push(thread.timeSlices[0]);
     view.selection = selection;
     this.addHTMLOutput(view);
@@ -52,7 +53,7 @@ tv.b.unittest.testSuite(function() { // @suppress longLineCheck
       assert.equal(e.selection[0], binderSlice);
       didSelectionChangeHappen = true;
     });
-    view.shadowRoot.querySelector('tv-c-analysis-link').click();
+    view.shadowRoot.querySelector('tr-c-a-analysis-link').click();
     assert.isTrue(didSelectionChangeHappen);
   });
 
@@ -68,8 +69,9 @@ tv.b.unittest.testSuite(function() { // @suppress longLineCheck
 
     var thread = m.findAllThreadsNamed('Binder_1')[0];
 
-    var view = document.createElement('tv-c-single-thread-time-slice-sub-view');
-    var selection = new tv.c.Selection();
+    var view = document.createElement(
+        'tr-c-a-single-thread-time-slice-sub-view');
+    var selection = new tr.c.Selection();
     selection.push(thread.timeSlices[1]);
     view.selection = selection;
     this.addHTMLOutput(view);
@@ -81,7 +83,7 @@ tv.b.unittest.testSuite(function() { // @suppress longLineCheck
       assert.equal(e.selection[0], launcherSlice);
       didSelectionChangeHappen = true;
     });
-    view.shadowRoot.querySelector('tv-c-analysis-link').click();
+    view.shadowRoot.querySelector('tr-c-a-analysis-link').click();
     assert.isTrue(didSelectionChangeHappen);
   });
 });

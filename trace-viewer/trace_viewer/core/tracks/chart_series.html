@@ -7,16 +7,16 @@ found in the LICENSE file.
 
 <link rel="import" href="/base/range.html">
 <link rel="import" href="/core/event_presenter.html">
-<link rel="import" href="/core/trace_model/proxy_selectable_item.html">
-<link rel="import" href="/core/trace_model/selection_state.html">
+<link rel="import" href="/model/proxy_selectable_item.html">
+<link rel="import" href="/model/selection_state.html">
 <link rel="import" href="/core/tracks/heading_track.html">
 
 <script>
 'use strict';
 
-tv.exportTo('tv.c.tracks', function() {
-  var EventPresenter = tv.c.EventPresenter;
-  var SelectionState = tv.c.trace_model.SelectionState;
+tr.exportTo('tr.c.tracks', function() {
+  var EventPresenter = tr.c.EventPresenter;
+  var SelectionState = tr.model.SelectionState;
 
   /**
    * The type of a chart series.
@@ -94,7 +94,7 @@ tv.exportTo('tv.c.tracks', function() {
       var config = opt_renderingConfig || {};
 
       // Store all configuration flags as private properties.
-      tv.b.iterItems(DEFAULT_RENDERING_CONFIG, function(key, defaultValue) {
+      tr.b.iterItems(DEFAULT_RENDERING_CONFIG, function(key, defaultValue) {
         var value = config[key];
         if (value === undefined)
           value = defaultValue;
@@ -107,7 +107,7 @@ tv.exportTo('tv.c.tracks', function() {
     },
 
     get range() {
-      var range = new tv.b.Range();
+      var range = new tr.b.Range();
       this.points.forEach(function(point) {
         range.addValue(point.y);
       }, this);
@@ -150,11 +150,11 @@ tv.exportTo('tv.c.tracks', function() {
       var rightTimestamp = transform.rightTimestamp + extraPixels;
 
       // Find the index of the first and last (partially) visible points.
-      var firstVisibleIndex = tv.b.findLowIndexInSortedArray(
+      var firstVisibleIndex = tr.b.findLowIndexInSortedArray(
           this.points,
           function(point) { return point.x; },
           leftTimestamp);
-      var lastVisibleIndex = tv.b.findLowIndexInSortedArray(
+      var lastVisibleIndex = tr.b.findLowIndexInSortedArray(
           this.points,
           function(point) { return point.x; },
           rightTimestamp);
@@ -209,7 +209,7 @@ tv.exportTo('tv.c.tracks', function() {
             break;
           }
           var density = visibleIndexRange / visibleViewXRange;
-          var clampedDensity = tv.b.clamp(density,
+          var clampedDensity = tr.b.clamp(density,
               this.unselectedPointDensityOpaque_,
               this.unselectedPointDensityTransparent_);
           var densityRange = this.unselectedPointDensityTransparent_ -
@@ -245,13 +245,14 @@ tv.exportTo('tv.c.tracks', function() {
       // position is independent of the surrounding dots.
       var previousViewX = undefined;
       var previousViewY = undefined;
+      var previousViewYBase = undefined;
       var lastSelectionState = undefined;
+      var baseSteps = undefined;
       var startIndex = Math.max(firstVisibleIndex - 1, 0);
 
       for (var i = startIndex; i < this.points.length; i++) {
         var currentPoint = this.points[i];
         var currentViewX = transform.worldXToViewX(currentPoint.x);
-        var currentViewY = transform.worldYToViewY(currentPoint.y);
 
         // Stop drawing the points once we are to the right of the visible area.
         if (currentViewX > rightViewX) {
@@ -292,6 +293,14 @@ tv.exportTo('tv.c.tracks', function() {
           currentViewX = previousViewX + viewSkipDistance;
         }
 
+        var currentViewY = Math.round(transform.worldYToViewY(currentPoint.y));
+        var currentViewYBase;
+        if (currentPoint.yBase === undefined) {
+          currentViewYBase = transform.outerBottomViewY;
+        } else {
+          currentViewYBase = Math.round(
+              transform.worldYToViewY(currentPoint.yBase));
+        }
         var currentSelectionState = currentPoint.selectionState;
 
         // Actually draw the given component of the point.
@@ -341,11 +350,20 @@ tv.exportTo('tv.c.tracks', function() {
             if (previousViewX !== undefined)
               ctx.lineTo(currentViewX, previousViewY);
 
-            // Change background color and start a new polygon when the
-            // selection state changes (and at the beginning) .
+            // Finish the bottom part of the backgound polygon, change
+            // background color and start a new polygon when the selection state
+            // changes (and at the beginning).
             if (currentSelectionState !== lastSelectionState) {
               if (previousViewX !== undefined) {
-                ctx.lineTo(currentViewX, transform.outerBottomViewY);
+                var previousBaseStepViewX = currentViewX;
+                for (var j = baseSteps.length - 1; j >= 0; j--) {
+                  var baseStep = baseSteps[j];
+                  var baseStepViewX = baseStep.viewX;
+                  var baseStepViewY = baseStep.viewY;
+                  ctx.lineTo(previousBaseStepViewX, baseStepViewY);
+                  ctx.lineTo(baseStepViewX, baseStepViewY);
+                  previousBaseStepViewX = baseStepViewX;
+                }
                 ctx.closePath();
                 ctx.fill();
               }
@@ -353,7 +371,13 @@ tv.exportTo('tv.c.tracks', function() {
               ctx.fillStyle = EventPresenter.getCounterSeriesColor(
                   this.colorId_, currentSelectionState,
                   this.backgroundOpacity_);
-              ctx.moveTo(currentViewX, transform.outerBottomViewY);
+              ctx.moveTo(currentViewX, currentViewYBase);
+              baseSteps = [];
+            }
+
+            if (currentViewYBase !== previousViewYBase ||
+                currentSelectionState !== lastSelectionState) {
+              baseSteps.push({viewX: currentViewX, viewY: currentViewYBase});
             }
 
             // Move to the current point coordinate.
@@ -366,6 +390,7 @@ tv.exportTo('tv.c.tracks', function() {
 
         previousViewX = currentViewX;
         previousViewY = currentViewY;
+        previousViewYBase = currentViewYBase;
         lastSelectionState = currentSelectionState;
       }
 
@@ -383,7 +408,15 @@ tv.exportTo('tv.c.tracks', function() {
             break;
 
           case ChartSeriesComponent.BACKGROUND:
-            ctx.lineTo(previousViewX, transform.outerBottomViewY);
+            var previousBaseStepViewX = currentViewX;
+            for (var j = baseSteps.length - 1; j >= 0; j--) {
+              var baseStep = baseSteps[j];
+              var baseStepViewX = baseStep.viewX;
+              var baseStepViewY = baseStep.viewY;
+              ctx.lineTo(previousBaseStepViewX, baseStepViewY);
+              ctx.lineTo(baseStepViewX, baseStepViewY);
+              previousBaseStepViewX = baseStepViewX;
+            }
             ctx.closePath();
             ctx.fill();
             break;
@@ -409,7 +442,7 @@ tv.exportTo('tv.c.tracks', function() {
         point.addToSelection(selection);
       }
 
-      tv.b.iterateOverIntersectingIntervals(
+      tr.b.iterateOverIntersectingIntervals(
           this.points,
           function(point) { return point.x },
           getPointWidth,
@@ -422,7 +455,7 @@ tv.exportTo('tv.c.tracks', function() {
       if (this.points === undefined)
         return false;
 
-      var index = tv.b.findFirstIndexInArray(this.points, function(point) {
+      var index = tr.b.findFirstIndexInArray(this.points, function(point) {
         return point.modelItem === event;
       }, this);
       if (index === -1)
@@ -441,7 +474,7 @@ tv.exportTo('tv.c.tracks', function() {
       if (this.points === undefined)
         return;
 
-      var item = tv.b.findClosestElementInSortedArray(
+      var item = tr.b.findClosestElementInSortedArray(
           this.points,
           function(point) { return point.x },
           worldX,

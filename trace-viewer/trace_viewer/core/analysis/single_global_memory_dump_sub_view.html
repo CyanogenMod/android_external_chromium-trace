@@ -6,45 +6,26 @@ found in the LICENSE file.
 -->
 
 <link rel="import" href="/core/analysis/analysis_sub_view.html">
-<link rel="import" href="/core/analysis/memory_dump_overview_pane.html">
-<link rel="import" href="/core/analysis/memory_dump_details_pane.html">
+<link rel="import" href="/core/analysis/memory_dump_view.html">
 
-<polymer-element name="tv-c-single-global-memory-dump-sub-view"
-    extends="tracing-analysis-sub-view">
+<polymer-element name="tr-c-a-single-global-memory-dump-sub-view"
+    extends="tr-c-a-sub-view">
   <template>
-    <style>
-    :host {
-      display: flex;
-      flex-direction: column;
-    }
-    </style>
-    <tv-c-memory-dump-overview-pane id="overview_pane">
-    </tv-c-memory-dump-overview-pane>
-    <tv-c-memory-dump-details-pane id="details_pane">
-    </tv-c-memory-dump-details-pane>
+    <tr-c-a-memory-dump-view id="memory_dump_view">
+    </tr-c-a-memory-dump-view>
   </template>
   <script>
   'use strict';
 
   Polymer({
-    created: function() {
-      this.currentSelection_ = undefined;
-    },
-
-    ready: function() {
-      this.$.overview_pane.addEventListener(
-          'selected-memory-dump-changed', function(e) {
-        this.$.details_pane.memoryDump =
-            this.$.overview_pane.selectedMemoryDump;
-      }.bind(this));
-    },
-
     set selection(selection) {
       if (selection.length !== 1)
         throw new Error('Only supports a single global memory dump');
-      if (!(selection[0] instanceof tv.c.trace_model.GlobalMemoryDump))
+      if (!(selection[0] instanceof tr.model.GlobalMemoryDump))
         throw new Error('Only supports global memory dumps');
-      this.setSelectionWithoutErrorChecks(selection);
+      this.currentSelection_ = selection;
+      this.$.memory_dump_view.processMemoryDumps = tr.b.dictionaryValues(
+          selection[0].processMemoryDumps);
     },
 
     get selection() {
@@ -53,13 +34,6 @@ found in the LICENSE file.
 
     get requiresTallView() {
       return true;
-    },
-
-    setSelectionWithoutErrorChecks: function(selection) {
-      this.currentSelection_ = selection;
-      this.$.overview_pane.processMemoryDumps = tv.b.dictionaryValues(
-          selection[0].processMemoryDumps);
-      this.$.details_pane.memoryDump = undefined;
     }
   });
   </script>

@@ -5,11 +5,12 @@ Use of this source code is governed by a BSD-style license that can be
 found in the LICENSE file.
 -->
 
-<link rel="import" href="/core/trace_model/counter.html">
-<link rel="import" href="/core/trace_model/slice.html">
-<link rel="import" href="/core/trace_model/slice_group.html">
-<link rel="import" href="/core/trace_model/stack_frame.html">
-<link rel="import" href="/core/trace_model/thread_time_slice.html">
+<link rel="import" href="/model/counter.html">
+<link rel="import" href="/model/model.html">
+<link rel="import" href="/model/slice.html">
+<link rel="import" href="/model/slice_group.html">
+<link rel="import" href="/model/stack_frame.html">
+<link rel="import" href="/model/thread_time_slice.html">
 
 <script>
 'use strict';
@@ -17,14 +18,58 @@ found in the LICENSE file.
 /**
  * @fileoverview Helper functions for use in tracing tests.
  */
-tv.exportTo('tv.c.test_utils', function() {
+tr.exportTo('tr.c.test_utils', function() {
+  function _getStartAndCpuDurationFromDict(
+      options, required, startFieldName, durationFieldName, endFieldName) {
+
+    if (options[startFieldName] === undefined) {
+      if (required)
+        throw new Error('Too little information.');
+      else
+        return {start: undefined, duration: undefined};
+    }
+    if (options[durationFieldName] !== undefined &&
+        options[endFieldName] !== undefined) {
+      throw new Error('Too much information.');
+    }
+    if (options[durationFieldName] === undefined &&
+        options[endFieldName] === undefined) {
+      if (required)
+        throw new Error('Too little information.');
+      else
+        return {start: undefined, duration: undefined};
+    }
+
+    var duration;
+    if (options[durationFieldName] !== undefined) {
+      duration = options[durationFieldName];
+    } else {
+      duration = options[endFieldName] - options[startFieldName];
+    }
+
+    return {
+      start: options[startFieldName],
+      duration: duration
+    };
+  }
+
+  function getStartAndDurationFromDict(options) {
+    return _getStartAndCpuDurationFromDict(
+        options, true, 'start', 'duration', 'end');
+  }
+
+  function maybeGetCpuStartAndCpuDurationFromDict(options) {
+    return _getStartAndCpuDurationFromDict(
+        options, false, 'cpuStart', 'cpuDuration', 'cpuEnd');
+  }
+
   function newAsyncSlice(start, duration, startThread, endThread) {
     return newAsyncSliceNamed('a', start, duration, startThread, endThread);
   }
 
   function newAsyncSliceNamed(name, start, duration, startThread, endThread) {
     var asyncSliceConstructor =
-        tv.c.trace_model.AsyncSlice.getConstructor('', name);
+        tr.model.AsyncSlice.getConstructor('', name);
 
     var s = new asyncSliceConstructor('', name, 0, start);
     s.duration = duration;
@@ -34,24 +79,23 @@ tv.exportTo('tv.c.test_utils', function() {
   }
 
   function newAsyncSliceEx(options) {
-    if (options.start === undefined)
-      throw new Error('Too little info');
+    var sd = getStartAndDurationFromDict(options);
 
     var cat = options.cat ? options.cat : 'cat';
     var title = options.title ? options.title : 'a';
 
-    var colorId = options.colorId ? options.colorId : 0;
-
-    var duration;
-    if (options.duration !== undefined) {
-      if (options.end !== undefined) throw new Error('TMI');
-      duration = options.duration;
-    } else if (options.end !== undefined) {
-      if (options.duration !== undefined) throw new Error('TMI');
-      duration = options.end - options.start;
+    var colorId;
+    if (options.colorId) {
+      if (options.colorId === 'random') {
+        colorId = Math.floor(Math.random() *
+                   tr.b.ui.paletteProperties.numGeneralPurposeColorIds);
+      } else {
+        colorId = options.colorId;
+      }
     } else {
-      throw new Error('Too little info');
+      colorId = 0;
     }
+
 
     var isTopLevel;
     if (options.isTopLevel !== undefined)
@@ -60,18 +104,21 @@ tv.exportTo('tv.c.test_utils', function() {
       isTopLevel = false;
 
     var asyncSliceConstructor =
-        tv.c.trace_model.AsyncSlice.getConstructor(cat, title);
+        tr.model.AsyncSlice.getConstructor(cat, title);
 
     var slice = new asyncSliceConstructor(
         cat,
         title,
         colorId,
-        options.start,
+        sd.start,
         options.args ? options.args : {},
-        duration, isTopLevel);
+        sd.duration, isTopLevel);
 
     if (options.id)
       slice.id = options.id;
+    else
+      slice.id = tr.b.GUID.allocate();
+
     if (options.startStackFrame)
       slice.startStackFrame = options.startStackFrame;
     if (options.endStackFrame)
@@ -90,17 +137,17 @@ tv.exportTo('tv.c.test_utils', function() {
   }
 
   function newCounterNamed(parent, name) {
-    var s = new tv.c.trace_model.Counter(parent, name, null, name);
+    var s = new tr.model.Counter(parent, name, null, name);
     return s;
   }
 
   function newCounterCategory(parent, category, name) {
-    var s = new tv.c.trace_model.Counter(parent, name, category, name);
+    var s = new tr.model.Counter(parent, name, category, name);
     return s;
   }
 
   function newCounterSeries() {
-    var s = new tv.c.trace_model.CounterSeries('a', 0);
+    var s = new tr.model.CounterSeries('a', 0);
     return s;
   }
 
@@ -112,31 +159,22 @@ tv.exportTo('tv.c.test_utils', function() {
 
     var colorId = options.colorId ? options.colorId : 0;
 
-    var duration;
-    if (options.duration !== undefined) {
-      if (options.end !== undefined) throw new Error('TMI');
-      duration = options.duration;
-    } else if (options.end !== undefined) {
-      if (options.duration !== undefined) throw new Error('TMI');
-      duration = options.end - options.start;
-    } else {
-      throw new Error('Too little info');
-    }
+    var sd = getStartAndDurationFromDict(options);
 
     var id;
     if (options.id !== undefined)
       id = options.id;
     else
-      id = tv.b.GUID.allocate();
+      id = tr.b.GUID.allocate();
 
-    var event = new tv.c.trace_model.FlowEvent(
+    var event = new tr.model.FlowEvent(
         options.cat ? options.cat : 'cat',
         id,
         title,
         colorId,
-        options.start,
+        sd.start,
         options.args ? options.args : {},
-        duration);
+        sd.duration);
 
     if (options.startStackFrame)
       event.startStackFrame = options.startStackFrame;
@@ -160,12 +198,12 @@ tv.exportTo('tv.c.test_utils', function() {
   }
 
   function newSliceNamed(name, start, duration) {
-    var s = new tv.c.trace_model.Slice('', name, 0, start, {}, duration);
+    var s = new tr.model.Slice('', name, 0, start, {}, duration);
     return s;
   }
 
   function newThreadSlice(thread, state, start, duration, opt_cpu) {
-    var s = new tv.c.trace_model.ThreadTimeSlice(
+    var s = new tr.model.ThreadTimeSlice(
         thread, state, 'cat', start, {}, duration);
     if (opt_cpu)
       s.cpuOnWhichThreadWasRunning = opt_cpu;
@@ -179,7 +217,7 @@ tv.exportTo('tv.c.test_utils', function() {
     else
       model = undefined;
     var sf = newStackTrace(model, category, frameNames);
-    var s = new tv.c.trace_model.Sample(undefined, thread,
+    var s = new tr.model.Sample(undefined, thread,
                                         sampleName, start,
                                         sf,
                                         1);
@@ -187,56 +225,34 @@ tv.exportTo('tv.c.test_utils', function() {
   }
 
   function newSliceCategory(category, name, start, duration) {
-    var s = new tv.c.trace_model.Slice(
+    var s = new tr.model.Slice(
         category, name, 0, start, {}, duration);
     return s;
   }
 
   function newSliceEx(options) {
-    if (options.start === undefined)
-      throw new Error('Too little info');
+    var sd = getStartAndDurationFromDict(options);
 
     var title = options.title ? options.title : 'a';
 
     var colorId = options.colorId ? options.colorId : 0;
 
-    var duration;
-    if (options.duration !== undefined) {
-      if (options.end !== undefined) throw new Error('TMI');
-      duration = options.duration;
-    } else if (options.end !== undefined) {
-      if (options.duration !== undefined) throw new Error('TMI');
-      duration = options.end - options.start;
-    } else {
-      throw new Error('Too little info');
-    }
-
-    var cpuStart = options.cpuStart;
-    var cpuDuration;
-    if (options.cpuDuration !== undefined) {
-      if (cpuStart !== undefined) throw new Error('Too little info');
-      if (options.cpuEnd !== undefined) throw new Error('TMI');
-      cpuDuration = options.cpuDuration;
-    } else if (options.cpuEnd !== undefined) {
-      if (cpuStart === undefined) throw new Error('Too little info');
-      if (options.cpuDuration !== undefined) throw new Error('TMI');
-      cpuDuration = options.cpuEnd - cpuStart;
-    }
+    var cpuSD = maybeGetCpuStartAndCpuDurationFromDict(options);
 
     var type;
     if (options.type)
       type = options.type;
     else
-      type = tv.c.trace_model.Slice;
+      type = tr.model.Slice;
 
     var slice = new type(
         options.cat ? options.cat : 'cat',
         title,
         colorId,
-        options.start,
+        sd.start,
         options.args ? options.args : {},
-        duration,
-        cpuStart, cpuDuration);
+        sd.duration,
+        cpuSD.start, cpuSD.duration);
 
 
     return slice;
@@ -245,7 +261,7 @@ tv.exportTo('tv.c.test_utils', function() {
   function newStackTrace(model, category, titles) {
     var frame = undefined;
     for (var i = 0; i < titles.length; i++) {
-      frame = new tv.c.trace_model.StackFrame(frame, tv.b.GUID.allocate(),
+      frame = new tr.model.StackFrame(frame, tr.b.GUID.allocate(),
                                                  category, titles[i], 7);
       if (model)
         model.addStackFrame(frame);
@@ -254,7 +270,7 @@ tv.exportTo('tv.c.test_utils', function() {
   }
 
   function findSliceNamed(slices, name) {
-    if (slices instanceof tv.c.trace_model.SliceGroup)
+    if (slices instanceof tr.model.SliceGroup)
       slices = slices.slices;
     for (var i = 0; i < slices.length; i++)
       if (slices[i].title == name)
@@ -263,23 +279,25 @@ tv.exportTo('tv.c.test_utils', function() {
   }
 
   function newModel(customizeModelCallback) {
-    var io = new tv.c.ImportOptions();
+    var io = new tr.ImportOptions();
     io.customizeModelCallback = customizeModelCallback;
     io.shiftWorldToZero = false;
     io.pruneEmptyContainers = false;
-    return new tv.c.TraceModel([], io);
+    io.auditorConstructors = [];
+    return new tr.Model([], io);
   }
 
   function newModelWithAuditor(customizeModelCallback, auditor) {
-    var io = new tv.c.ImportOptions();
+    var io = new tr.ImportOptions();
     io.customizeModelCallback = customizeModelCallback;
     io.shiftWorldToZero = false;
     io.pruneEmptyContainers = false;
     io.auditorConstructors = [auditor];
-    return new tv.c.TraceModel([], io);
+    return new tr.Model([], io);
   }
 
   return {
+    getStartAndDurationFromDict: getStartAndDurationFromDict,
     newAsyncSlice: newAsyncSlice,
     newAsyncSliceNamed: newAsyncSliceNamed,
     newAsyncSliceEx: newAsyncSliceEx,

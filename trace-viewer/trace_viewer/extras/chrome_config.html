@@ -27,19 +27,22 @@ The chrome config is heavily used:
 <link rel="import" href="/extras/importer/trace2html_importer.html">
 
 <!-- Lots of chrome-specific extras -->
-<link rel="import" href="/extras/cc/cc.html">
+<link rel="import" href="/extras/chrome/cc/cc.html">
 <link rel="import" href="/extras/tcmalloc/tcmalloc.html">
 <link rel="import" href="/extras/net/net.html">
 <link rel="import" href="/extras/system_stats/system_stats.html">
-<link rel="import" href="/extras/gpu/gpu.html">
+<link rel="import" href="/extras/chrome/gpu/gpu.html">
 
 <!-- Side panels are chrome-only for now -->
-<link rel="import" href="/extras/side_panel/input_latency.html">
-<link rel="import" href="/extras/side_panel/time_summary.html">
+<link rel="import" href="/extras/side_panel/input_latency_side_panel.html">
+<link rel="import" href="/extras/side_panel/time_summary_side_panel.html">
 
 <!-- Sample analysis is chrome-only because it brings in D3 which is HUGE -->
 <link rel="import" href="/extras/analysis/sampling_summary.html">
 
 <!-- Auditors are fun -->
-<link rel="import" href="/extras/audits/chrome_auditor.html">
-<link rel="import" href="/extras/audits/android_auditor.html">
+<link rel="import" href="/extras/chrome/chrome_auditor.html">
+<link rel="import" href="/extras/android/android_auditor.html">
+
+<!-- RAIL is fun too -->
+<link rel="import" href="/extras/rail/rail_score_side_panel.html">

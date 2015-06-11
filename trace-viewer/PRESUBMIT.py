@@ -10,15 +10,12 @@ def CheckChange(input_api, output_api):
   try:
     sys.path += [input_api.PresubmitLocalPath()]
     from hooks import pre_commit
-    results = pre_commit.GetResults('@{u}')
-    return map(output_api.PresubmitError, results)
+    return pre_commit.RunChecks(input_api, output_api)
   finally:
     sys.path = original_sys_path
 
-
 def CheckChangeOnUpload(input_api, output_api):
   return CheckChange(input_api, output_api)
-
 
 def CheckChangeOnCommit(input_api, output_api):
   return CheckChange(input_api, output_api)

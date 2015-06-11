@@ -6,18 +6,18 @@ found in the LICENSE file.
 -->
 
 <link rel="import" href="/core/test_utils.html">
-<link rel="import" href="/extras/importer/linux_perf/linux_perf_importer.html">
+<link rel="import" href="/extras/importer/linux_perf/ftrace_importer.html">
 
 <script>
 'use strict';
 
-tv.b.unittest.testSuite(function() { // @suppress longLineCheck
+tr.b.unittest.testSuite(function() { // @suppress longLineCheck
   test('drmImport', function() {
     var lines = [
       ' chrome-2465  [000]    71.653157: drm_vblank_event: crtc=0, seq=4233',
       ' <idle>-0     [000]    71.669851: drm_vblank_event: crtc=0, seq=4234'
     ];
-    var m = new tv.c.TraceModel(lines.join('\n'), false);
+    var m = new tr.Model(lines.join('\n'), false);
     assert.isFalse(m.hasImportWarnings);
 
     var threads = m.getAllThreads();
