@@ -10,23 +10,23 @@ found in the LICENSE file.
 <script>
 'use strict';
 
-tv.b.unittest.testSuite(function() { // @suppress longLineCheck
+tr.b.unittest.testSuite(function() { // @suppress longLineCheck
   test('simple', function() {
     var html_lines = [
       '<!DOCTYPE HTML>',
       '<script id="viewer-data" type="application/json">',
       btoa('hello'),
       '<\/script>',
-      '<script id="viewer-data" type="application/json">',
+      '<script id="viewer-data" type="text/plain">',
       btoa('world'),
       '<\/script>',
       '</html>'
     ];
     var html_text = html_lines.join('\n');
-    assert.isTrue(tv.e.importer.Trace2HTMLImporter.canImport(html_text));
+    assert.isTrue(tr.e.importer.Trace2HTMLImporter.canImport(html_text));
 
-    var m = new tv.c.TraceModel();
-    var imp = new tv.e.importer.Trace2HTMLImporter(m, html_text);
+    var m = new tr.Model();
+    var imp = new tr.e.importer.Trace2HTMLImporter(m, html_text);
     var subTracesAsBuffers = imp.extractSubtraces();
     var subTracesAsStrings = subTracesAsBuffers.map(function(buffer) {
       var str = '';

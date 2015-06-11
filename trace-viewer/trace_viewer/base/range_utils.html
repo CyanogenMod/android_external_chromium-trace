@@ -1,0 +1,156 @@
+<!DOCTYPE html>
+<!--
+Copyright (c) 2014 The Chromium Authors. All rights reserved.
+Use of this source code is governed by a BSD-style license that can be
+found in the LICENSE file.
+-->
+<link rel="import" href="/base/base.html">
+<link rel="import" href="/base/iteration_helpers.html">
+<script>
+'use strict';
+
+/**
+ * @fileoverview Provides event merging functionality for grouping/analysis.
+ */
+tr.exportTo('tr.e.audits', function() {
+  function mergeRanges(inRanges, mergeThreshold, mergeFunction) {
+    return mergeExplicitRanges(inRanges,
+                               mergeThreshold,
+                               mergeFunction,
+                               function(r) { return r.min; },
+                               function(r) { return r.max; });
+  }
+
+  function mergeExplicitRanges(inRanges, mergeThreshold, mergeFunction,
+                       opt_startFunction, opt_endFunction) {
+    var startFunction = opt_startFunction;
+    var endFunction = opt_endFunction;
+    if (!startFunction)
+      startFunction = function(event) { return event.start; };
+    if (!endFunction)
+      endFunction = function(event) { return event.end; };
+
+    var remainingEvents = inRanges.slice();
+    remainingEvents.sort(function(x, y) {
+      return startFunction(x) - startFunction(y);
+    });
+
+    if (remainingEvents.length <= 1) {
+      var merged = [];
+      if (remainingEvents.length == 1) {
+        merged.push(mergeFunction(remainingEvents));
+      }
+      return merged;
+    }
+
+    var mergedEvents = [];
+
+    var currentMergeBuffer = [];
+    var rightEdge;
+    function beginMerging() {
+      currentMergeBuffer.push(remainingEvents[0]);
+      remainingEvents.splice(0, 1);
+      rightEdge = endFunction(currentMergeBuffer[0]);
+    }
+
+    function flushCurrentMergeBuffer() {
+      if (currentMergeBuffer.length == 0)
+        return;
+
+      mergedEvents.push(mergeFunction(currentMergeBuffer));
+      currentMergeBuffer = [];
+
+      // Refill merge buffer if needed.
+      if (remainingEvents.length != 0)
+        beginMerging();
+    }
+
+    beginMerging();
+
+    while (remainingEvents.length) {
+      var currentEvent = remainingEvents[0];
+
+      var distanceFromRightEdge = startFunction(currentEvent) - rightEdge;
+      if (distanceFromRightEdge < mergeThreshold) {
+        rightEdge = Math.max(rightEdge, endFunction(currentEvent));
+        remainingEvents.splice(0, 1);
+        currentMergeBuffer.push(currentEvent);
+        continue;
+      }
+
+      // Too big a gap.
+      flushCurrentMergeBuffer();
+    }
+    flushCurrentMergeBuffer();
+
+    return mergedEvents;
+  }
+
+  // 'opt_totalRange' allows capturing an empty range before the first of
+  // 'inRanges' and after the last of 'inRanges'.
+  function findEmptyRangesBetweenExplicitRanges(
+      inRanges, opt_totalRange, opt_startFunction, opt_endFunction) {
+    var startFunction = opt_startFunction;
+    if (!startFunction)
+      startFunction = function(range) { return range.start; };
+    var endFunction = opt_endFunction;
+    if (!endFunction)
+      endFunction = function(range) { return range.end; };
+
+    var emptyRanges = [];
+    if (!inRanges.length) {
+      if (opt_totalRange) {
+        emptyRanges.push(tr.b.Range.fromExplicitRange(
+            startFunction(opt_totalRange), endFunction(opt_totalRange)));
+      }
+      return emptyRanges;
+    }
+
+    inRanges = inRanges.slice();
+    inRanges.sort(function(x, y) {
+      return startFunction(x) - startFunction(y);
+    });
+    if (opt_totalRange &&
+        (startFunction(opt_totalRange) < startFunction(inRanges[0]))) {
+      emptyRanges.push(tr.b.Range.fromExplicitRange(
+          startFunction(opt_totalRange), startFunction(inRanges[0])));
+    }
+
+    inRanges.forEach(function(range, index) {
+      for (var otherIndex = 0; otherIndex < inRanges.length; ++otherIndex) {
+        if (index === otherIndex)
+          continue;
+        var other = inRanges[otherIndex];
+
+        if (startFunction(other) > endFunction(range)) {
+          // 'inRanges' is sorted, so 'other' is the first range after 'range',
+          // and there is an empty range between them.
+          emptyRanges.push(tr.b.Range.fromExplicitRange(
+              endFunction(range), startFunction(other)));
+          return;
+        }
+        // Otherwise, 'other' starts before 'range' ends, so 'other' might
+        // possibly contain the end of 'range'.
+
+        if (endFunction(other) > endFunction(range)) {
+          // 'other' does contain the end of 'range', so no empty range starts
+          // at the end of this 'range'.
+          return;
+        }
+      }
+      if (opt_totalRange &&
+          (endFunction(range) < endFunction(opt_totalRange))) {
+        emptyRanges.push(tr.b.Range.fromExplicitRange(
+            endFunction(range), endFunction(opt_totalRange)));
+      }
+    });
+    return emptyRanges;
+  }
+
+  return {
+    findEmptyRangesBetweenExplicitRanges: findEmptyRangesBetweenExplicitRanges,
+    mergeExplicitRanges: mergeExplicitRanges,
+    mergeRanges: mergeRanges
+  };
+});
+</script>

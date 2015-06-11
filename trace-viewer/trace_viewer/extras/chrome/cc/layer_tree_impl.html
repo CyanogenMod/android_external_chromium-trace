@@ -8,15 +8,15 @@ found in the LICENSE file.
 <link rel="import" href="/extras/chrome/chrome_model_helper.html">
 <link rel="import" href="/extras/chrome/cc/constants.html">
 <link rel="import" href="/extras/chrome/cc/layer_impl.html">
-<link rel="import" href="/core/trace_model/object_instance.html">
+<link rel="import" href="/model/object_instance.html">
 
 <script>
 'use strict';
 
-tv.exportTo('tv.e.cc', function() {
+tr.exportTo('tr.e.cc', function() {
 
-  var constants = tv.e.cc.constants;
-  var ObjectSnapshot = tv.c.trace_model.ObjectSnapshot;
+  var constants = tr.e.cc.constants;
+  var ObjectSnapshot = tr.model.ObjectSnapshot;
 
   /**
    * @constructor
@@ -29,14 +29,14 @@ tv.exportTo('tv.e.cc', function() {
     __proto__: ObjectSnapshot.prototype,
 
     preInitialize: function() {
-      tv.e.cc.preInitializeObject(this);
+      tr.e.cc.preInitializeObject(this);
       this.layerTreeHostImpl = undefined;
       this.whichTree = undefined;
       this.sourceFrameNumber = undefined;
     },
 
     initialize: function() {
-      tv.e.cc.moveRequiredFieldsFromArgsToToplevel(
+      tr.e.cc.moveRequiredFieldsFromArgsToToplevel(
           this, ['rootLayer',
             'renderSurfaceLayerList']);
       if (this.args.sourceFrameNumber)
@@ -48,19 +48,19 @@ tv.exportTo('tv.e.cc', function() {
         this.tracedInputLatencies = [];
 
         var ownProcess = this.objectInstance.parent;
-        var traceModel = ownProcess.model;
-        if (tv.e.audits.ChromeModelHelper.supportsModel(traceModel))
-          this._initializeTracedInputLatencies(traceModel);
+        var model = ownProcess.model;
+        if (tr.e.audits.ChromeModelHelper.supportsModel(model))
+          this._initializeTracedInputLatencies(model);
       }
     },
 
-    _initializeTracedInputLatencies: function(traceModel) {
-      var modelHelper = new tv.e.audits.ChromeModelHelper(traceModel);
-      if (!modelHelper.browser)
+    _initializeTracedInputLatencies: function(model) {
+      var modelHelper = new tr.e.audits.ChromeModelHelper(model);
+      if (!modelHelper.browserHelper)
         return;
 
-      var latencyEvents = modelHelper.browser.getLatencyEventsInRange(
-          traceModel.bounds);
+      var latencyEvents = modelHelper.browserHelper.getLatencyEventsInRange(
+          model.bounds);
 
       // Convert all ids to InputLatency Async objects.
       latencyEvents.forEach(function(event) {
@@ -75,7 +75,7 @@ tv.exportTo('tv.e.cc', function() {
     },
 
     get hasSourceFrameBeenDrawnBefore() {
-      if (this.whichTree == tv.e.cc.constants.PENDING_TREE)
+      if (this.whichTree == tr.e.cc.constants.PENDING_TREE)
         return false;
 
       // Old chrome's don't produce sourceFrameNumber.

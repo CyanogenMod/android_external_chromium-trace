@@ -8,16 +8,16 @@ found in the LICENSE file.
 <link rel="import" href="/extras/chrome/cc/cc.html">
 <link rel="import" href="/extras/chrome/cc/layer_view.html">
 <link rel="import" href="/extras/importer/trace_event_importer.html">
-<link rel="import" href="/core/trace_model/trace_model.html">
+<link rel="import" href="/model/model.html">
 
 <script src="/extras/chrome/cc/layer_tree_host_impl_test_data.js"></script>
 
 <script>
 'use strict';
 
-tv.b.unittest.testSuite(function() {
+tr.b.unittest.testSuite(function() {
   test('instantiate', function() {
-    var m = new tv.c.TraceModel(g_catLTHIEvents);
+    var m = new tr.Model(g_catLTHIEvents);
     var p = m.processes[1];
 
     var instance = p.objects.getAllInstancesNamed('cc::LayerTreeHostImpl')[0];
@@ -25,16 +25,16 @@ tv.b.unittest.testSuite(function() {
     var numLayers = lthi.activeTree.renderSurfaceLayerList.length;
     var layer = lthi.activeTree.renderSurfaceLayerList[numLayers - 1];
 
-    var view = new tv.e.cc.LayerView();
+    var view = new tr.e.cc.LayerView();
     view.style.height = '500px';
     view.layerTreeImpl = lthi.activeTree;
-    view.selection = new tv.e.cc.LayerSelection(layer);
+    view.selection = new tr.e.cc.LayerSelection(layer);
 
     this.addHTMLOutput(view);
   });
 
   test('instantiate_withTileHighlight', function() {
-    var m = new tv.c.TraceModel(g_catLTHIEvents);
+    var m = new tr.Model(g_catLTHIEvents);
     var p = m.processes[1];
 
     var instance = p.objects.getAllInstancesNamed('cc::LayerTreeHostImpl')[0];
@@ -43,10 +43,10 @@ tv.b.unittest.testSuite(function() {
     var layer = lthi.activeTree.renderSurfaceLayerList[numLayers - 1];
     var tile = lthi.activeTiles[0];
 
-    var view = new tv.e.cc.LayerView();
+    var view = new tr.e.cc.LayerView();
     view.style.height = '500px';
     view.layerTreeImpl = lthi.activeTree;
-    view.selection = new tv.e.cc.TileSelection(tile);
+    view.selection = new tr.e.cc.TileSelection(tile);
     this.addHTMLOutput(view);
   });
 });
