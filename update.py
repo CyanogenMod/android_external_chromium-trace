@@ -28,16 +28,20 @@ if options.local_dir is None:
   if p.wait() != 0:
     print 'Failed to checkout source from upstream git.'
     sys.exit(1)
-  
-  shutil.rmtree(os.path.join(trace_viewer_dir, '.git'), True)
 
+  trace_viewer_git_dir = os.path.join(trace_viewer_dir, '.git')
   # Update the UPSTREAM_REVISION file
   git_args = ['git', 'rev-parse', 'HEAD']
-  p = subprocess.Popen(git_args, stdout=subprocess.PIPE, cwd=trace_viewer_dir)
+  p = subprocess.Popen(git_args,
+                       stdout=subprocess.PIPE,
+                       cwd=trace_viewer_dir,
+                       env={"GIT_DIR":trace_viewer_git_dir})
   out, err = p.communicate()
   if p.wait() != 0:
     print 'Failed to get revision.'
     sys.exit(1)
+
+  shutil.rmtree(trace_viewer_git_dir, True)
 
   rev = out.strip()
   with open('UPSTREAM_REVISION', 'wt') as f:
