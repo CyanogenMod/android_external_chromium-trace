@@ -59,6 +59,10 @@ def parse_options(argv):
   parser.add_option('--no-fix-threads', dest='fix_threads', default=True,
                     action='store_false',
                     help='don\'t fix missing or truncated thread names')
+  parser.add_option('--no-fix-tgids', dest='fix_tgids', default=True,
+                    action='store_false',
+                    help='Do not run extra commands to restore missing thread to\
+                    thread group id mappings.')
   parser.add_option('--no-fix-circular', dest='fix_circular', default=True,
                     action='store_false',
                     help='don\'t fix truncated circular traces')

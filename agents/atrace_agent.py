@@ -81,20 +81,13 @@ class AtraceAgent(systrace_agent.SystraceAgent):
 
   def start(self):
     tracer_args = self._construct_trace_command()
-    try:
-      self._adb = subprocess.Popen(tracer_args, stdout=subprocess.PIPE,
-                                   stderr=subprocess.PIPE)
-    except OSError as error:
-      print >> sys.stderr, (
-          'The command "%s" failed with the following error:' %
-          ' '.join(tracer_args))
-      print >> sys.stderr, '    ', error
-      sys.exit(1)
+
+    self._adb = do_popen(tracer_args)
 
   def collect_result(self):
-    trace_data = self._collect_trace_data();
+    trace_data = self._collect_trace_data()
     if self._expect_trace:
-      self._trace_data = self._preprocess_trace_data(trace_data);
+      self._trace_data = self._preprocess_trace_data(trace_data)
 
   def expect_trace(self):
     return self._expect_trace
@@ -152,8 +145,6 @@ class AtraceAgent(systrace_agent.SystraceAgent):
       extra_args = self._construct_extra_trace_command()
       atrace_args.extend(extra_args)
 
-      if self._options.fix_threads:
-        atrace_args.extend([';', 'ps', '-t'])
       tracer_args = util.construct_adb_shell_command(
           atrace_args, self._options.device_serial)
 
@@ -229,6 +220,7 @@ class AtraceAgent(systrace_agent.SystraceAgent):
               sys.stdout.write('Done.\n')
               # Now we start downloading the trace data.
               sys.stdout.write('Downloading trace...')
+
               current_line = ''
               # Use a larger chunk size for efficiency since we no longer
               # need to worry about parsing the stream.
@@ -284,11 +276,6 @@ class AtraceAgent(systrace_agent.SystraceAgent):
       The processed trace data.
     """
     trace_data = ''.join(trace_data)
-
-    if self._options.fix_threads:
-      # Extract the thread list dumped by ps.
-      trace_data, thread_names = extract_thread_list(trace_data)
-
     if trace_data:
       trace_data = strip_and_decompress_trace(trace_data)
 
@@ -298,13 +285,25 @@ class AtraceAgent(systrace_agent.SystraceAgent):
       sys.exit(1)
 
     if self._options.fix_threads:
-      trace_data = fix_thread_names(trace_data, thread_names)
+      # Issue ps command to device and patch thread names
+      ps_dump = do_preprocess_adb_cmd('ps -t', self._options.device_serial)
+      if ps_dump is not None:
+        thread_names = extract_thread_list(ps_dump)
+        trace_data = fix_thread_names(trace_data, thread_names)
+
+    if self._options.fix_tgids:
+      # Issue printf command to device and patch tgids
+      procfs_dump = do_preprocess_adb_cmd('printf "%s\n" ' +
+                                          '/proc/[0-9]*/task/[0-9]*',
+                                          self._options.device_serial)
+      if procfs_dump is not None:
+        pid2_tgid = extract_tgids(procfs_dump)
+        trace_data = fix_missing_tgids(trace_data, pid2_tgid)
 
     if self._options.fix_circular:
       trace_data = fix_circular_traces(trace_data)
 
     return trace_data
-
 
 class AtraceLegacyAgent(AtraceAgent):
   def _construct_list_categories_command(self):
@@ -363,7 +362,6 @@ class AtraceLegacyAgent(AtraceAgent):
 
     return extra_args
 
-
 class BootAgent(AtraceAgent):
   """AtraceAgent that specializes in tracing the boot sequence."""
 
@@ -406,7 +404,6 @@ class BootAgent(AtraceAgent):
     return util.construct_adb_shell_command(
           atrace_args + ['&&'] + setprop_args + ['&&'] + rm_args,
           self._options.device_serial)
-
 
 class FileReaderThread(threading.Thread):
   """Reads data from a file/pipe on a worker thread.
@@ -468,7 +465,6 @@ class FileReaderThread(threading.Thread):
     assert chunk_size > 0
     self._chunk_size = chunk_size
 
-
 def get_default_categories(device_serial):
   categories_output, return_code = util.run_adb_shell(LIST_CATEGORIES_ARGS,
                                                     device_serial)
@@ -493,28 +489,42 @@ def status_update(last_update_time):
   return last_update_time
 
 
-def extract_thread_list(trace_data):
+def extract_thread_list(trace_text):
   """Removes the thread list from the given trace data.
-
   Args:
-    trace_data: The raw trace data (before decompression).
+    trace_text: The text portion of the trace
   Returns:
-    A tuple containing the trace data and a map of thread ids to thread names.
+    a map of thread ids to thread names
   """
+
   threads = {}
-  parts = re.split('USER +PID +PPID +VSIZE +RSS +WCHAN +PC +NAME',
-                   trace_data, 1)
-  if len(parts) == 2:
-    trace_data = parts[0]
-    for line in parts[1].splitlines():
-      cols = line.split(None, 8)
-      if len(cols) == 9:
-        tid = int(cols[1])
-        name = cols[8]
-        threads[tid] = name
+  #start at line 1 to skip the top of the ps dump:
+  text = trace_text.splitlines()
+  for line in text[1:]:
+    cols = line.split(None, 8)
+    if len(cols) == 9:
+      tid = int(cols[1])
+      name = cols[8]
+      threads[tid] = name
 
-  return (trace_data, threads)
+  return threads
 
+def extract_tgids(trace_text):
+  """Removes the procfs dump from the given trace text
+  Args:
+    trace_text: The text portion of the trace
+  Returns:
+    a map of pids to their tgid.
+  """
+  tgid_2pid = {}
+  text = trace_text.splitlines()
+  for line in text:
+    result = re.match('^/proc/([0-9]+)/task/([0-9]+)', line)
+    if result:
+      parent_pid, tgid = result.group(1,2)
+      tgid_2pid[tgid] = parent_pid;
+
+  return tgid_2pid
 
 def strip_and_decompress_trace(trace_data):
   """Fixes new-lines and decompresses trace data.
@@ -548,6 +558,7 @@ def strip_and_decompress_trace(trace_data):
   return trace_data
 
 
+
 def fix_thread_names(trace_data, thread_names):
   """Replaces thread ids with their names.
 
@@ -557,6 +568,7 @@ def fix_thread_names(trace_data, thread_names):
   Returns:
     The updated trace data.
   """
+
   def repl(m):
     tid = int(m.group(2))
     if tid > 0:
@@ -569,9 +581,38 @@ def fix_thread_names(trace_data, thread_names):
       return name + '-' + m.group(2)
     else:
       return m.group(0)
+
+  # matches something like:
+  # Binder_2-895, or com.google.android.inputmethod.latin-1078 etc...
   trace_data = re.sub(r'^\s*(\S+)-(\d+)', repl, trace_data,
                       flags=re.MULTILINE)
   return trace_data
+
+
+def fix_missing_tgids(trace_data, pid2_tgid):
+  """Replaces missing TGIDs from the trace data with those found in procfs
+  Args:
+    trace_data: the atrace data
+  Returns:
+    The updated trace data with missing TGIDs replaced with the correct TGID
+  """
+
+  def repl(m):
+    tid = m.group(2)
+    if (int(tid) > 0 and m.group(1) != '<idle>' and m.group(3) == '(-----)'
+        and tid in pid2_tgid):
+          # returns Proc_name-PID (TGID)
+          # Binder_2-381 (-----) becomes Binder_2-381 (128)
+          return m.group(1) + '-' + m.group(2) + ' ( '+ pid2_tgid[tid]+ ')'
+
+    return m.group(0)
+
+  # matches something like:
+  # Binder_2-895 (-----)
+  trace_data = re.sub(r'^\s*(\S+)-(\d+)\s+(\(\S+\))', repl, trace_data,
+                      flags=re.MULTILINE)
+  return trace_data;
+
 
 
 def fix_circular_traces(out):
@@ -609,3 +650,25 @@ def fix_circular_traces(out):
     end_of_header = re.search(r'^[^#]', out, re.MULTILINE).start()
     out = out[:end_of_header] + out[start_of_full_trace:]
   return out
+
+def do_popen(args):
+  try:
+    adb = subprocess.Popen(args, stdout=subprocess.PIPE,
+                              stderr=subprocess.PIPE)
+  except OSError as error:
+    print >> sys.stderr, (
+      'The command "%s" failed with the following error:' %
+      ' '.join(args))
+    print >> sys.stderr, '    ', error
+    sys.exit(1)
+
+  return adb
+
+def do_preprocess_adb_cmd(command, serial):
+  args = [command]
+  dump, ret_code = util.run_adb_shell(args, serial)
+  if ret_code != 0:
+    return None
+
+  dump = ''.join(dump)
+  return dump
