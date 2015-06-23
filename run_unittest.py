@@ -14,10 +14,15 @@ DEVICE_SERIAL = 'AG8404EC0444AGC'
 LIST_TMP_ARGS = ['ls', '/data/local/tmp']
 ATRACE_ARGS = ['atrace', '-z', '-t', '10']
 CATEGORIES = ['sched', 'gfx', 'view', 'wm']
+ADB_SHELL = ['adb', '-s', DEVICE_SERIAL, 'shell']
+
 SYSTRACE_CMD = ['./systrace.py', '--time', '10', '-o', 'out.html', '-e',
                 DEVICE_SERIAL] + CATEGORIES
-TRACE_CMD = (['adb', '-s', DEVICE_SERIAL, 'shell'] + ATRACE_ARGS + CATEGORIES +
+TRACE_CMD = (ADB_SHELL + ATRACE_ARGS + CATEGORIES +
              [';', 'ps', '-t'])
+
+SYSTRACE_LIST_CATEGORIES_CMD = ['./systrace.py', '-e', DEVICE_SERIAL, '-l']
+TRACE_LIST_CATEGORIES_CMD = (ADB_SHELL + ['atrace', '--list_categories'])
 
 TEST_DIR = 'test_data/'
 ATRACE_DATA = TEST_DIR + 'atrace_data'
@@ -96,6 +101,13 @@ class AtraceAgentUnitTest(unittest.TestCase):
       agent = atrace_agent.try_create_agent(options, categories)
       trace_data = agent._preprocess_trace_data(atrace_data_with_thread_list)
       self.assertEqual(atrace_data, trace_data)
+
+  def test_list_categories(self):
+    options, categories = systrace.parse_options(SYSTRACE_LIST_CATEGORIES_CMD)
+    agent = atrace_agent.try_create_agent(options, categories)
+    tracer_args = agent._construct_trace_command()
+    self.assertEqual(' '.join(TRACE_LIST_CATEGORIES_CMD), ' '.join(tracer_args))
+    self.assertEqual(False, agent.expect_trace())
 
 
 if __name__ == '__main__':
