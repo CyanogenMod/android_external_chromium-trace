@@ -28,6 +28,13 @@ LEGACY_ATRACE_ARGS = ['atrace', '-z', '-t', '10', '-s']
 LEGACY_TRACE_CMD = (ADB_SHELL + LEGACY_ATRACE_ARGS +
              [';', 'ps', '-t'])
 
+SYSTRACE_BOOT_CMD = (['./systrace.py', '--boot', '-e', DEVICE_SERIAL] +
+                     CATEGORIES)
+TRACE_BOOT_CMD = (ADB_SHELL +
+                  ['atrace', '--async_stop', '&&', 'setprop',
+                   'persist.debug.atrace.boottrace', '0', '&&',
+                   'rm', '/data/misc/boottrace/categories'])
+
 TEST_DIR = 'test_data/'
 ATRACE_DATA = TEST_DIR + 'atrace_data'
 ATRACE_DATA_RAW = TEST_DIR + 'atrace_data_raw'
@@ -130,6 +137,16 @@ class AtraceLegacyAgentUnitTest(unittest.TestCase):
     tracer_args = agent._construct_trace_command()
     self.assertEqual(' '.join(LEGACY_TRACE_CMD), ' '.join(tracer_args))
     self.assertEqual(True, agent.expect_trace())
+
+
+class BootAgentUnitTest(unittest.TestCase):
+  def test_boot(self):
+    options, categories = systrace.parse_options(SYSTRACE_BOOT_CMD)
+    agent = atrace_agent.BootAgent(options, categories)
+    tracer_args = agent._construct_trace_command()
+    self.assertEqual(' '.join(TRACE_BOOT_CMD), ' '.join(tracer_args))
+    self.assertEqual(True, agent.expect_trace())
+
 
 if __name__ == '__main__':
     unittest.main()
