@@ -31,9 +31,31 @@ TRACE_START_REGEXP = r'TRACE\:'
 # Plain-text trace data should always start with this string.
 TRACE_TEXT_HEADER = '# tracer'
 
+# This list is based on the tags in frameworks/native/include/utils/Trace.h for
+# legacy platform.
+LEGACY_TRACE_TAG_BITS = (
+  ('gfx',       1<<1),
+  ('input',     1<<2),
+  ('view',      1<<3),
+  ('webview',   1<<4),
+  ('wm',        1<<5),
+  ('am',        1<<6),
+  ('sm',        1<<7),
+  ('audio',     1<<8),
+  ('video',     1<<9),
+  ('camera',    1<<10),
+)
+
 
 def try_create_agent(options, categories):
-  return AtraceAgent(options, categories)
+  if options.from_file is not None:
+    return AtraceAgent(options, categories)
+
+  device_sdk_version = util.get_device_sdk_version()
+  if device_sdk_version >= 18:
+    return AtraceAgent(options, categories)
+  elif device_sdk_version >= 16:
+    return AtraceLegacyAgent(options, categories)
 
 
 class AtraceAgent(systrace_agent.SystraceAgent):
@@ -69,6 +91,23 @@ class AtraceAgent(systrace_agent.SystraceAgent):
   def get_class_name(self):
     return 'trace-data'
 
+  def _construct_list_categories_command(self):
+    return util.construct_adb_shell_command(
+          LIST_CATEGORIES_ARGS, self._options.device_serial)
+
+  def _construct_extra_trace_command(self):
+    extra_args = []
+    if self._options.app_name is not None:
+      extra_args.extend(['-a', self._options.app_name])
+
+    if self._options.kfuncs is not None:
+      extra_args.extend(['-k', self._options.kfuncs])
+
+    if not self._categories:
+      self._categories = get_default_categories(self._options.device_serial)
+    extra_args.extend(self._categories)
+    return extra_args
+
   def _construct_trace_command(self):
     """Builds a command-line used to invoke a trace process.
 
@@ -78,14 +117,13 @@ class AtraceAgent(systrace_agent.SystraceAgent):
       stream trace data.
     """
     if self._options.list_categories:
-      tracer_args = util.construct_adb_shell_command(
-          LIST_CATEGORIES_ARGS, self._options.device_serial)
+      tracer_args = self._construct_list_categories_command()
       self._expect_trace = False
     elif self._options.from_file is not None:
       tracer_args = ['cat', self._options.from_file]
       self._expect_trace = True
     else:
-      atrace_args = ATRACE_BASE_ARGS
+      atrace_args = ATRACE_BASE_ARGS[:]
       self._expect_trace = True
       if self._options.compress_trace_data:
         atrace_args.extend(['-z'])
@@ -97,16 +135,8 @@ class AtraceAgent(systrace_agent.SystraceAgent):
       if ((self._options.trace_buf_size is not None)
           and (self._options.trace_buf_size > 0)):
         atrace_args.extend(['-b', str(self._options.trace_buf_size)])
-
-      if self._options.app_name is not None:
-        atrace_args.extend(['-a', self._options.app_name])
-
-      if self._options.kfuncs is not None:
-        atrace_args.extend(['-k', self._options.kfuncs])
-
-      if not self._categories:
-        self._categories = get_default_categories(self._options.device_serial)
-      atrace_args.extend(self._categories)
+      extra_args = self._construct_extra_trace_command()
+      atrace_args.extend(extra_args)
 
       if self._options.fix_threads:
         atrace_args.extend([';', 'ps', '-t'])
@@ -260,6 +290,64 @@ class AtraceAgent(systrace_agent.SystraceAgent):
       trace_data = fix_circular_traces(trace_data)
 
     return trace_data
+
+
+class AtraceLegacyAgent(AtraceAgent):
+  def _construct_list_categories_command(self):
+    LEGACY_CATEGORIES = """       sched - CPU Scheduling
+        freq - CPU Frequency
+        idle - CPU Idle
+        load - CPU Load
+        disk - Disk I/O (requires root)
+         bus - Bus utilization (requires root)
+   workqueue - Kernel workqueues (requires root)"""
+    return ["echo", LEGACY_CATEGORIES]
+
+  def start(self):
+    super(AtraceLegacyAgent, self).start()
+    if self.expect_trace():
+      SHELL_ARGS = ['getprop', 'debug.atrace.tags.enableflags']
+      output, return_code = util.run_adb_shell(SHELL_ARGS, self._options.device_serial)
+      flags = 0
+      if return_code == 0:
+        try:
+          if output.startswith('0x'):
+            flags = int(output, 16)
+          elif output.startswith('0'):
+            flags = int(output, 8)
+          else:
+            flags = int(output)
+        except ValueError, e:
+          pass
+
+      if flags:
+        tags = []
+        for desc, bit in LEGACY_TRACE_TAG_BITS:
+          if bit & flags:
+            tags.append(desc)
+        categories = tags + self._categories
+        print 'Collecting data with following categories:', ' '.join(categories)
+
+  def _construct_extra_trace_command(self):
+    extra_args = []
+    if not self._categories:
+      self._categories = ['sched', ]
+    if 'sched' in self._categories:
+      extra_args.append('-s')
+    if 'freq' in self._categories:
+      extra_args.append('-f')
+    if 'idle' in self._categories:
+      extra_args.append('-i')
+    if 'load' in self._categories:
+      extra_args.append('-l')
+    if 'disk' in self._categories:
+      extra_args.append('-d')
+    if 'bus' in self._categories:
+      extra_args.append('-u')
+    if 'workqueue' in self._categories:
+      extra_args.append('-w')
+
+    return extra_args
 
 
 class FileReaderThread(threading.Thread):

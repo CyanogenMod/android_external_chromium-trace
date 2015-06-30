@@ -50,7 +50,7 @@ class UtilUnitTest(unittest.TestCase):
 class AtraceAgentUnitTest(unittest.TestCase):
   def test_construct_trace_command(self):
     options, categories = systrace.parse_options(SYSTRACE_CMD)
-    agent = atrace_agent.try_create_agent(options, categories)
+    agent = atrace_agent.AtraceAgent(options, categories)
     tracer_args = agent._construct_trace_command()
     self.assertEqual(' '.join(TRACE_CMD), ' '.join(tracer_args))
     self.assertEqual(True, agent.expect_trace())
@@ -98,13 +98,13 @@ class AtraceAgentUnitTest(unittest.TestCase):
       atrace_data = f2.read()
 
       options, categories = systrace.parse_options([])
-      agent = atrace_agent.try_create_agent(options, categories)
+      agent = atrace_agent.AtraceAgent(options, categories)
       trace_data = agent._preprocess_trace_data(atrace_data_with_thread_list)
       self.assertEqual(atrace_data, trace_data)
 
   def test_list_categories(self):
     options, categories = systrace.parse_options(SYSTRACE_LIST_CATEGORIES_CMD)
-    agent = atrace_agent.try_create_agent(options, categories)
+    agent = atrace_agent.AtraceAgent(options, categories)
     tracer_args = agent._construct_trace_command()
     self.assertEqual(' '.join(TRACE_LIST_CATEGORIES_CMD), ' '.join(tracer_args))
     self.assertEqual(False, agent.expect_trace())
