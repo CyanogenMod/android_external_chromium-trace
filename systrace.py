@@ -167,16 +167,9 @@ def create_agents(options, categories):
 
 
 def main():
-  device_sdk_version = util.get_device_sdk_version()
-  if device_sdk_version < 18:
-    legacy_script = os.path.join(os.path.dirname(sys.argv[0]),
-                                 'systrace-legacy.py')
-    # execv() does not return.
-    os.execv(legacy_script, sys.argv)
-
   options, categories = parse_options(sys.argv)
-
   agents = create_agents(options, categories)
+
   if not agents:
     dirs = DEFAULT_AGENT_DIR
     if options.agent_dirs:
