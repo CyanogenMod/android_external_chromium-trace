@@ -25,7 +25,7 @@ SYSTRACE_LIST_CATEGORIES_CMD = ['./systrace.py', '-e', DEVICE_SERIAL, '-l']
 TRACE_LIST_CATEGORIES_CMD = (ADB_SHELL + ['atrace', '--list_categories'])
 
 LEGACY_ATRACE_ARGS = ['atrace', '-z', '-t', '10', '-s']
-LEGACY_TRACE_CMD = (['adb', '-s', DEVICE_SERIAL, 'shell'] + LEGACY_ATRACE_ARGS +
+LEGACY_TRACE_CMD = (ADB_SHELL + LEGACY_ATRACE_ARGS +
              [';', 'ps', '-t'])
 
 TEST_DIR = 'test_data/'
@@ -116,7 +116,7 @@ class AtraceAgentUnitTest(unittest.TestCase):
 class AtraceLegacyAgentUnitTest(unittest.TestCase):
   def test_construct_trace_command(self):
     options, categories = systrace.parse_options(SYSTRACE_CMD)
-    agent = atrace_agent.try_create_agent(options, categories)
+    agent = atrace_agent.AtraceLegacyAgent(options, categories)
     tracer_args = agent._construct_trace_command()
     self.assertEqual(' '.join(LEGACY_TRACE_CMD), ' '.join(tracer_args))
     self.assertEqual(True, agent.expect_trace())
