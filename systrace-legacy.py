@@ -169,6 +169,8 @@ def main():
             html_file.write(
               html_prefix.replace("{{SYSTRACE_TRACE_VIEWER_HTML}}",
                   trace_viewer_html))
+            html_file.write('<!-- BEGIN TRACE -->\n' +
+              '  <script class="trace-data" type="application/text">\n')
             trace_started = True
             break
           elif 'TRACE:'.startswith(line) and i == len(lines) - 1:
@@ -190,6 +192,7 @@ def main():
     html_out = dec.flush().replace('\n', '\\n\\\n').replace('\r', '')
     if len(html_out) > 0:
       html_file.write(html_out)
+    html_file.write('  </script>\n<!-- END TRACE -->\n')
     html_suffix = read_asset(script_dir, 'suffix.html')
     html_file.write(html_suffix)
     html_file.close()
