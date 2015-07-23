@@ -31,6 +31,7 @@ LEGACY_TRACE_CMD = (ADB_SHELL + LEGACY_ATRACE_ARGS +
 TEST_DIR = 'test_data/'
 ATRACE_DATA = TEST_DIR + 'atrace_data'
 ATRACE_DATA_RAW = TEST_DIR + 'atrace_data_raw'
+ATRACE_DATA_RAW_FROM_FILE = TEST_DIR + 'atrace_data_raw_from_file'
 ATRACE_DATA_STRIPPED = TEST_DIR + 'atrace_data_stripped'
 ATRACE_DATA_THREAD_FIXED = TEST_DIR + 'atrace_data_thread_fixed'
 ATRACE_DATA_WITH_THREAD_LIST = TEST_DIR + 'atrace_data_with_thread_list'
@@ -112,6 +113,15 @@ class AtraceAgentUnitTest(unittest.TestCase):
     tracer_args = agent._construct_trace_command()
     self.assertEqual(' '.join(TRACE_LIST_CATEGORIES_CMD), ' '.join(tracer_args))
     self.assertEqual(False, agent.expect_trace())
+
+  def test_construct_trace_from_file_command(self):
+    options, categories = systrace.parse_options(['systrace.py',
+        '--from-file', ATRACE_DATA_RAW_FROM_FILE])
+    agent = atrace_agent.try_create_agent(options, categories)
+    tracer_args = agent._construct_trace_command()
+    self.assertEqual(' '.join(['cat', ATRACE_DATA_RAW_FROM_FILE]),
+            ' '.join(tracer_args))
+    self.assertEqual(True, agent.expect_trace())
 
 class AtraceLegacyAgentUnitTest(unittest.TestCase):
   def test_construct_trace_command(self):
