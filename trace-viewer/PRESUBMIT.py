@@ -4,13 +4,18 @@
 
 import sys
 
+def RunChecks(input_api, output_api):
+  results = []
+  from build import presubmit_checks
+  results += presubmit_checks.RunChecks(input_api)
+
+  return map(output_api.PresubmitError, results)
 
 def CheckChange(input_api, output_api):
   original_sys_path = sys.path
   try:
     sys.path += [input_api.PresubmitLocalPath()]
-    from hooks import pre_commit
-    return pre_commit.RunChecks(input_api, output_api)
+    return RunChecks(input_api, output_api)
   finally:
     sys.path = original_sys_path
 
