@@ -54,7 +54,7 @@ else:
 build_dir = os.path.join(trace_viewer_dir)
 sys.path.append(build_dir)
 
-from trace_viewer.build import vulcanize_trace_viewer
+from tracing.build import vulcanize_trace_viewer
 with codecs.open(output_html_file, encoding='utf-8', mode='w') as f:
   vulcanize_trace_viewer.WriteTraceViewer(
       f,
