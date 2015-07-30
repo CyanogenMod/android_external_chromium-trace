@@ -30,6 +30,10 @@ MIN_TIME_BETWEEN_STATUS_UPDATES = 0.2
 TRACE_START_REGEXP = r'TRACE\:'
 # Plain-text trace data should always start with this string.
 TRACE_TEXT_HEADER = '# tracer'
+# The property name for switching on and off tracing during boot.
+BOOTTRACE_PROP = 'persist.debug.atrace.boottrace'
+# The file path for specifying categories to be traced during boot.
+BOOTTRACE_CATEGORIES = '/data/misc/boottrace/categories'
 
 # This list is based on the tags in frameworks/native/include/utils/Trace.h for
 # legacy platform.
@@ -53,7 +57,17 @@ def try_create_agent(options, categories):
 
   device_sdk_version = util.get_device_sdk_version()
   if device_sdk_version >= 18:
-    return AtraceAgent(options, categories)
+    if options.boot:
+      # atrace --async_stop, which is used by BootAgent, does not work properly
+      # on the device SDK version 22 or before.
+      if device_sdk_version <= 22:
+        print >> sys.stderr, ('--boot option does not work on the device SDK '
+                              'version 22 or before.\nYour device SDK version '
+                              'is %d.' % device_sdk_version)
+        sys.exit(1)
+      return BootAgent(options, categories)
+    else:
+      return AtraceAgent(options, categories)
   elif device_sdk_version >= 16:
     return AtraceLegacyAgent(options, categories)
 
@@ -348,6 +362,50 @@ class AtraceLegacyAgent(AtraceAgent):
       extra_args.append('-w')
 
     return extra_args
+
+
+class BootAgent(AtraceAgent):
+  """AtraceAgent that specializes in tracing the boot sequence."""
+
+  def __init__(self, options, categories):
+    super(BootAgent, self).__init__(options, categories)
+
+  def start(self):
+    try:
+      setup_args = self._construct_setup_command()
+      try:
+        subprocess.check_call(setup_args)
+        print 'Hit Ctrl+C once the device has booted up.'
+        while True:
+          time.sleep(1)
+      except KeyboardInterrupt:
+        pass
+      tracer_args = self._construct_trace_command()
+      self._adb = subprocess.Popen(tracer_args, stdout=subprocess.PIPE,
+                                   stderr=subprocess.PIPE)
+    except OSError as error:
+      print >> sys.stderr, (
+          'The command "%s" failed with the following error:' %
+          ' '.join(tracer_args))
+      print >> sys.stderr, '    ', error
+      sys.exit(1)
+
+  def _construct_setup_command(self):
+    echo_args = ['echo'] + self._categories + ['>', BOOTTRACE_CATEGORIES]
+    setprop_args = ['setprop', BOOTTRACE_PROP, '1']
+    reboot_args = ['reboot']
+    return util.construct_adb_shell_command(
+        echo_args + ['&&'] + setprop_args + ['&&'] + reboot_args,
+        self._options.device_serial)
+
+  def _construct_trace_command(self):
+    self._expect_trace = True
+    atrace_args = ['atrace', '--async_stop']
+    setprop_args = ['setprop', BOOTTRACE_PROP, '0']
+    rm_args = ['rm', BOOTTRACE_CATEGORIES]
+    return util.construct_adb_shell_command(
+          atrace_args + ['&&'] + setprop_args + ['&&'] + rm_args,
+          self._options.device_serial)
 
 
 class FileReaderThread(threading.Thread):
