@@ -69,6 +69,10 @@ def parse_options(argv):
   parser.add_option('--link-assets', dest='link_assets', default=False,
                     action='store_true',
                     help='(deprecated)')
+  parser.add_option('--boot', dest='boot', default=False, action='store_true',
+                    help='reboot the device with tracing during boot enabled. '
+                    'The report is created by hitting Ctrl+C after the device '
+                    'has booted up.')
   parser.add_option('--from-file', dest='from_file', action='store',
                     help='read the trace from a file (compressed) rather than '
                     'running a live trace')
