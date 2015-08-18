@@ -4,10 +4,10 @@ import codecs, httplib, json, optparse, os, urllib, shutil, subprocess, sys
 
 output_html_file = 'systrace_trace_viewer.html'
 
-upstream_git = 'https://github.com/google/trace-viewer.git'
+upstream_git = 'https://github.com/catapult-project/catapult.git'
 
 script_dir = os.path.dirname(os.path.abspath(sys.argv[0]))
-trace_viewer_dir = os.path.join(script_dir, 'trace-viewer')
+trace_viewer_dir = os.path.join(script_dir, 'catapult')
 
 parser = optparse.OptionParser()
 parser.add_option('--local', dest='local_dir', metavar='DIR',
@@ -51,10 +51,10 @@ else:
 
 
 # Generate the vulcanized result.
-build_dir = os.path.join(trace_viewer_dir)
+build_dir = os.path.join(trace_viewer_dir, 'tracing')
 sys.path.append(build_dir)
 
-from tracing.build import vulcanize_trace_viewer
+from tracing_build import vulcanize_trace_viewer
 with codecs.open(output_html_file, encoding='utf-8', mode='w') as f:
   vulcanize_trace_viewer.WriteTraceViewer(
       f,
