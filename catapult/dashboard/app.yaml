@@ -1,0 +1,60 @@
+# Python Application Configuration
+# https://developers.google.com/appengine/docs/python/config/appconfig
+
+runtime: python27  # Which runtime to use.
+api_version: 1     # Which version of the API to use for that runtime.
+threadsafe: false  # Disable threading.
+
+# Third party libraries loaded from the App Engine environment.
+libraries:
+- name: jinja2
+  version: "2.6"
+- name: pycrypto
+  version: "2.6"
+- name: webapp2
+  version: "2.5.1"
+
+builtins:
+- remote_api: on
+- appstats: on
+- deferred: on
+
+inbound_services:
+- warmup
+
+handlers:
+- url: /mapreduce(/.*)?
+  script: mapreduce.main.APP
+  login: admin
+
+- url: /_ah/dev_console(/.*)?
+  script: google.appengine.ext.admin.application
+  login: admin
+  secure: always
+
+- url: /favicon.ico
+  static_dir: dashboard/static/favicon.ico
+  secure: always
+
+- url: /static/
+  static_dir: dashboard/static/
+  secure: always
+
+- url: /dashboard/elements/(.*\.html)$
+  static_files: dashboard/elements/\1
+  upload: dashboard/elements/.*\.html$
+  secure: always
+
+- url: /third_party/polymer/components/(.*)/(.*\.(html|js|css))$
+  static_files: third_party/polymer/components/\1/\2
+  upload: third_party/polymer/components/.*/.*\.(html|js|css)$
+  secure: always
+
+- url: /ip_whitelist
+  script: dashboard.dispatcher.app
+  login: admin
+  secure: always
+
+- url: /.*
+  script: dashboard.dispatcher.app
+  secure: always
