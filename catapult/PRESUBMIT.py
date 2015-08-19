@@ -32,7 +32,7 @@ _EXCLUDED_PATHS = (
     r'^tracing[\\\/]\.allow-devtools-save$',
     r'^tracing[\\\/]bower\.json$',
     r'^tracing[\\\/]\.bowerrc$',
-    r'^tracing[\\\/]examples[\\\/]string_convert\.js$',
+    r'^tracing[\\\/]tracing_examples[\\\/]string_convert\.js$',
     r'^tracing[\\\/]test_data[\\\/].*',
     r'^tracing[\\\/]third_party[\\\/].*',
 )
@@ -67,7 +67,8 @@ def CheckChange(input_api, output_api):
     results += input_api.canned_checks.RunPylint(
         input_api, output_api, black_list=_EXCLUDED_PATHS)
     results += CheckChangeLogBug(input_api, output_api)
-    results += js_checks.RunChecks(input_api, output_api)
+    results += js_checks.RunChecks(
+        input_api, output_api, excluded_paths=_EXCLUDED_PATHS)
   finally:
     sys.path.remove(input_api.PresubmitLocalPath())
   return results
