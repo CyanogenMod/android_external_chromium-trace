@@ -8,6 +8,7 @@ found in the LICENSE file.
 <link rel="import" href="/tracing/base/units/time.html">
 <link rel="import" href="/tracing/core/test_utils.html">
 <link rel="import" href="/tracing/extras/importer/trace_event_importer.html">
+<link rel="import" href="/tracing/importer/import.html">
 
 <script>
 'use strict';
@@ -16,14 +17,10 @@ tr.b.unittest.testSuite(function() {
   var findSliceNamed = tr.c.test_utils.findSliceNamed;
 
   var makeModel = function(events, opt_shift, opt_prune) {
-    var shift = opt_shift === undefined ? true : opt_shift;
-    var prune = opt_prune === undefined ? true : opt_prune;
-
-    var io = new tr.ImportOptions();
-    io.showImportWarnings = false;
-    io.shiftWorldToZero = shift;
-    io.pruneEmptyContainers = prune;
-    return new tr.Model(events, io);
+    return tr.c.test_utils.newModelWithEvents([events], {
+      shiftWorldToZero: opt_shift,
+      pruneEmptyContainers: opt_prune
+    });
   }
 
   test('canImportEmpty', function() {
@@ -1935,8 +1932,7 @@ tr.b.unittest.testSuite(function() {
       {ts: 20000, pid: 1, tid: 1, ph: 'O', cat: 'c', id: '0x1000', name: 'a', args: {snapshot: 20}}, // @suppress longLineCheck
       {ts: 50000, pid: 1, tid: 1, ph: 'D', cat: 'c', id: '0x1000', name: 'a', args: {}} // @suppress longLineCheck
     ];
-    var m = makeModel();
-    m.importTraces([events], false);
+    var m = makeModel(events, false);
     assert.equal(m.bounds.min, 10);
     assert.equal(m.bounds.max, 50);
     assert.isFalse(m.hasImportWarnings);
@@ -2342,6 +2338,92 @@ tr.b.unittest.testSuite(function() {
     var m = makeModel(events);
 
     assert.equal(m.flowEvents.length, 0);
+  });
+
+  test('importFlowV2OnePair', function() {
+    // Flow V2: one flow producer one flow consumer
+    var events = [
+      { name: 'producer', cat: 'foo', pid: 52, tid: 53, ts: 547, ph: 'X', 'dur': 100, bind_id: '0xaaa', flow_out: true},   // @suppress longLineCheck
+      { name: 'consumer', cat: 'foo', pid: 70, tid: 71, ts: 770, ph: 'X', 'dur': 1000, bind_id: '0xaaa', flow_in: true}   // @suppress longLineCheck
+    ];
+
+    var m = makeModel(events);
+
+    assert.equal(m.flowEvents.length, 1);
+
+    var f0 = m.flowEvents[0];
+
+    assert.equal(f0.startSlice.title, 'producer');
+    assert.deepEqual(f0.startSlice.outFlowEvents, [f0]);
+    assert.equal(f0.endSlice.title, 'consumer');
+    assert.deepEqual(f0.endSlice.inFlowEvents, [f0]);
+  });
+
+  test('importFlowV2OneFlowStep', function() {
+    // Flow V2: one flow producer one flow consumer
+    var events = [
+      { name: 'producer', cat: 'foo', pid: 52, tid: 53, ts: 547, ph: 'X', 'dur': 100, bind_id: '0xaaa', flow_out: true},   // @suppress longLineCheck
+      { name: 'step', cat: 'foo', pid: 62, tid: 63, ts: 647, ph: 'X', 'dur': 100, bind_id: '0xaaa', flow_out: true, flow_in: true},   // @suppress longLineCheck
+      { name: 'consumer', cat: 'foo', pid: 70, tid: 71, ts: 770, ph: 'X', 'dur': 1000, bind_id: '0xaaa', args: { 'queue_duration': 0}, flow_in: true}   // @suppress longLineCheck
+    ];
+
+    var m = makeModel(events);
+
+    assert.equal(m.flowEvents.length, 2);
+
+    var f0 = m.flowEvents[0];
+    var f1 = m.flowEvents[1];
+
+    assert.equal(f0.startSlice.title, 'producer');
+    assert.deepEqual(f0.startSlice.outFlowEvents, [f0]);
+    assert.equal(f0.endSlice.title, 'step');
+    assert.deepEqual(f0.endSlice.inFlowEvents, [f0]);
+
+    assert.equal(f1.startSlice.title, 'step');
+    assert.deepEqual(f1.startSlice.outFlowEvents, [f1]);
+    assert.equal(f1.endSlice.title, 'consumer');
+    assert.deepEqual(f1.endSlice.inFlowEvents, [f1]);
+  });
+
+  test('importFlowV2MultipleConsumers', function() {
+    // Flow V2: one flow producer multiple flow consumers
+    var events = [
+      { name: 'producer', cat: 'foo', pid: 52, tid: 53, ts: 547, ph: 'X', 'dur': 100, bind_id: '0xaaa', flow_out: true},   // @suppress longLineCheck
+      { name: 'consumer1', cat: 'foo', pid: 70, tid: 71, ts: 770, ph: 'X', 'dur': 1000, bind_id: '0xaaa', flow_in: true},   // @suppress longLineCheck
+      { name: 'consumer2', cat: 'foo', pid: 70, tid: 72, ts: 870, ph: 'X', 'dur': 1000, bind_id: '0xaaa', flow_in: true}   // @suppress longLineCheck
+    ];
+
+    var m = makeModel(events);
+
+    assert.equal(m.flowEvents.length, 2);
+
+    var f0 = m.flowEvents[0];
+    var f1 = m.flowEvents[1];
+
+    assert.equal(f0.startSlice.title, 'producer');
+    assert.equal(f1.startSlice.title, 'producer');
+
+    assert.equal(f0.startSlice.outFlowEvents.length, 2);
+    assert.deepEqual(f0.startSlice.outFlowEvents, [f0, f1]);
+    assert.deepEqual(f1.startSlice.outFlowEvents, [f0, f1]);
+
+    assert.equal(f0.endSlice.title, 'consumer1');
+    assert.equal(f1.endSlice.title, 'consumer2');
+    assert.deepEqual(f0.endSlice.inFlowEvents, [f0]);
+    assert.deepEqual(f1.endSlice.inFlowEvents, [f1]);
+  });
+
+  test('importFlowV2MultipleProducers', function() {
+    // Flow V2: multiple flow producers, which is not allowed
+    var events = [
+      { name: 'producer1', cat: 'foo', pid: 52, tid: 53, ts: 547, ph: 'X', 'dur': 100, bind_id: '0xaaa', flow_out: true},   // @suppress longLineCheck
+      { name: 'producer2', cat: 'foo', pid: 52, tid: 54, ts: 567, ph: 'X', 'dur': 100, bind_id: '0xaaa', flow_out: true},   // @suppress longLineCheck
+      { name: 'consumer', cat: 'foo', pid: 70, tid: 71, ts: 770, ph: 'X', 'dur': 1000, bind_id: '0xaaa', flow_in: true}   // @suppress longLineCheck
+    ];
+
+    var m = makeModel(events);
+
+    assert.equal(m.flowEvents.length, 1);
   });
 
   // This test creates a flow event that stops on the same timestamp that
