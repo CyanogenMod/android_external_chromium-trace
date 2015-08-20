@@ -78,6 +78,8 @@ class AtraceAgent(systrace_agent.SystraceAgent):
     self._expect_trace = False
     self._adb = None
     self._trace_data = None
+    if not self._categories:
+      self._categories = get_default_categories(self._options.device_serial)
 
   def start(self):
     tracer_args = self._construct_trace_command()
@@ -110,8 +112,6 @@ class AtraceAgent(systrace_agent.SystraceAgent):
     if self._options.kfuncs is not None:
       extra_args.extend(['-k', self._options.kfuncs])
 
-    if not self._categories:
-      self._categories = get_default_categories(self._options.device_serial)
     extra_args.extend(self._categories)
     return extra_args
 
@@ -142,6 +142,10 @@ class AtraceAgent(systrace_agent.SystraceAgent):
       if ((self._options.trace_buf_size is not None)
           and (self._options.trace_buf_size > 0)):
         atrace_args.extend(['-b', str(self._options.trace_buf_size)])
+      elif 'sched' in self._categories:
+        # 'sched' is a high-volume tag, double the default buffer size
+        # to accommodate that
+        atrace_args.extend(['-b', '4096'])
       extra_args = self._construct_extra_trace_command()
       atrace_args.extend(extra_args)
 
