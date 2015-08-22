@@ -12,7 +12,7 @@ import util
 
 DEVICE_SERIAL = 'AG8404EC0444AGC'
 LIST_TMP_ARGS = ['ls', '/data/local/tmp']
-ATRACE_ARGS = ['atrace', '-z', '-t', '10']
+ATRACE_ARGS = ['atrace', '-z', '-t', '10', '-b', '4096']
 CATEGORIES = ['sched', 'gfx', 'view', 'wm']
 ADB_SHELL = ['adb', '-s', DEVICE_SERIAL, 'shell']
 
@@ -23,7 +23,7 @@ TRACE_CMD = (ADB_SHELL + ATRACE_ARGS + CATEGORIES)
 SYSTRACE_LIST_CATEGORIES_CMD = ['./systrace.py', '-e', DEVICE_SERIAL, '-l']
 TRACE_LIST_CATEGORIES_CMD = (ADB_SHELL + ['atrace', '--list_categories'])
 
-LEGACY_ATRACE_ARGS = ['atrace', '-z', '-t', '10', '-s']
+LEGACY_ATRACE_ARGS = ['atrace', '-z', '-t', '10', '-b', '4096', '-s']
 LEGACY_TRACE_CMD = (ADB_SHELL + LEGACY_ATRACE_ARGS)
 
 STOP_FIX_UPS = ['atrace', '--no-fix-threads', '--no-fix-tgids']
@@ -63,7 +63,7 @@ class UtilUnitTest(unittest.TestCase):
 
     command = util.construct_adb_shell_command(ATRACE_ARGS, DEVICE_SERIAL)
     self.assertEqual(' '.join(command),
-                     'adb -s AG8404EC0444AGC shell atrace -z -t 10')
+                     'adb -s AG8404EC0444AGC shell atrace -z -t 10 -b 4096')
 
 
 class AtraceAgentUnitTest(unittest.TestCase):
