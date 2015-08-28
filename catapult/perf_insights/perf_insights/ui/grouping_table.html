@@ -25,7 +25,7 @@ found in the LICENSE file.
 
 tr.exportTo('pi.ui', function() {
 
-  function Row(title, data, groupingKeyFuncs) {
+  function Row(title, data, groupingKeyFuncs, compareFunc) {
     this.title = title;
     this.data_ = data;
     if (groupingKeyFuncs === undefined)
@@ -93,7 +93,7 @@ tr.exportTo('pi.ui', function() {
     },
 
     get tableColumns() {
-      return this.$.tableColumns;
+      return this.$.table.tableColumns;
     },
 
     set tableColumns(tableColumns) {
@@ -101,7 +101,7 @@ tr.exportTo('pi.ui', function() {
     },
 
     get sortColumnIndex() {
-      return this.$.sortColumnIndex;
+      return this.$.table.sortColumnIndex;
     },
 
     set sortColumnIndex(sortColumnIndex) {
@@ -109,11 +109,51 @@ tr.exportTo('pi.ui', function() {
     },
 
     get sortDescending() {
-      return this.$.sortDescending;
+      return this.$.table.sortDescending;
     },
 
     set sortDescending(sortDescending) {
       this.$.table.sortDescending = sortDescending;
+    },
+
+    get rowHighlightEnabled() {
+      return this.$.table.rowHighlightEnabled;
+    },
+
+    set rowHighlightEnabled(rowHighlightEnabled) {
+      this.$.table.rowHighlightEnabled = rowHighlightEnabled;
+    },
+
+    get supportsSelection() {
+      return this.$.table.supportsSelection;
+    },
+
+    set supportsSelection(supportsSelection) {
+      this.$.table.supportsSelection = supportsSelection;
+    },
+
+    get cellSelectionMode() {
+      return this.$.table.cellSelectionMode;
+    },
+
+    set cellSelectionMode(cellSelectionMode) {
+      this.$.table.cellSelectionMode = cellSelectionMode;
+    },
+
+    get selectedColumnIndex() {
+      return this.$.table.selectedColumnIndex;
+    },
+
+    set selectedColumnIndex(selectedColumnIndex) {
+      this.$.table.selectedColumnIndex = selectedColumnIndex;
+    },
+
+    get selectedTableRow() {
+      return this.$.table.selectedTableRow;
+    },
+
+    set selectedTableRow(selectedTableRow) {
+      this.$.table.selectedTableRow = selectedTableRow;
     },
 
     get groupBy() {
@@ -141,11 +181,11 @@ tr.exportTo('pi.ui', function() {
       var dataToGroup = this.dataToGroup_ || [];
 
       var superRow = new Row('', dataToGroup, groupBy);
-      this.$.table.tableRows = superRow.subRows;
+      this.$.table.tableRows = superRow.subRows || [];
     }
   });
 
   return {
-  }
+  };
 });
 </script>

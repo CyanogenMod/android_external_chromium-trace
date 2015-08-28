@@ -2,8 +2,6 @@
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 
-"""Unit tests for alert module."""
-
 import unittest
 
 from dashboard import testing_common
@@ -16,11 +14,9 @@ class AlertTest(testing_common.TestCase):
   """Test case for some functions in anomaly."""
 
   def testGetBotNamesFromAlerts_EmptyList_ReturnsEmptySet(self):
-    """Tests that an empty set is returned when nothing is passed."""
     self.assertEqual(set(), alert.GetBotNamesFromAlerts([]))
 
   def testGetBotNamesFromAlerts_RemovesDuplicates(self):
-    """Tests that duplicates are removed from the result."""
     testing_common.AddTests(
         ['SuperGPU'], ['Bot1'], {'foo': {'bar': {}}})
     anomaly.Anomaly(test=utils.TestKey('SuperGPU/Bot1/foo/bar')).put()
@@ -30,8 +26,7 @@ class AlertTest(testing_common.TestCase):
     self.assertEqual(2, len(anomalies))
     self.assertEqual(1, len(bot_names))
 
-  def testGetBotNamesFromAlerts_TypicalCase(self):
-    """Tests that we can get the name of the bots for a list of anomalies."""
+  def testGetBotNamesFromAlerts_ReturnsBotNames(self):
     testing_common.AddTests(
         ['SuperGPU'], ['Bot1', 'Bot2', 'Bot3'], {'foo': {'bar': {}}})
     anomaly.Anomaly(test=utils.TestKey('SuperGPU/Bot1/foo/bar')).put()
