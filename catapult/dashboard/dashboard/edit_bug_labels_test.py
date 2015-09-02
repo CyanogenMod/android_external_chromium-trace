@@ -2,8 +2,6 @@
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 
-"""Unit tests for edit_bug_labels module."""
-
 import unittest
 
 import webapp2
@@ -31,8 +29,7 @@ class EditBugLabelsTest(testing_common.TestCase):
     super(EditBugLabelsTest, self).tearDown()
     self.UnsetCurrentUser()
 
-  def testBugLabelPattern(self):
-    """Tests adding and removing a BugLabelPattern."""
+  def testBugLabelPattern_AddAndRemove(self):
     self.testapp.post('/edit_bug_labels', {
         'action': 'add_buglabel_pattern',
         'buglabel_to_add': 'Performance-1',

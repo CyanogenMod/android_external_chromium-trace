@@ -2,8 +2,6 @@
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 
-"""Unit test for 'main' module (the request handler for the front page)."""
-
 import unittest
 
 import mock
@@ -29,8 +27,8 @@ class MainTest(testing_common.TestCase):
   @mock.patch(
       'google.appengine.api.urlfetch.fetch',
       mock.MagicMock(return_value=testing_common.FakeResponseObject(500, '')))
-  def testGet_BugRequestFails_PageIsShown(self):
-    """Even if the recent bugs list can't be fetched, the page should load."""
+  def testGet_BugRequestFails_PageIsStillShown(self):
+    # Even if the recent bugs list can't be fetched, the page should load.
     response = self.testapp.get('/')
     self.assertIn('<html>', response.body)
 

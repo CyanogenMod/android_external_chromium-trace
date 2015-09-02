@@ -5,8 +5,9 @@ the bisect process after the user clicks on the bisect button.
 <link rel="import" href="/third_party/polymer/components/paper-button/paper-button.html">
 <link rel="import" href="/third_party/polymer/components/paper-dialog/paper-action-dialog.html">
 <link rel="import" href="/third_party/polymer/components/paper-spinner/paper-spinner.html">
-<link rel="import" href="/dashboard/elements/base-form.html">
-<link rel="import" href="/dashboard/elements/xhr-element.html">
+
+<link rel="import" href="base-form.html">
+<link rel="import" href="xhr-element.html">
 
 <polymer-element name="bisect-form" extends="base-form"
                  attributes="xsrfToken testPath
@@ -46,10 +47,6 @@ the bisect process after the user clicks on the bisect button.
         paper-button[affirmative] {
           background: #4285f4;
           color: #fff;
-        }
-
-        paper-spinner::shadow .circle {
-          border-color: #4285f4;
         }
 
         .error {
@@ -130,10 +127,6 @@ the bisect process after the user clicks on the bisect button.
                 <b>not</b> show up on the graph.
               </p>
             </td>
-          </tr>
-          <tr>
-            <td>Use recipe (beta):</td>
-            <td><input type="checkbox" checked="{{useRecipe}}"></td>
           </tr>
         </table>
       </form>
@@ -228,10 +221,9 @@ the bisect process after the user clicks on the bisect button.
               'max_time_minutes': this.MAX_TIME_MINUTES,
               'truncate_percent': this.TRUNCATE_PERCENT,
               'use_archive': this.useArchive ? 'true' : '',
-              'use_recipe': this.useRecipe ? 'true' : '',
               'master': this.master,
               'internal_only': this.internalOnly,
-              'bisect_mode': this.BISECT_MODE,
+              'bisect_mode': this.BISECT_MODE
           };
           if (this.bugId) {
             params['bug_id'] = this.bugId;
