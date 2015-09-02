@@ -18,33 +18,34 @@ AUTO_JOB_COUNT = 'auto-job-count'
 
 class MapRunner:
   def __init__(self, trace_handles, map_function_handle,
-               stop_on_error=False):
+               stop_on_error=False, progress_reporter=None):
     self._map_function_handle = map_function_handle
     self._work_queue = queue.Queue()
     self._result_queue = queue.Queue()
     self._stop_on_error = stop_on_error
     self._abort = False
     self._failed_run_info_to_dump = None
-    self._progress_reporter = gtest_progress_reporter.GTestProgressReporter(
-                                  sys.stdout)
+    if progress_reporter is None:
+      self._progress_reporter = gtest_progress_reporter.GTestProgressReporter(
+                                    sys.stdout)
+    else:
+      self._progress_reporter = progress_reporter
     for trace_handle in trace_handles:
       self._work_queue.put(trace_handle)
 
   def _ProcessTrace(self, trace_handle):
     run_info = trace_handle.run_info
     subresults = results_module.Results()
-    # TODO: Modify ProgressReporter API to deal with interleaving runs so
-    # that we can use self._progress_reporter here.
-    progress_reporter = gtest_progress_reporter.GTestProgressReporter(
-                            sys.stdout)
-    progress_reporter.WillRun(run_info)
+    run_reporter = self._progress_reporter.WillRun(run_info)
     map_single_trace.MapSingleTrace(
         subresults,
         trace_handle,
         self._map_function_handle)
+    for v in subresults.all_values:
+      run_reporter.DidAddValue(v)
     self._result_queue.put(subresults)
     had_failure = subresults.DoesRunContainFailure(run_info)
-    progress_reporter.DidRun(run_info, had_failure)
+    run_reporter.DidRun(had_failure)
     if self._stop_on_error and had_failure:
       self._failed_run_info_to_dump = run_info
       self._abort = True

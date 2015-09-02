@@ -160,7 +160,7 @@ tr.exportTo('tr.ui.units', function() {
         this.items_ = undefined;
       } else if (itemsOrGenericTable instanceof Array) {
         this.items_ = itemsOrGenericTable;
-      } else if (itemsOrGenericTable instanceof tr.b.units.GenericTable) {
+      } else if (itemsOrGenericTable instanceof tr.b.u.GenericTable) {
         this.items_ = itemsOrGenericTable.items;
       }
       this.updateContents_();
@@ -264,6 +264,22 @@ tr.exportTo('tr.ui.units', function() {
       this.$.table.tableRows = this.items_;
       this.$.table.footerRows = this.createFooterRowsIfNeeded_(columns);
       this.$.table.rebuild();
+    },
+
+    get supportsSelection() {
+      return this.$.supportsSelection;
+    },
+
+    set supportsSelection(supportsSelection) {
+      this.$.table.supportsSelection = supportsSelection;
+    },
+
+    get rowHighlightEnabled() {
+      return this.$.rowHighlightEnabled;
+    },
+
+    set rowHighlightEnabled(rowHighlightEnabled) {
+      this.$.table.rowHighlightEnabled = rowHighlightEnabled;
     }
   });
 

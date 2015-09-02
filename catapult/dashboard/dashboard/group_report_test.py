@@ -2,8 +2,6 @@
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 
-"""Unit tests for group_report module."""
-
 import unittest
 
 import webapp2
@@ -115,7 +113,6 @@ class GroupReportTest(testing_common.TestCase):
     self.assertEqual(3, len(alert_list))
 
   def testGet_WithInvalidRevParameter_ShowsError(self):
-    """Tests a request to /group_report with the rev parameter."""
     response = self.testapp.get('/group_report?rev=foo')
     self.assertIn('error', response.body)
     self.assertIn('Invalid rev', response.body)

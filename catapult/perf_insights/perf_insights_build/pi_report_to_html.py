@@ -12,11 +12,12 @@ from perf_insights import corpus_query
 from perf_insights import local_directory_corpus_driver
 from perf_insights import map_function_handle as map_function_handle_module
 from perf_insights import map_runner
+from perf_insights import progress_reporter as progress_reporter_module
 from perf_insights.results import json_output_formatter
 from tvcm import generate
 import perf_insights
 import perf_insights_project
-import polymer_soup
+import bs4
 
 
 def Main(argv, pi_report_file=None):
@@ -48,34 +49,29 @@ def Main(argv, pi_report_file=None):
     query = corpus_query.CorpusQuery.FromString(
         args.query)
 
-  return PiReportToHTML(args.output_file, args.trace_directory,
+  with codecs.open(args.output_file, mode='w', encoding='utf-8') as ofile:
+    return PiReportToHTML(ofile, args.trace_directory,
                         pi_report_file, query, args.json,
                         args.stop_on_error, args.jobs)
 
-def _GetAttr(n, attr, defaultValue=None):
-  for pair in n.attrs:
-    if pair[0] == attr:
-      return pair[1]
-  return defaultValue
-
 def _GetMapFunctionHrefFromPiReport(html_contents):
-  soup = polymer_soup.PolymerSoup(html_contents)
+  soup = bs4.BeautifulSoup(html_contents)
   elements = soup.findAll('polymer-element')
   for element in elements:
-    if _GetAttr(element, 'extends').lower() == 'pi-ui-pi-report':
-      map_function_href = _GetAttr(element, 'map-function-href')
+    if element.attrs.get('extends').lower() == 'pi-ui-r-pi-report':
+      map_function_href = element.attrs.get('map-function-href', None)
       if map_function_href is None:
         raise Exception('Report is missing map-function-href attribute')
-      pi_report_element_name = _GetAttr(element, 'name', None)
+      pi_report_element_name = element.attrs.get('name', None)
       if pi_report_element_name is None:
         raise Exception('Report is missing name attribute')
       return map_function_href, pi_report_element_name
-  raise Exception('No element that extends pi-ui-pi-report was found')
+  raise Exception('No element that extends pi-ui-r-pi-report was found')
 
 
-def PiReportToHTML(output_file, trace_directory, pi_report_file,
+def PiReportToHTML(ofile, trace_directory, pi_report_file,
                    query, json_output=False,
-                   stop_on_error=False, jobs=1):
+                   stop_on_error=False, jobs=1, quiet=False):
   project = perf_insights_project.PerfInsightsProject()
 
   with open(pi_report_file, 'r') as f:
@@ -91,30 +87,34 @@ def PiReportToHTML(output_file, trace_directory, pi_report_file,
     raise Exception('Could not find %s' % map_function_href)
 
   results = _MapTraces(trace_directory, map_function_handle,
-                       query, stop_on_error, jobs)
+                       query, stop_on_error, jobs, quiet)
   if stop_on_error and results.had_failures:
     sys.stderr.write('There were mapping errors. Aborting.');
     return 255
 
-  with codecs.open(output_file, mode='w', encoding='utf-8') as ofile:
-    if json_output:
-      json.dump(results.AsDict(), ofile, indent=2)
-    else:
-      WriteResultsToFile(ofile, project,
-                         pi_report_file, pi_report_element_name,
-                         results)
+  if json_output:
+    json.dump(results.AsDict(), ofile, indent=2)
+  else:
+    WriteResultsToFile(ofile, project,
+                       pi_report_file, pi_report_element_name,
+                       results)
   return 0
 
 
 def _MapTraces(trace_directory, map_function_handle, query,
                stop_on_error=False,
-               jobs=1):
+               jobs=1, quiet=False):
   corpus_driver = local_directory_corpus_driver.LocalDirectoryCorpusDriver(
       os.path.abspath(os.path.expanduser(trace_directory)))
 
   trace_handles = corpus_driver.GetTraceHandlesMatchingQuery(query)
+  if quiet:
+    alt_progress_reporter = progress_reporter_module.ProgressReporter()
+  else:
+    alt_progress_reporter = None
   runner = map_runner.MapRunner(trace_handles, map_function_handle,
-                  stop_on_error=stop_on_error)
+                  stop_on_error=stop_on_error,
+                  progress_reporter=alt_progress_reporter)
   return runner.Run(jobs=jobs)
 
 
