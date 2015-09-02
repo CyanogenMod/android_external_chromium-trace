@@ -24,7 +24,7 @@ _EXCLUDED_PATHS = (
     r'.*LICENSE$',
     r'.*OWNERS$',
     r'.*README\.md$',
-    r'^dashboard[\\\/]third_party[\\\/].*',
+    r'^dashboard[\\\/]dashboard[\\\/]templates[\\\/].*',
     r'^experimental[\\\/]heatmap[\\\/].*',
     r'^perf_insights[\\\/]test_data[\\\/].*',
     r'^perf_insights[\\\/]third_party[\\\/].*',
@@ -61,7 +61,7 @@ def CheckChange(input_api, output_api):
   results = []
   try:
     sys.path += [input_api.PresubmitLocalPath()]
-    from build import js_checks
+    from catapult_build import js_checks
     results += input_api.canned_checks.PanProjectChecks(
         input_api, output_api, excluded_paths=_EXCLUDED_PATHS)
     results += input_api.canned_checks.RunPylint(

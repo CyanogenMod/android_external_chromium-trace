@@ -8,7 +8,7 @@ found in the LICENSE file.
 <link rel="import" href="/tracing/base/base.html">
 <link rel="import" href="/tracing/model/attribute.html">
 <link rel="import" href="/tracing/ui/base/dom_helpers.html">
-<link rel="import" href="/tracing/ui/units/size_in_bytes_span.html">
+<link rel="import" href="/tracing/ui/units/scalar_span.html">
 
 <script>
 'use strict';
@@ -132,22 +132,20 @@ tr.exportTo('tr.ui.analysis', function() {
    *   3. columns whose name is 'page_size'.
    *      [least important, right in the resulting table]
    *
-   * where the order within each group is unmodified (stable sort).
+   * where columns are sorted alphabetically within each group.
    */
   MemoryColumn.sortByImportance = function(columns, importanceRules) {
     var positions = columns.map(function(column, srcIndex) {
       return {
         importance: column.getImportance(importanceRules),
-        srcIndex: srcIndex,
         column: column
       };
     });
 
     positions.sort(function(a, b) {
-      // Keep existing order of columns if they have the same importance
-      // (stable sort).
+      // Sort columns with the same importance alphabetically.
       if (a.importance === b.importance)
-        return a.srcIndex - b.srcIndex;
+        return a.column.name.localeCompare(b.column.name);
 
       // Sort columns in descending order of importance.
       return b.importance - a.importance;
@@ -321,8 +319,8 @@ tr.exportTo('tr.ui.analysis', function() {
 
     formatDefinedAttributeValue: function(attr) {
       if (this.units === 'bytes') {
-        var sizeEl = document.createElement('tr-ui-u-size-in-bytes-span');
-        sizeEl.numBytes = attr.value;
+        var sizeEl = document.createElement('tr-ui-u-scalar-span');
+        sizeEl.setValueAndUnit(attr.value, tr.b.u.Units.sizeInBytes);
         return sizeEl;
       }
       return MemoryColumn.prototype.formatDefinedAttributeValue.call(

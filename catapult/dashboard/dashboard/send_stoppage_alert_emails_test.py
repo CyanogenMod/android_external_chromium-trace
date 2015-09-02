@@ -2,8 +2,6 @@
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 
-"""Unit tests for send_stoppage module."""
-
 import unittest
 
 import webapp2
@@ -38,7 +36,6 @@ class EmailSummaryTest(testing_common.TestCase):
       testing_common.AddRows(test_path, {100})
 
   def testGet_ThreeAlertsOneSheriff_EmailSent(self):
-    """Adds data for the tests below, including several stoppage alerts."""
     self._AddSampleData()
     for name in ('foo', 'bar', 'baz'):
       test = utils.TestKey('M/b/suite/%s' % name).get()
