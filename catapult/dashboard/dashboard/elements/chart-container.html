@@ -4,10 +4,11 @@ including a legend listing different traces that can be plotted on the same
 chart, a revision range selecting mini-chart at the bottom, and all of the alert
 triaging functionality in the chart.
 -->
-<link rel="import" href="/third_party/polymer/components/core-collapse/core-collapse.html">
-<link rel="import" href="/third_party/polymer/components/core-icon/core-icon.html">
-<link rel="import" href="/third_party/polymer/components/paper-button/paper-button.html">
+<link rel="import" href="/components/core-collapse/core-collapse.html">
+<link rel="import" href="/components/core-icon/core-icon.html">
+<link rel="import" href="/components/paper-button/paper-button.html">
 
+<link rel="import" href="alert-icon.html">
 <link rel="import" href="chart-legend.html">
 <link rel="import" href="chart-slider.html">
 <link rel="import" href="chart-title.html">
@@ -21,6 +22,7 @@ triaging functionality in the chart.
                              showCompact collapseLegend"
                  on-drop="{{onDrop}}"
                  on-dragover="{{allowDrop}}">
+
   <template>
     <style>
     #container {
@@ -116,17 +118,11 @@ triaging functionality in the chart.
       position: relative;
     }
 
-    .alert-icon {
+    alert-icon {
       position: absolute;
       margin-top: -5px;
-      margin-left: -1px;
+      margin-left: -6px;
       z-index: 1000;
-    }
-
-    .alert-icon.highlighted {
-      box-shadow: 0px 0px 5px #ffba02;
-      border: 2px solid #ffba02;
-      border-radius: 14px;
     }
 
     #close-chart {
@@ -142,6 +138,7 @@ triaging functionality in the chart.
       width: 100%;
     }
     </style>
+
     <div id="container" compact?="{{showCompact}}">
       <div id="top-bar" horizontal layout>
         <div flex horizontal center-justified layout>
@@ -160,6 +157,7 @@ triaging functionality in the chart.
         <div id="alert-icon-container"></div>
         <chart-tooltip id="tooltip"
                        xsrfToken="{{xsrfToken}}"></chart-tooltip>
+
         <div id="plots-container" on-mouseleave="{{onMouseLeave}}">
           <div id="plot">
             <div id="loading-div">
@@ -1174,6 +1172,7 @@ triaging functionality in the chart.
 
           var data = this.getDataForFlot();
           if (data.length == 0) {
+            data = [[]];
             this.chart = $.plot(this.$.plot, data, this.chartOptions);
             this.clearAlertIcons();
             return;
@@ -1380,7 +1379,6 @@ triaging functionality in the chart.
           var minHeight = this.chart.getAxes().yaxis.min;
           var maxHeight = this.chart.getAxes().yaxis.max;
           var xOffset = this.chartOptions.yaxis.labelWidth;
-
           var flotData = this.chart.getData();
           var annotations = this.json.annotations;
           for (var flotIndex = 0; flotIndex < flotData.length; flotIndex++) {
@@ -1397,16 +1395,20 @@ triaging functionality in the chart.
                   flotData[flotIndex].data[dataIndex][1] > maxHeight) {
                 continue;
               }
-              var alertIcon = this.addAlertIcon(
-                  annotations[jsonSeriesIndex][dataIndex]['g_anomaly']);
+
+              var flotPoint = flotData[flotIndex].data[dataIndex];
               var left = xOffset + Math.round(
-                  flotData[flotIndex].xaxis.p2c(
-                      flotData[flotIndex].data[dataIndex][0]));
+                  flotData[flotIndex].xaxis.p2c(flotPoint[0]));
               var top = Math.round(
-                  flotData[flotIndex].yaxis.p2c(
-                      flotData[flotIndex].data[dataIndex][1]));
-              alertIcon.style.left = left + 'px';
-              alertIcon.style.top = top + 'px';
+                  flotData[flotIndex].yaxis.p2c(flotPoint[1]));
+
+              var alertIcon = document.createElement('alert-icon');
+              alertIcon.initialize(
+                annotations[jsonSeriesIndex][dataIndex]['g_anomaly'],
+                this.alertKey);
+              this.$['alert-icon-container'].appendChild(alertIcon);
+              alertIcon.setPosition(top, left);
+
               alertIcon.onmouseover = this.showTooltip.bind(
                   this, flotIndex, dataIndex);
               alertIcon.onclick = this.onAlertClick.bind(
@@ -1417,43 +1419,6 @@ triaging functionality in the chart.
 
         clearAlertIcons: function() {
           this.$['alert-icon-container'].innerHTML = '';
-        },
-
-        addAlertIcon: function(alertAnnotation) {
-          var bugId = alertAnnotation['bug_id'];
-          var improvement = alertAnnotation['improvement'];
-          var recovered = alertAnnotation['recovered'];
-          var key = alertAnnotation['key'];
-
-          var alertIcon = document.createElement('core-icon');
-
-          var icon = 'report';
-          var color = 'black';
-          if (!bugId && !improvement) {
-            color = 'red';
-          } else if (!bugId && improvement) {
-            color = 'green';
-            icon = 'info';
-          }
-          alertIcon.style.color = color;
-          alertIcon.icon = icon;
-
-          if (bugId && bugId < 0 || recovered) {
-            // Triaged as invalid, ignored, or recovered; lower opacity.
-            alertIcon.style.opacity = 0.4;
-          }
-
-          alertIcon.classList.add('alert-icon');
-          // alertKey is an optional attribute to specify that this chart
-          // is associated with an alert. If this alert is the one alert that
-          // this chart is meant to draw attention to, we want to distinguish
-          // this alert from any others on the chart.
-          if (this.alertKey == key) {
-             alertIcon.classList.add('highlighted');
-          }
-
-          this.$['alert-icon-container'].appendChild(alertIcon);
-          return alertIcon;
         },
 
         /**

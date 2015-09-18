@@ -21,6 +21,7 @@ tr.exportTo('tr.ui.analysis', function() {
   var GlobalMemoryDump = tr.model.GlobalMemoryDump;
   var ProcessMemoryDump = tr.model.ProcessMemoryDump;
   var MemoryAllocatorDump = tr.model.MemoryAllocatorDump;
+  var MemoryAllocatorDumpLink = tr.model.MemoryAllocatorDumpLink;
   var VMRegion = tr.model.VMRegion;
   var VMRegionByteStats = tr.model.VMRegionByteStats;
   var ScalarAttribute = tr.model.ScalarAttribute;
@@ -30,6 +31,7 @@ tr.exportTo('tr.ui.analysis', function() {
       var p1 = model.getOrCreateProcess(1);
       var p2 = model.getOrCreateProcess(2);
       var p3 = model.getOrCreateProcess(3);
+      var p4 = model.getOrCreateProcess(4);
 
       var gmd = new GlobalMemoryDump(model, 42);
       model.globalMemoryDumps.push(gmd);
@@ -48,7 +50,7 @@ tr.exportTo('tr.ui.analysis', function() {
       mostRecentGmd.processMemoryDumps[p1.pid] = mostRecentPmd1;
 
       var pmd1 = addProcessMemoryDump(p1, 41);
-      pmd1.totalResidentBytes = 31457280 /* 30 MiB */;
+      pmd1.totals = { residentBytes: 31457280 /* 30 MiB */ };
       mostRecentPmd1.vmRegions = [
         VMRegion.fromDict({
             startAddress: 1024,
@@ -65,7 +67,11 @@ tr.exportTo('tr.ui.analysis', function() {
 
       // One process with everything.
       var pmd2 = addProcessMemoryDump(p2, 42);
-      pmd2.totalResidentBytes = 20971520 /* 20 MiB */;
+      pmd2.totals = {
+        residentBytes: 20971520, /* 20 MiB */
+        peakResidentBytes: 41943040, /* 40 MiB */
+        arePeakResidentBytesResettable: false
+      };
       pmd2.vmRegions = [
         VMRegion.fromDict({
           startAddress: 256,
@@ -103,7 +109,7 @@ tr.exportTo('tr.ui.analysis', function() {
       pmd3.memoryAllocatorDumps = (function() {
         var oilpanDump = new MemoryAllocatorDump(pmd3, 'oilpan');
         oilpanDump.addAttribute('size',
-            new ScalarAttribute('bytes', 2147483648) /* 2 GiB */);
+            new ScalarAttribute('bytes', 3221225472) /* 3 GiB */);
         oilpanDump.addAttribute('inner_size',
             new ScalarAttribute('bytes', 5242880) /* 5 MiB */);
         oilpanDump.addAttribute('objects_count',
@@ -117,8 +123,18 @@ tr.exportTo('tr.ui.analysis', function() {
         v8Dump.addAttribute('objects_count',
             new ScalarAttribute('objects', 204));
 
+        var ownershipLink = new MemoryAllocatorDumpLink(v8Dump, oilpanDump);
+        v8Dump.owns = ownershipLink;
+        oilpanDump.ownedBy.push(ownershipLink);
+
         return [oilpanDump, v8Dump];
       })();
+
+      var pmd4 = addProcessMemoryDump(p4, 44);
+      pmd4.totals = {
+        peakResidentBytes: 17825792, /* 17 MiB */
+        arePeakResidentBytesResettable: true
+      };
     });
 
     return model.globalMemoryDumps[0];

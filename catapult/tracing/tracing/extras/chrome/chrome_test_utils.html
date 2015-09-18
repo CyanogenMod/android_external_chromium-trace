@@ -21,7 +21,6 @@ tr.exportTo('tr.e.chrome', function() {
 
   ChromeTestUtils.newChromeModel = function(customizeModelCallback) {
     return tr.c.TestUtils.newModel(function(model) {
-      console.log(model);
       model.browserProcess = model.getOrCreateProcess(1);
       model.browserMain = model.browserProcess.getOrCreateThread(2);
       model.browserMain.name = 'CrBrowserMain';
@@ -59,6 +58,14 @@ tr.exportTo('tr.e.chrome', function() {
     dict.title = 'InputHandlerProxy::HandleGestureFling::started';
     var slice = tr.c.TestUtils.newAsyncSliceEx(dict);
     model.rendererCompositor.asyncSliceGroup.push(slice);
+    return slice;
+  }
+
+  ChromeTestUtils.addRenderingEvent = function(model, dict) {
+    dict.title = dict.title || 'DummyEvent';
+    dict.type = tr.model.ThreadSlice;
+    var slice = tr.c.TestUtils.newSliceEx(dict);
+    model.rendererMain.sliceGroup.pushSlice(slice);
     return slice;
   }
 
