@@ -13,6 +13,7 @@ import re
 import httplib2
 
 from google.appengine.api import users
+from google.appengine.api import app_identity
 
 from dashboard import buildbucket_job
 from dashboard import buildbucket_service
@@ -116,7 +117,7 @@ class StartBisectHandler(request_handler.RequestHandler):
     master_name = self.request.get('master', 'ChromiumPerf')
     internal_only = self.request.get('internal_only') == 'true'
     bisect_bot = self.request.get('bisect_bot')
-
+    bypass_no_repro_check = self.request.get('bypass_no_repro_check') == 'true'
     use_recipe = bool(GetBisectDirectorForTester(bisect_bot))
 
     bisect_config = GetBisectConfig(
@@ -132,7 +133,8 @@ class StartBisectHandler(request_handler.RequestHandler):
         bug_id=bug_id,
         use_archive=self.request.get('use_archive'),
         bisect_mode=self.request.get('bisect_mode', 'mean'),
-        use_buildbucket=use_recipe)
+        use_buildbucket=use_recipe,
+        bypass_no_repro_check=bypass_no_repro_check)
 
     if 'error' in bisect_config:
       return bisect_config
@@ -238,7 +240,7 @@ def _PrefillInfo(test_path):
 def GetBisectConfig(
     bisect_bot, master_name, suite, metric, good_revision, bad_revision,
     repeat_count, max_time_minutes, truncate_percent, bug_id, use_archive=None,
-    bisect_mode='mean', use_buildbucket=False):
+    bisect_mode='mean', use_buildbucket=False, bypass_no_repro_check=False):
   """Fills in a JSON response with the filled-in config file.
 
   Args:
@@ -302,6 +304,8 @@ def GetBisectConfig(
   }
   if use_buildbucket:
     config_dict['recipe_tester_name'] = bisect_bot
+  if bypass_no_repro_check:
+    config_dict['required_initial_confidence'] = '0'
   return config_dict
 
 
@@ -413,46 +417,57 @@ def GuessBisectBot(master_name, bot_name):
 def GuessCommand(
     bisect_bot, suite, metric=None, rerun_option=None, use_buildbucket=False):
   """Returns a command to use in the bisect configuration."""
-  platform = bisect_bot.split('_')[0]
   if suite in _NON_TELEMETRY_TEST_COMMANDS:
-    return _GuessCommandNonTelemetry(suite, platform)
+    return _GuessCommandNonTelemetry(suite, bisect_bot, use_buildbucket)
   return _GuessCommandTelemetry(
-      suite, platform, metric, rerun_option, use_buildbucket)
+      suite, bisect_bot, metric, rerun_option, use_buildbucket)
 
 
-def _GuessCommandNonTelemetry(suite, platform):
+def _GuessCommandNonTelemetry(suite, bisect_bot, use_buildbucket):
   """Returns a command string to use for non-Telemetry tests."""
   if suite not in _NON_TELEMETRY_TEST_COMMANDS:
     return None
-  if suite == 'cc_perftests' and platform == 'android':
-    return 'build/android/test_runner.py gtest --release -s cc_perftests'
+  if suite == 'cc_perftests' and bisect_bot.startswith('android'):
+    if use_buildbucket:
+      return 'src/build/android/test_runner.py gtest --release -s cc_perftests'
+    else:
+      return 'build/android/test_runner.py gtest --release -s cc_perftests'
 
-  command = _NON_TELEMETRY_TEST_COMMANDS[suite]
-  if platform.startswith('win'):
+  command = list(_NON_TELEMETRY_TEST_COMMANDS[suite])
+
+  if use_buildbucket and command[0].startswith('./out'):
+    command[0] = command[0].replace('./', './src/')
+
+  if bisect_bot.startswith('win'):
     command[0] = command[0].replace('/', '\\')
     command[0] += '.exe'
   return ' '.join(command)
 
 
 def _GuessCommandTelemetry(
-    suite, platform, metric,  # pylint: disable=unused-argument
+    suite, bisect_bot, metric,  # pylint: disable=unused-argument
     rerun_option, use_buildbucket):
   """Returns a command to use given that |suite| is a Telemetry benchmark."""
   # TODO(qyearsley): Use metric to add a --story-filter flag for Telemetry.
   # See: http://crbug.com/448628
   command = []
-  if platform.startswith('win'):
+  if bisect_bot.startswith('win'):
     command.append('python')
 
+  if use_buildbucket:
+    test_cmd = 'src/tools/perf/run_benchmark'
+  else:
+    test_cmd = 'tools/perf/run_benchmark'
+
   command.extend([
-      'tools/perf/run_benchmark',
+      test_cmd,
       '-v',
-      '--browser=%s' % _GuessBrowserName(platform),
+      '--browser=%s' % _GuessBrowserName(bisect_bot),
       '--output-format=%s' % ('chartjson' if use_buildbucket else 'buildbot'),
       '--also-run-disabled-tests',
   ])
 
-  profile_dir = _GuessProfileDir(suite)
+  profile_dir = _GuessProfileDir(suite, use_buildbucket)
   if profile_dir:
     command.append('--profile-dir=%s' % profile_dir)
 
@@ -473,22 +488,29 @@ def _GuessCommandTelemetry(
   return ' '.join(command)
 
 
-def _GuessBrowserName(platform):
+def _GuessBrowserName(bisect_bot):
   """Returns a browser name string for Telemetry to use."""
-  if platform == 'android':
+  if bisect_bot.startswith('android'):
     return 'android-chromium'
-  if platform == 'clankium':
+  if bisect_bot.startswith('clankium'):
     return 'android-chrome'
+  if bisect_bot.startswith('win') and 'x64' in bisect_bot:
+    return 'release_x64'
+
   return 'release'
 
 
-def _GuessProfileDir(suite):
+def _GuessProfileDir(suite, use_buildbucket):
   """Returns a profile directory string for Telemetry, or None."""
   if (suite == 'startup.warm.dirty.blank_page' or
       suite == 'startup.cold.dirty.blank_page' or
       suite.startswith('session_restore')):
+    # Profile directory relative to build directory on slave.
+    if use_buildbucket:
+      return 'src/out/Release/generated_profile/small_profile'
     # Profile directory relative to chromium/src.
-    return 'out/Release/generated_profile/small_profile'
+    else:
+      return 'out/Release/generated_profile/small_profile'
   return None
 
 
@@ -628,8 +650,8 @@ def PerformBisect(bisect_job):
       bisect_job.rietveld_issue_id = int(issue_id)
       bisect_job.rietveld_patchset_id = int(patchset_id)
       bisect_job.SetStarted()
-      bug_comment = ('Bisect started; track progress at <a href="%s">%s</a>'
-                     % (issue_url, issue_url))
+      bug_comment = ('Bisect started; track progress at '
+                     '<a href="%s">%s</a>' % (issue_url, issue_url))
       LogBisectResult(bug_id, bug_comment)
     return {'issue_id': issue_id, 'issue_url': issue_url}
   return {'error': 'Error starting try job. Try to fix at %s' % issue_url}
@@ -700,12 +722,7 @@ def _PerformPerfTryJob(perf_job):
 
 
 def LogBisectResult(bug_id, comment):
-  """Adds bisect results to log.
-
-  Args:
-    bug_id: ID of the issue.
-    comment: Bisect results information.
-  """
+  """Adds an entry to the bisect result log for a particular bug."""
   if not bug_id or bug_id < 0:
     return
   formatter = quick_logger.Formatter()
@@ -733,6 +750,13 @@ def _MakeBuildbucketBisectJob(bisect_job):
     raise request_handler.InvalidInputError(
         'Recipe is only implemented for tests run on chromium.perf '
         '(and chromium.perf.fyi).')
+
+  # Recipe bisect supports 'perf' and 'return_code' test types only.
+  # TODO (prasadv): Update bisect form on dashboard to support test_types.
+  test_type = 'perf'
+  if config.get('bisect_mode') == 'return_code':
+    test_type = config['bisect_mode']
+
   return buildbucket_job.BisectJob(
       bisect_director=GetBisectDirectorForTester(config['recipe_tester_name']),
       good_revision=config['good_revision'],
@@ -745,6 +769,8 @@ def _MakeBuildbucketBisectJob(bisect_job):
       bug_id=bisect_job.bug_id,
       gs_bucket='chrome-perf',
       recipe_tester_name=config['recipe_tester_name'],
+      test_type=test_type,
+      required_confidence=config.get('required_initial_confidence', '95')
   )
 
 
@@ -753,9 +779,15 @@ def PerformBuildbucketBisect(bisect_job):
     bisect_job.buildbucket_job_id = buildbucket_service.PutJob(
         _MakeBuildbucketBisectJob(bisect_job))
     bisect_job.SetStarted()
+    hostname = app_identity.get_default_version_hostname()
+    job_id = bisect_job.buildbucket_job_id
+    issue_url = 'https://%s/buildbucket_job_status/%s' % (hostname, job_id)
+    bug_comment = ('Bisect started; track progress at '
+                   '<a href="%s">%s</a>' % (issue_url, issue_url))
+    LogBisectResult(bisect_job.bug_id, bug_comment)
     return {
-        'issue_id': bisect_job.buildbucket_job_id,
-        'issue_url': '/buildbucket_job_status/' + bisect_job.buildbucket_job_id,
+        'issue_id': job_id,
+        'issue_url': issue_url,
     }
   except httplib2.HttpLib2Error as e:
     return {
