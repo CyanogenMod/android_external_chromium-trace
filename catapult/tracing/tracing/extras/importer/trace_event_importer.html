@@ -364,6 +364,12 @@ tr.exportTo('tr.e.importer', function() {
     },
 
     processCompleteEvent: function(event) {
+      // TODO(fmeawad): Preventing the overhead slices from making it into
+      // the model until bug
+      // https://github.com/catapult-project/catapult/issues/1469 is addressed.
+      if (event.cat.indexOf('trace_event_overhead') > -1)
+        return undefined;
+
       var thread = this.model_.getOrCreateProcess(event.pid)
           .getOrCreateThread(event.tid);
 
@@ -446,8 +452,10 @@ tr.exportTo('tr.e.importer', function() {
           // We won't know the name if we try to insert the code here.
         }
       } else {
-        map.addCode(startAddr,
-            new tr.e.importer.TraceCodeEntry(data.code_len, data.name));
+        var entry = new tr.e.importer.TraceCodeEntry(data.code_len, data.name);
+        // Hack to get around name de-duplication done by CodeMap::findEntry.
+        entry.nameUpdated_ = true;
+        map.addCode(startAddr, entry);
       }
     },
 
@@ -505,6 +513,10 @@ tr.exportTo('tr.e.importer', function() {
 
     processV8Sample: function(event) {
       var data = event.args.data;
+
+      // As-per DevTools, the backend sometimes creates bogus samples. Skip it.
+      if (data.vm_state === 'js' && !data.stack.length)
+        return;
 
       var rootStackFrame = this.v8ProcessRootStackFrame_[event.pid];
       if (!rootStackFrame) {
@@ -684,7 +696,7 @@ tr.exportTo('tr.e.importer', function() {
           // TODO(yuhaoz): If Chrome supports creating other events with flow,
           // we will need to call processFlowEvent for them also.
           // https://github.com/catapult-project/catapult/issues/1259
-          if (event.bind_id !== undefined)
+          if (slice !== undefined && event.bind_id !== undefined)
             this.processFlowEvent(event, slice);
 
         } else if (event.ph === 'b' || event.ph === 'e' || event.ph === 'n' ||
@@ -1820,6 +1832,9 @@ tr.exportTo('tr.e.importer', function() {
         var allMemoryAllocatorDumpsByGuid = {};
         var globalMemoryAllocatorDumpsByFullName = {};
 
+        var LEVELS_OF_DETAIL = [undefined, 'light', 'detailed'];
+        var globalLevelOfDetailIndex = undefined;
+
         events.process.forEach(function(processEvent) {
           var pid = processEvent.pid;
           if (pid in globalMemoryDump.processMemoryDumps) {
@@ -1846,19 +1861,81 @@ tr.exportTo('tr.e.importer', function() {
               globalMemoryDump, process,
               timestampFromUs(processEvent.ts));
 
-          // Parse the totals, which are mandatory.
-          if (dumps.process_totals === undefined ||
-              dumps.process_totals.resident_set_bytes === undefined) {
+          // Determine the level of detail of the dump.
+          var processLevelOfDetail = dumps.level_of_detail;
+          var processLevelOfDetailIndex = LEVELS_OF_DETAIL.indexOf(
+              processLevelOfDetail);
+          if (processLevelOfDetailIndex < 0) {
+            this.model_.importWarning({
+              type: 'memory_dump_parse_error',
+              message: 'unknown level of detail \'' + processLevelOfDetail +
+                  '\' of process memory dump for pid=' + pid +
+                  ' and dump id=' + id + '.'
+            });
+          } else {
+            processMemoryDump.levelOfDetail = processLevelOfDetail;
+            if (globalLevelOfDetailIndex === undefined) {
+              globalLevelOfDetailIndex = processLevelOfDetailIndex;
+            } else if (globalLevelOfDetailIndex !== processLevelOfDetailIndex) {
+              // If the process memory dumps have different levels of detail,
+              // show a warning and use the highest level.
+              this.model_.importWarning({
+                type: 'memory_dump_parse_error',
+                message: 'diffent levels of detail of process memory dumps ' +
+                    'for dump id=' + id + '.'
+              });
+              globalLevelOfDetailIndex = Math.max(
+                  globalLevelOfDetailIndex, processLevelOfDetailIndex);
+            }
+          }
+
+          // Parse the totals.
+          var rawTotals = dumps.process_totals;
+          if (rawTotals !== undefined) {
+            processMemoryDump.totals = {};
+
+            // Total resident bytes (mandatory).
+            if (rawTotals.resident_set_bytes !== undefined) {
+              processMemoryDump.totals.residentBytes = parseInt(
+                  rawTotals.resident_set_bytes, 16);
+            }
+
+            // Peak resident bytes (optional).
+            if (rawTotals.peak_resident_set_bytes !== undefined) {
+              if (rawTotals.is_peak_rss_resetable === undefined) {
+                this.model_.importWarning({
+                    type: 'memory_dump_parse_error',
+                    message: 'Optional field peak_resident_set_bytes found' +
+                        ' but is_peak_rss_resetable not found in' +
+                        ' process memory dump for pid=' + pid +
+                        ' and dump id=' + id + '.'
+                });
+              }
+              processMemoryDump.totals.peakResidentBytes = parseInt(
+                  rawTotals.peak_resident_set_bytes, 16);
+            }
+            if (rawTotals.is_peak_rss_resetable !== undefined) {
+              if (rawTotals.peak_resident_set_bytes === undefined) {
+                this.model_.importWarning({
+                    type: 'memory_dump_parse_error',
+                    message: 'Optional field is_peak_rss_resetable found' +
+                        ' but peak_resident_set_bytes not found in' +
+                        ' process memory dump for pid=' + pid +
+                        ' and dump id=' + id + '.'
+                });
+              }
+              processMemoryDump.totals.arePeakResidentBytesResettable =
+                  !!rawTotals.is_peak_rss_resetable;
+            }
+          }
+          if (processMemoryDump.totals === undefined ||
+              processMemoryDump.totals.residentBytes === undefined) {
             this.model_.importWarning({
                 type: 'memory_dump_parse_error',
                 message: 'Mandatory field resident_set_bytes not found in' +
                     ' process memory dump for pid=' + pid +
                     ' and dump id=' + id + '.'
             });
-            processMemoryDump.totalResidentBytes = undefined;
-          } else {
-            processMemoryDump.totalResidentBytes = parseInt(
-                dumps.process_totals.resident_set_bytes, 16);
           }
 
           // Populate the vmRegions, if present.
@@ -1971,6 +2048,16 @@ tr.exportTo('tr.e.importer', function() {
 
               // Add all new attributes to the memory allocator dump.
               var attributes = rawAllocatorDump.attrs;
+              if (attributes === undefined) {
+                this.model_.importWarning({
+                  type: 'memory_dump_parse_error',
+                  message: 'Memory allocator dump ' + fullName +
+                      ' from pid=' + pid + ' (GUID=' + guid + ') does not' +
+                      ' have attributes.'
+                });
+                attributes = {};
+              }
+
               tr.b.iterItems(attributes, function(attrName, attrArgs) {
                 if (attrName in allocatorDump.attributes) {
                   // Skip existing attributes of the memory allocator dump.
@@ -1998,6 +2085,9 @@ tr.exportTo('tr.e.importer', function() {
           process.memoryDumps.push(processMemoryDump);
           globalMemoryDump.processMemoryDumps[pid] = processMemoryDump;
         }, this);
+
+        globalMemoryDump.levelOfDetail =
+            LEVELS_OF_DETAIL[globalLevelOfDetailIndex];
 
         // Find the root allocator dumps and establish the parent links of
         // the global memory dump.

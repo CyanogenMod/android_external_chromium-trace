@@ -91,8 +91,8 @@
     }
   </style>
 
-  <link rel="import" href="/third_party/polymer/components/polymer/polymer.html">
-  <link rel="import" href="/third_party/polymer/components/paper-button/paper-button.html">
+  <link rel="import" href="/components/polymer/polymer.html">
+  <link rel="import" href="/components/paper-button/paper-button.html">
 
   <link rel="import" href="/elements/alerts-table.html">
   <link rel="import" href="/elements/bug-info.html">
@@ -112,7 +112,7 @@
     <overlay-message id="warning-message" opened="true" autoCloseDisabled duration="-1">
     {{warning_message}}
     {% if warning_bug %}
-      <a href="http://crbug.com/{{warning_bug}}">See bug {{warning_bug}}.</a>
+      <a href="https://github.com/catapult-project/catapult/issues/{{warning_bug}}">See bug #{{warning_bug}}.</a>
     {% endif %}
     </overlay-message>
   {% endif %}
