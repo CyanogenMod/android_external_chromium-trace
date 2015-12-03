@@ -5,14 +5,16 @@ Use of this source code is governed by a BSD-style license that can be
 found in the LICENSE file.
 -->
 
-<link rel="import" href="/tracing/ui/tracks/rect_track.html">
+<link rel="import" href="/tracing/base/color_scheme.html">
 <link rel="import" href="/tracing/ui/base/ui.html">
-<link rel="import" href="/tracing/ui/base/color_scheme.html">
+<link rel="import" href="/tracing/ui/tracks/rect_track.html">
 
 <script>
 'use strict';
 
 tr.exportTo('tr.ui.tracks', function() {
+  var ColorScheme = tr.b.ColorScheme;
+
   /**
    * Visualizes a Process's state using a series of rects to represent activity.
    * @constructor
@@ -57,7 +59,7 @@ tr.exportTo('tr.ui.tracks', function() {
      * If an important slice starts in the middle of another,
      * just drop it on the floor.
      */
-    var genericColorId = tr.ui.b.getColorIdForReservedName('generic_work');
+    var genericColorId = ColorScheme.getColorIdForReservedName('generic_work');
     var pushRect = function(start, end, slice) {
       rects.push(new tr.ui.tracks.Rect(
           slice, /* modelItem: show selection state of slice if present */

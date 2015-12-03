@@ -1,23 +1,36 @@
-<!DOCTYPE HTML>
+<!DOCTYPE html>
 <!--
 Copyright (c) 2015 The Chromium Authors. All rights reserved.
 Use of this source code is governed by a BSD-style license that can be
 found in the LICENSE file.
 -->
 <link rel="import" href="/perf_insights/mappers/reduce.html">
+<link rel="import" href="/tracing/extras/ads/domain_category.html">
+<link rel="import" href="/tracing/extras/chrome/slice_title_fixer.html">
+<link rel="import" href="/tracing/model/source_info/js_source_info.html">
 
 <script>
 'use strict';
 
-tr.exportTo('pi.wr', function() {
+tr.exportTo('pi.m', function() {
+  var JSSourceState = tr.model.source_info.JSSourceState;
+
   function SliceCostInfo() {
     this.threadGroup = undefined;
     this.railTypeName = undefined;
     this.title = undefined;
+    this.domainCategory = undefined;
     this.domain = undefined;
+    this.userFriendlyCategory = undefined;
 
     this.selfTime = 0;
     this.cpuSelfTime = 0;
+
+    this.jsTime = 0;
+    this.jsTimeByState = {};
+    for (var state in JSSourceState) {
+      this.jsTimeByState[JSSourceState[state]] = 0;
+    }
   }
 
   SliceCostInfo.asReduceTarget = function(key, firstValue) {
@@ -25,7 +38,9 @@ tr.exportTo('pi.wr', function() {
     sliceCostInfo.threadGroup = firstValue.threadGroup;
     sliceCostInfo.railTypeName = firstValue.railTypeName;
     sliceCostInfo.title = firstValue.title;
+    sliceCostInfo.domainCategory = firstValue.domainCategory;
     sliceCostInfo.domain = firstValue.domain;
+    sliceCostInfo.userFriendlyCategory = firstValue.userFriendlyCategory;
     return sliceCostInfo;
   }
 
@@ -34,9 +49,20 @@ tr.exportTo('pi.wr', function() {
     sliceCostInfo.threadGroup = d.threadGroup;
     sliceCostInfo.railTypeName = d.railTypeName;
     sliceCostInfo.title = d.title;
+    sliceCostInfo.domainCategory = d.domainCategory;
     sliceCostInfo.domain = d.domain;
+    sliceCostInfo.userFriendlyCategory = d.userFriendlyCategory;
     sliceCostInfo.selfTime = d.selfTime;
     sliceCostInfo.cpuSelfTime = d.cpuSelfTime;
+    sliceCostInfo.jsTime = d.jsTime || 0;
+    for (var state in JSSourceState) {
+      if (d.jsTimeByState === undefined) {
+        sliceCostInfo.jsTimeByState[state] = 0;
+      } else {
+        sliceCostInfo.jsTimeByState[JSSourceState[state]] =
+            d.jsTimeByState[JSSourceState[state]] || 0;
+      }
+    }
     return sliceCostInfo;
   }
 
@@ -46,6 +72,14 @@ tr.exportTo('pi.wr', function() {
         this.selfTime += threadSlice.selfTime;
       if (threadSlice.cpuSelfTime !== undefined)
         this.cpuSelfTime += threadSlice.cpuSelfTime;
+      if (threadSlice.jsTime !== undefined)
+        this.jsTime += threadSlice.jsTime;
+      if (threadSlice.jsTimeByState !== undefined) {
+        for (var state in JSSourceState) {
+          this.jsTimeByState[JSSourceState[state]] +=
+              threadSlice.jsTimeByState[JSSourceState[state]];
+        }
+      }
     },
 
     finalizeAndGetResult: function() {
@@ -54,8 +88,9 @@ tr.exportTo('pi.wr', function() {
   };
 
 
-  function getSliceCostReport(model, threadGrouping, railTypeNameByGUID) {
-    var reduce = new pi.wr.StreamingReducer(SliceCostInfo.asReduceTarget);
+  function getSliceCostReport(model, threadGrouping, railTypeNameByGUID,
+      filterFunction) {
+    var reduce = new pi.m.StreamingReducer(SliceCostInfo.asReduceTarget);
 
     function generateDomainCosts(slice) {
       // V8.Execute events may generate several sliceCostInfo, based on the
@@ -69,10 +104,26 @@ tr.exportTo('pi.wr', function() {
         var sliceCostInfo = new SliceCostInfo();
         sliceCostInfo.threadGroup = threadGrouping.getGroupNameForEvent(slice);
         sliceCostInfo.railTypeName = railTypeNameByGUID[slice.guid];
-        sliceCostInfo.title = slice.title;
+
+        var ufc = model.getUserFriendlyCategoryFromEvent(slice);
+        sliceCostInfo.userFriendlyCategory = ufc || 'other';
+        sliceCostInfo.title = tr.e.chrome.SliceTitleFixer.fromEvent(slice);
         sliceCostInfo.domain = sample.leafStackFrame.domain;
+        sliceCostInfo.domainCategory =
+            tr.e.ads.DomainCategory.fromDomain(sliceCostInfo.domain);
         sliceCostInfo.selfTime = sample.weight;
         sliceCostInfo.cpuSelfTime = sample.weight;
+        // Let's use the state of the leaf frame. TODO(chiniforooshan):
+        // understand what it means if frames of a sample stack are in different
+        // states (BUG #1542).
+        var sourceInfo = sample.leafStackFrame.sourceInfo;
+        if (sourceInfo === undefined ||
+            !(sourceInfo instanceof tr.model.source_info.JSSourceInfo)) {
+          sliceCostInfo.jsTime = sample.weight;
+          sliceCostInfo.jsTimeByState[JSSourceState.UNKNOWN] = sample.weight;
+        } else {
+          sliceCostInfo.jsTimeByState[sourceInfo.state] = sample.weight;
+        }
         var key = sliceCostInfo.threadGroup + '/' +
                   sliceCostInfo.railTypeName + '/' +
                   sliceCostInfo.title + '/' +
@@ -83,6 +134,8 @@ tr.exportTo('pi.wr', function() {
 
     model.iterateAllEvents(function(event) {
       if (!(event instanceof tr.model.ThreadSlice))
+        return;
+      if (filterFunction && !filterFunction(event))
         return;
 
       var threadSlice = event;
@@ -95,7 +148,9 @@ tr.exportTo('pi.wr', function() {
       sliceCostInfo.threadGroup = threadGrouping.getGroupNameForEvent(
           threadSlice);
       sliceCostInfo.railTypeName = railTypeNameByGUID[threadSlice.guid];
-      sliceCostInfo.title = threadSlice.title;
+      var ufc = model.getUserFriendlyCategoryFromEvent(threadSlice);
+      sliceCostInfo.userFriendlyCategory = ufc || 'other';
+      sliceCostInfo.title = tr.e.chrome.SliceTitleFixer.fromEvent(threadSlice);
       // For all other events, just generate one sliceCostInfo.
       sliceCostInfo.selfTime = threadSlice.selfTime;
       sliceCostInfo.cpuSelfTime = threadSlice.cpuSelfTime;

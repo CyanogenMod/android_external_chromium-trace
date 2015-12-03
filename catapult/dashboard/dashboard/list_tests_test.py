@@ -167,27 +167,14 @@ class ListTestsTest(testing_common.TestCase):
             'has_rows': True,
             'sub_tests': {}
         },
-    }
-    self.assertEqual(expected, json.loads(response.body))
-
-    # When a request is made for subtests for multiple platforms, all subtests
-    # that are not deprecated for at least one of the platforms will be listed.
-    response = self.testapp.post('/list_tests', {
-        'type': 'sub_tests',
-        'suite': 'dromaeo',
-        'bots': 'Chromium/mac,Chromium/win7'})
-    self.assertEqual('*', response.headers.get('Access-Control-Allow-Origin'))
-    expected = {
-        'dom': {
-            'has_rows': True,
-            'sub_tests': {}
-        },
         'jslib': {
             'has_rows': True,
-            'sub_tests': {}
+            'sub_tests': {},
+            'deprecated': True
         }
     }
     self.assertEqual(expected, json.loads(response.body))
+
 
   def testGetSubTests_InternalData_OnlyReturnedForAuthorizedUsers(self):
     # When the user has a an internal account, internal-only data is given.
@@ -238,11 +225,35 @@ class ListTestsTest(testing_common.TestCase):
         },
         'bar': {
             'has_rows': False,
-            'sub_tests': {'b': {'has_rows': False, 'sub_tests': {}}},
+            'sub_tests': {
+                'b': {
+                    'has_rows': False,
+                    'sub_tests': {
+                        'c': {
+                            'has_rows': False,
+                            'deprecated': True,
+                            'sub_tests': {},
+                        },
+                    },
+                },
+            },
         },
     }
     b = {
-        'bar': {'has_rows': True, 'sub_tests': {}},
+        'bar': {
+            'has_rows': True,
+            'sub_tests': {
+                'b': {
+                    'has_rows': False,
+                    'sub_tests': {
+                        'c': {
+                            'has_rows': False,
+                            'sub_tests': {},
+                        },
+                    },
+                },
+            },
+        },
         'baz': {'has_rows': False, 'sub_tests': {}},
     }
     self.assertEqual(
@@ -253,7 +264,14 @@ class ListTestsTest(testing_common.TestCase):
             },
             'bar': {
                 'has_rows': True,
-                'sub_tests': {'b': {'has_rows': False, 'sub_tests': {}}}
+                'sub_tests': {
+                    'b': {
+                        'has_rows': False,
+                        'sub_tests': {
+                            'c': {'has_rows': False, 'sub_tests': {}},
+                        },
+                    },
+                },
             },
             'baz': {'has_rows': False, 'sub_tests': {}},
         },
@@ -280,7 +298,7 @@ class ListTestsTest(testing_common.TestCase):
         },
     }
     self.assertEqual(
-        expected, list_tests._SubTestsDict(paths))
+        expected, list_tests._SubTestsDict(paths, False))
 
   def test_GetTestsMatchingPattern(self):
     """Tests the basic functionality of the GetTestsMatchingPattern function."""

@@ -9,6 +9,7 @@ import json
 import logging
 import re
 import sys
+import traceback
 import urllib
 
 from google.appengine.api import app_identity
@@ -17,7 +18,9 @@ from google.appengine.api import urlfetch
 from google.appengine.api import urlfetch_errors
 from google.appengine.ext import ndb
 
+from dashboard import bisect_fyi
 from dashboard import buildbucket_service
+from dashboard import datastore_hooks
 from dashboard import email_template
 from dashboard import issue_tracker_service
 from dashboard import layered_cache
@@ -25,6 +28,7 @@ from dashboard import quick_logger
 from dashboard import request_handler
 from dashboard import rietveld_service
 from dashboard import start_try_job
+from dashboard import utils
 from dashboard.models import anomaly
 from dashboard.models import bug_data
 from dashboard.models import try_job
@@ -46,6 +50,9 @@ _BISECT_BOT_TIMEOUT = 12 * 60
 
 # Amount of time to pass before deleting a try job.
 _STALE_TRYJOB_DELTA = datetime.timedelta(days=7)
+
+# Amount of time pass before deleteing try jobs that use Buildbucket.
+_STALE_TRYJOB_DELTA_BUILDBUCKET = datetime.timedelta(days=21)
 
 _BUG_COMMENT_TEMPLATE = """Bisect job status: %(status)s
 Bisect job ran on: %(bisect_bot)s
@@ -90,8 +97,12 @@ class UpdateBugWithResultsHandler(request_handler.RequestHandler):
     issue_tracker = issue_tracker_service.IssueTrackerService(
         additional_credentials=credentials)
 
+    # Set privilege so we can also fetch internal try_job entities.
+    datastore_hooks.SetPrivilegedRequest()
+
     jobs_to_check = try_job.TryJob.query(
         try_job.TryJob.status == 'started').fetch()
+    all_successful = True
     for job in jobs_to_check:
       try:
         if job.use_buildbucket:
@@ -102,7 +113,11 @@ class UpdateBugWithResultsHandler(request_handler.RequestHandler):
                        job.key.id(), getattr(job, 'rietveld_issue_id', None))
         _CheckJob(job, issue_tracker)
       except Exception as e:  # pylint: disable=broad-except
-        logging.error('Caught Exception %s: %s', type(e).__name__, e)
+        logging.error('Caught Exception %s: %s\n%s',
+                      type(e).__name__, e, traceback.format_exc())
+        all_successful = False
+    if all_successful:
+      utils.TickMonitoringCustomMetric('UpdateBugWithResults')
 
 
 def _CheckJob(job, issue_tracker):
@@ -115,9 +130,13 @@ def _CheckJob(job, issue_tracker):
     issue_tracker: An issue_tracker_service.IssueTrackerService instance.
   """
   # Give up on stale try job.
+  if job.use_buildbucket:
+    stale_delta = _STALE_TRYJOB_DELTA_BUILDBUCKET
+  else:
+    stale_delta = _STALE_TRYJOB_DELTA
   if (job.last_ran_timestamp and
-      job.last_ran_timestamp < datetime.datetime.now() - _STALE_TRYJOB_DELTA):
-    comment = 'Stale bisect job cancelled.  Will retry again later.'
+      job.last_ran_timestamp < datetime.datetime.now() - stale_delta):
+    comment = 'Stale bisect job, will stop waiting for results.'
     comment += 'Rietveld issue: %s' % job.rietveld_issue_id
     start_try_job.LogBisectResult(job.bug_id, comment)
     job.SetFailed()
@@ -125,6 +144,8 @@ def _CheckJob(job, issue_tracker):
 
   if job.job_type == 'perf-try':
     _CheckPerfTryJob(job)
+  elif job.job_type == 'bisect-fyi':
+    _CheckFYIBisectJob(job, issue_tracker)
   else:
     # Delete bisect jobs that aren't associated with any bug id.
     if job.bug_id is None or job.bug_id < 0:
@@ -207,7 +228,7 @@ def _GetPerfTryResults(job):
   """
   results = {}
   # Fetch bisect bot results from Rietveld server.
-  response = _FetchURL(_RietveldIssueJSONURL(job))
+  response = _FetchRietveldIssueJSON(job)
   issue_url = _RietveldIssueURL(job)
   try_job_info = _ValidateRietveldResponse(response)
 
@@ -282,7 +303,7 @@ def _GetBisectResults(job):
     job_id = job.buildbucket_job_id
     issue_url = 'https://%s/buildbucket_job_status/%s' % (hostname, job_id)
   else:
-    response = _FetchURL(_RietveldIssueJSONURL(job))
+    response = _FetchRietveldIssueJSON(job)
     issue_url = _RietveldIssueURL(job)
     try_job_info = _ValidateRietveldResponse(response)
 
@@ -462,8 +483,9 @@ def _PostSucessfulResult(job, bisect_results, issue_tracker):
   bug = ndb.Key('Bug', job.bug_id).get()
 
   commit_cache_key = _GetCommitHashCacheKey(bisect_results['results'])
-  if bug and _BisectResultIsPositive(bisect_results['results']):
-    merge_issue = layered_cache.Get(commit_cache_key)
+  result_is_positive = _BisectResultIsPositive(bisect_results['results'])
+  if bug and result_is_positive:
+    merge_issue = layered_cache.GetExternal(commit_cache_key)
     if not merge_issue:
       authors_to_cc = _GetAuthorsToCC(bisect_results['results'])
 
@@ -498,8 +520,9 @@ def _PostSucessfulResult(job, bisect_results, issue_tracker):
   # Cache the commit info and bug ID to datastore when there is no duplicate
   # issue that this issue is getting merged into. This has to be done only
   # after the issue is updated successfully with bisect information.
-  if commit_cache_key and not merge_issue:
-    layered_cache.Set(commit_cache_key, str(job.bug_id), days_to_keep=30)
+  if commit_cache_key and not merge_issue and result_is_positive:
+    layered_cache.SetExternal(commit_cache_key, str(job.bug_id),
+                              days_to_keep=30)
     logging.info('Cached bug id %s and commit info %s in the datastore.',
                  job.bug_id, commit_cache_key)
 
@@ -514,9 +537,8 @@ def _ValidateAndConvertBuildbucketResponse(job_info):
     job_info: A dictionary containing the response from the buildbucket service.
 
   Returns:
-    Try job info dict, guaranteed to have the keys "url" and "result". The aim
-    of this method is to return a dict as similar as possible to the result of
-    _ValidateRietveldResponse.
+    Try job info dict in the same format as _ValidateRietveldResponse; will
+    have the keys "url", "results", and "bisect_bot".
 
   Raises:
     UnexpectedJsonError: The format was not as expected.
@@ -532,8 +554,14 @@ def _ValidateAndConvertBuildbucketResponse(job_info):
     raise UnexpectedJsonError('No "url" in try job results. This could mean '
                               'that the job has not started. '
                               'Buildbucket response: %s' % json_response)
-  job_info['builder'] = job_info.get('result_details', {}).get(
-      'properties', {}).get('builder_name')
+  try:
+    result_details = json.loads(job_info['result_details_json'])
+    bisect_config = result_details['properties']['bisect_config']
+    job_info['builder'] = bisect_config['recipe_tester_name']
+  except (KeyError, ValueError, TypeError):
+    # If the tester name isn't found here, this is unexpected but non-fatal.
+    job_info['builder'] = 'Unknown'
+    logging.error('Failed to extract tester name from JSON: %s', json_response)
   job_info['result'] = _BuildbucketStatusToStatusConstant(
       job_info['status'], job_info['result'])
   return job_info
@@ -702,17 +730,22 @@ def _GetAuthorsToCC(results_output):
   Returns:
     A list of email addresses, possibly empty.
   """
-  author_list = re.findall(r'Author  : (.*)', results_output)
-  authors_to_cc = sorted({author.strip() for author in author_list})
+  author_lines = re.findall(r'Author  : (.*)', results_output)
+  unique_emails = set()
+  for line in author_lines:
+    parts = line.split(',')
+    unique_emails.update(p.strip() for p in parts if '@' in p)
+  emails = sorted(unique_emails)
+
   # Avoid CCing issue to multiple authors when bisect finds multiple
   # different authors for culprits CLs.
-  if len(authors_to_cc) > 1:
-    authors_to_cc = []
-  if len(authors_to_cc) == 1:
+  if len(emails) > 1:
+    emails = []
+  if len(emails) == 1:
     # In addition to the culprit CL author, we also want to add reviewers
     # of the culprit CL to the cc list.
-    authors_to_cc.extend(_GetReviewersFromBisectLog(results_output))
-  return authors_to_cc
+    emails.extend(_GetReviewersFromBisectLog(results_output))
+  return emails
 
 
 def _GetReviewersFromBisectLog(results_output):
@@ -778,6 +811,7 @@ def _FetchURL(request_url, skip_status_code=False):
   Returns:
     Response object return by URL fetch, otherwise None when there's an error.
   """
+  logging.info('URL being fetched: ' + request_url)
   try:
     response = urlfetch.fetch(request_url)
   except urlfetch_errors.DeadlineExceededError:
@@ -797,11 +831,11 @@ def _FetchURL(request_url, skip_status_code=False):
   return response
 
 
-def _RietveldIssueJSONURL(job):
-  config = rietveld_service.GetDefaultRietveldConfig()
-  host = config.internal_server_url if job.internal_only else config.server_url
-  return '%s/api/%d/%d' % (
-      host, job.rietveld_issue_id, job.rietveld_patchset_id)
+def _FetchRietveldIssueJSON(job):
+    server = rietveld_service.RietveldService(internal_only=job.internal_only)
+    path = 'api/%d/%d' % (job.rietveld_issue_id, job.rietveld_patchset_id)
+    response, _ = server.MakeRequest(path, method='GET')
+    return response
 
 
 def _RietveldIssueURL(job):
@@ -820,3 +854,49 @@ def _BuildbucketStatusToStatusConstant(status, result):
       return SUCCESS
     return FAILURE
   return STARTED
+
+
+def _CheckFYIBisectJob(job, issue_tracker):
+  bisect_results = _GetBisectResults(job)
+  if not bisect_results:
+    logging.info('Bisect FYI: [%s] No bisect results, job might be pending.',
+                 job.job_name)
+    return
+  logging.info('Bisect FYI: [%s] Bisect job status: %s.',
+               job.job_name, bisect_results['status'])
+  try:
+    if bisect_results['status'] == 'Completed':
+      _PostSucessfulResult(job, bisect_results, issue_tracker)
+      # Below in VerifyBisectFYIResults we verify whether the actual
+      # results matches with the expectations; if they don't match then
+      # bisect_results['status'] gets set to 'Failure'.
+      bisect_fyi.VerifyBisectFYIResults(job, bisect_results)
+    elif 'Failure' in bisect_results['status']:
+      _PostFailedResult(
+          job, bisect_results, issue_tracker, add_bug_comment=True)
+      bisect_results['errors'] = 'Bisect FYI job failed:\n%s' % bisect_results
+  except BugUpdateFailure as e:
+    bisect_results['status'] = 'Failure'
+    bisect_results['error'] = 'Bug update Failed: %s' % e
+  finally:
+    _SendFYIBisectEmail(job, bisect_results)
+    job.key.delete()
+
+
+def _SendFYIBisectEmail(job, results):
+  """Sends an email to auto-bisect-team about FYI bisect results."""
+  # Don't send email when test case pass.
+  if results.get('status') == 'Completed':
+    logging.info('Test Passed: %s.\n Results: %s', job.job_name, results)
+    return
+
+  email_data = email_template.GetBisectFYITryJobEmail(job, results)
+  if not email_data:
+    logging.error('Failed to create "email_data" from results for %s.\n'
+                  ' Results: %s', job.job_name, results)
+    return
+  mail.send_mail(sender='auto-bisect-team@google.com',
+                 to='prasadv@google.com',
+                 subject=email_data['subject'],
+                 body=email_data['body'],
+                 html=email_data['html'])

@@ -1,4 +1,4 @@
-<!DOCTYPE HTML>
+<!DOCTYPE html>
 <!--
 Copyright (c) 2015 The Chromium Authors. All rights reserved.
 Use of this source code is governed by a BSD-style license that can be
@@ -6,9 +6,10 @@ found in the LICENSE file.
 -->
 <link rel="import" href="/tracing/base/xhr.html">
 <link rel="import" href="/tracing/ui/base/dom_helpers.html">
+<link rel="import" href="/tracing/ui/base/info_bar_group.html">
 <link rel="import" href="/tracing/ui/base/polymer_utils.html">
 <link rel="import" href="/perf_insights/ui/reports/pi_report.html">
-<link rel="import" href="/perf_insights/map_function.html">
+<link rel="import" href="/perf_insights/function_handle.html">
 <link rel="import" href="/perf_insights/ui/generic_results_view.html">
 
 <polymer-element name="pi-ui-pi-app-main">
@@ -45,15 +46,17 @@ found in the LICENSE file.
         min-width: 0;
         overflow: auto;
       }
+      report-container > * {
+        flex: 1 1 auto;
+      }
     </style>
     <top-controls>
-      <top-left-controls></top-left-controls>
+      <top-left-controls id="top_left_controls"></top-left-controls>
       <span class="spacer"></span>
-      <top-right-controls>
-      </top-right-controls>
+      <top-right-controls id="top_right_controls"></top-right-controls>
     </top-controls>
-    <report-container>
-    </report-container>
+    <tr-ui-b-info-bar-group id="infobars"></tr-ui-b-info-bar-group>
+    <report-container id="report_container"></report-container>
   </template>
 </polymer-element>
 <script>
@@ -80,9 +83,8 @@ tr.exportTo('pi.ui', function() {
     },
 
     ready: function() {
-      var topLeftControls = this.shadowRoot.querySelector('top-left-controls');
-      var topRightControls = this.shadowRoot.querySelector(
-          'top-right-controls');
+      var topLeftControls = this.$.top_left_controls;
+      var topRightControls = this.$.top_right_controls;
 
       var mapTracesDriverSelector = document.createElement('select');
       mapTracesDriverSelector.classList.add('map-traces-driver-selector');
@@ -101,6 +103,22 @@ tr.exportTo('pi.ui', function() {
         {
           'label': 'At most two traces',
           'value': 'MAX_TRACE_HANDLES=2'
+        },
+        {
+          'label': 'At most 5 traces',
+          'value': 'MAX_TRACE_HANDLES=5'
+        },
+        {
+          'label': 'At most 10 traces',
+          'value': 'MAX_TRACE_HANDLES=10'
+        },
+        {
+          'label': 'At most 50 traces',
+          'value': 'MAX_TRACE_HANDLES=50'
+        },
+        {
+          'label': 'At most 100 traces',
+          'value': 'MAX_TRACE_HANDLES=100'
         }
       ];
       var corpusQuerySelector = tr.ui.b.createSelector(
@@ -140,7 +158,7 @@ tr.exportTo('pi.ui', function() {
     set mapTracesDrivers(mapTracesDrivers) {
       this.mapTracesDrivers_ = mapTracesDrivers;
 
-      var topLeftControls = this.shadowRoot.querySelector('top-left-controls');
+      var topLeftControls = this.$.top_left_controls;
       var oldSelector = topLeftControls.querySelector(
           '.map-traces-driver-selector');
       var options = mapTracesDrivers.map(function(mapTracesDriver) {
@@ -224,30 +242,63 @@ tr.exportTo('pi.ui', function() {
 
       var mappingState = this.mappingState;
 
-      var that = this;
       var p = this.beginUpdatingContents_(mappingState);
       p = p.catch(function(err) {
         tr.showPanic('Something is wrong', err);
       });
-      p = p.then(updateDone);
+      p = p.then(updateDone.bind(this));
 
       function updateDone() {
-        that.pendingUpdateContentsPromise_ = undefined;
-        if (!areMappingStatesSame(that.mappingState, mappingState))
-          that.scheduleUpdateContents_();
+        this.pendingUpdateContentsPromise_ = undefined;
+        if (!areMappingStatesSame(this.mappingState, mappingState))
+          this.scheduleUpdateContents_();
       }
       this.pendingUpdateContentsPromise_ = p;
     },
 
     beginUpdatingContents_: function(mappingState) {
-      var that = this;
-      var p = Promise.resolve();
-
       var pe = tr.ui.b.getPolymerElementNamed(mappingState.piReportElementName);
-      var reportContainer = that.shadowRoot.querySelector('report-container');
+      var reportContainer = this.$.report_container;
+      var infobars = this.$.infobars;
 
+      function clearInfobarsOrUpdateWithErrors(mapResults) {
+        infobars.clearMessages();
+        if (!mapResults) {
+          infobars.addMessage('Cannot map');
+          return mapResults;
+        }
+        if (!mapResults.hadFailures)
+          return mapResults;
+
+        function onTellMeMore() {
+          var dlg = new tr.ui.b.Overlay();
+          dlg.dlg = 'Results summary';
+
+          var grv = document.createElement('pi-ui-generic-results-view');
+
+          grv.mapResults = mapResults;
+          grv.style.minHeight = '500px';
+          dlg.appendChild(grv);
+          dlg.visible = true;
+        }
+
+        var numFailedRuns = mapResults.failedRunInfos.length;
+        infobars.addMessage(
+            'There were ' + numFailedRuns + ' traces that did not process.',
+            [
+              {
+                buttonText: 'Tell me more...',
+                onClick: onTellMeMore
+              }
+            ]);
+
+        return mapResults;
+      }
+
+      var p = Promise.resolve();
       p = p.then(function indicateThinking() {
-        reportContainer.textContent = '... thinking...';
+        infobars.clearMessages();
+        infobars.addMessage('... thinking...');
       });
 
       p = p.then(function doMapping() {
@@ -258,18 +309,15 @@ tr.exportTo('pi.ui', function() {
         }
 
         var mapFunctionName = pe.getAttribute('map-function-name');
-        if (mapFunctionName === undefined)
-          throw new Error('nope');
-
-        var typeInfo = pi.MapFunction.findTypeInfoMatching(function(typeInfo) {
-          return typeInfo.constructor.name === mapFunctionName;
-        });
-        var mapFunction = typeInfo.constructor;
+        var mapFunctionHref = pe.getAttribute('map-function-href');
+        var moduleToLoad = new pi.ModuleToLoad(mapFunctionHref);
+        var mapFunctionHandle = new pi.FunctionHandle([moduleToLoad],
+                                                      mapFunctionName);
 
         if (mappingState.mapClientSide) {
           throw new Error('Currently unsupported');
         }
-        return mappingState.currentMapTracesDriver(mapFunctionName,
+        return mappingState.currentMapTracesDriver(mapFunctionHandle,
                                                    mappingState.corpusQuery);
       });
       p = p.then(function responseToResults(responseText) {
@@ -280,13 +328,12 @@ tr.exportTo('pi.ui', function() {
         return pi.r.Results.fromDict(data);
       });
 
+      p = p.then(clearInfobarsOrUpdateWithErrors);
+
       p = p.then(function showMappingResults(mapResults) {
         reportContainer.textContent = '';
-
-        if (mapResults === undefined) {
-          reportContainer.textContent = 'Cannot map';
+        if (mapResults === undefined)
           return;
-        }
 
         var reportEl;
         if (mappingState.showRawResults) {

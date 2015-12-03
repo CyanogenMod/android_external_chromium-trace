@@ -16,49 +16,25 @@ found in the LICENSE file.
  * @fileoverview The Animation phase of RAIL.
  */
 tr.exportTo('tr.e.rail', function() {
-  // If FPS is greater than this, then the FPS-pain is minimized.
-  var PAIN_BEGINS_AT_FPS = 60;
+  // The FPS comfort score is maximized at this value of average
+  // frames-per-second.
+  var MAX_COMFORT_FPS = 60;
 
-  // If FPS is less than this, then the FPS-pain is maximized.
-  var PAIN_PEAKS_AT_FPS = 10;
+  // The FPS comfort score is minimized at this value of average
+  // frames-per-second.
+  var MIN_COMFORT_FPS = 10;
 
-  // PAIN_POWER is a tunable parameter that affects the shape of
-  // computeRawPain() in rail_interaction_record.html.  It must be greater than
-  // 0.
-  var PAIN_POWER = 1.5;
+  // The jank comfort score is maximized when frame timestamp discrepancy is
+  // less than or equal to this:
+  var MIN_DISCOMFORT_JANK = 0.05;
 
-  // A frame is long if it starts more than this much time after the previous
-  // frame.
-  var LONG_FRAME_MS = 50;
+  // The jank comfort score is minimized when frame timestamp discrepancy is
+  // greater than or equal to this:
+  var MAX_DISCOMFORT_JANK = 0.3;
 
-  // If the number of long frames is less than this, then long-frame-pain is
-  // minimized.
-  var MIN_LONG_FRAMES = 0;
-
-  // If the number of long frames is greater than this times the total number of
-  // frames in the animation, then long-frame-pain is maximized.
-  // TODO(benjhayden): Modify LONG_FRAME_PAIN_PEAK_FRACTION once we've observed
-  //   the actual distribution of frames per animation and long-frames per
-  //   animation in a given corpus of traces.
-  var LONG_FRAME_PAIN_PEAK_FRACTION = 0.1;
-
-  // This is the lowest reasonable value for the number of long frames that
-  // would maximize long-frame-pain.
-  var MIN_MAX_LONG_FRAMES = 2;
-
-  // Discrepancy is minimized at 0 when every frame is exactly the same length,
-  // but realistically, a tiny amount of jank will look just as good.
-  var PAIN_BEGINS_AT_JANK = 0.05;
-
-  // Discrepancy is maximized at 1 when there are thousands of ridiculously fast
-  // frames and 1 ridiculously long frame. But realistically, discrepancy might
-  // never be larger than 0.3, so discrepancy up to take advantage of the full
-  // range of pain.
-  var PAIN_PEAKS_AT_JANK = 0.3;
-
-  function AnimationInteractionRecord(start, duration) {
+  function AnimationInteractionRecord(parentModel, start, duration) {
     tr.e.rail.RAILInteractionRecord.call(
-        this, 'Animation', 'rail_animate',
+        this, parentModel, 'Animation', 'rail_animate',
         start, duration);
     this.frameEvents_ = undefined;
   }
@@ -80,34 +56,35 @@ tr.exportTo('tr.e.rail', function() {
       return this.frameEvents_;
     },
 
-    get normalizedUserPain() {
+    get normalizedUserComfort() {
+      // Combine jank comfort and fps comfort non-linearly.
+      // weightedAverage2 weights lower scores exponentially more heavily than
+      // higher scores.
+      // http://goo.gl/W6MswA
       return tr.e.rail.weightedAverage2(
-          this.normalizedJankPain, this.normalizedFPSPain);
+          this.normalizedJankComfort, this.normalizedFPSComfort);
     },
 
-    get normalizedFPSPain() {
+    get normalizedFPSComfort() {
       var durationSeconds = this.duration / 1000;
-      var avgFps = this.frameEvents.length / durationSeconds;
-      var avgSpf = 1 / avgFps;
-      return tr.e.rail.computeNormalizedPain(avgSpf, {
-        min: 1 / PAIN_BEGINS_AT_FPS,
-        max: 1 / PAIN_PEAKS_AT_FPS,
-        power: PAIN_POWER
-      });
+      var avgSpf = durationSeconds / this.frameEvents.length;
+      var normalizedDiscomfort = tr.b.normalize(
+          avgSpf, 1 / MAX_COMFORT_FPS, 1 / MIN_COMFORT_FPS);
+      var normalizedComfort = 1 - normalizedDiscomfort;
+      return tr.b.clamp(normalizedComfort, 0, 1);
     },
 
-    get normalizedJankPain() {
+    get normalizedJankComfort() {
       var frameTimestamps = this.frameEvents.toArray().map(function(event) {
         return event.start;
       });
       var absolute = false;
       var discrepancy = tr.b.Statistics.timestampsDiscrepancy(
           frameTimestamps, absolute);
-      return tr.e.rail.computeNormalizedPain(discrepancy, {
-        min: PAIN_BEGINS_AT_JANK,
-        max: PAIN_PEAKS_AT_JANK,
-        power: PAIN_POWER
-      });
+      var normalizedDiscomfort = tr.b.normalize(
+          discrepancy, MIN_DISCOMFORT_JANK, MAX_DISCOMFORT_JANK);
+      var normalizedComfort = 1 - normalizedDiscomfort;
+      return tr.b.clamp(normalizedComfort, 0, 1);
     }
   };
 

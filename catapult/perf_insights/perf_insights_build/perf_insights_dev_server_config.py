@@ -14,7 +14,7 @@ from webapp2 import Route
 from perf_insights import local_directory_corpus_driver
 from perf_insights import corpus_query
 from perf_insights import map_runner
-from perf_insights import map_function_handle as map_function_handle_module
+from perf_insights import function_handle
 from perf_insights import progress_reporter
 from perf_insights.results import json_output_formatter
 
@@ -35,33 +35,36 @@ class TestListHandler(webapp2.RequestHandler):
 
 
 class RunMapFunctionHandler(webapp2.RequestHandler):
-  def get(self, *args, **kwargs): # pylint: disable=unused-argument
-    map_function = kwargs.pop('map_function')
 
-    map_function_handle = map_function_handle_module.MapFunctionHandle(
-      map_function_name=map_function)
+  def post(self, *args, **kwargs):  # pylint: disable=unused-argument
+    handle_dict = json.loads(self.request.body)
 
-    pi_data_dir = kwargs.pop('_pi_data_dir')
+    map_function_handle = function_handle.FunctionHandle.FromDict(handle_dict)
+    handle_with_filenames = map_function_handle.ConvertHrefsToAbsFilenames(
+        self.app)
+
     corpus_driver = local_directory_corpus_driver.LocalDirectoryCorpusDriver(
-        pi_data_dir)
+        trace_directory = kwargs.pop('_pi_data_dir'),
+        url_resolver = self.app.GetURLForAbsFilename)
 
     # TODO(nduca): pass self.request.params to the map function [maybe].
-    query_string = self.request.params.get('corpus_query', 'True')
+    query_string = self.request.get('corpus_query', 'True')
     query = corpus_query.CorpusQuery.FromString(query_string)
 
     trace_handles = corpus_driver.GetTraceHandlesMatchingQuery(query)
 
-    self._RunMapper(trace_handles, map_function_handle)
+    self._RunMapper(trace_handles, handle_with_filenames)
+
 
   def _RunMapper(self, trace_handles, map_function_handle):
     self.response.content_type = 'application/json'
     output_formatter = json_output_formatter.JSONOutputFormatter(
         self.response.out)
 
-    runner = map_runner.MapRunner(
-        trace_handles, map_function_handle)
-    runner.Run(jobs=map_runner.AUTO_JOB_COUNT,
-               output_formatters=[output_formatter])
+    runner = map_runner.MapRunner(trace_handles, map_function_handle,
+                                  jobs=map_runner.AUTO_JOB_COUNT,
+                                  output_formatters=[output_formatter])
+    runner.Run()
 
 
 class PerfInsightsDevServerConfig(object):
@@ -81,7 +84,7 @@ class PerfInsightsDevServerConfig(object):
   def GetRoutes(self, args):  # pylint: disable=unused-argument
     return [
       Route('/perf_insights/tests', TestListHandler),
-      Route('/perf_insights_examples/run_map_function/<map_function:.+>',
+      Route('/perf_insights_examples/run_map_function',
             RunMapFunctionHandler,
             defaults={
               '_pi_data_dir':
@@ -94,5 +97,4 @@ class PerfInsightsDevServerConfig(object):
 
   def GetTestDataPaths(self, args):  # pylint: disable=unused-argument
     return [('/perf_insights/test_data/',
-             self.project.perf_insights_test_data_path)]
-
+             os.path.abspath(os.path.expanduser(args.pi_data_dir)))]

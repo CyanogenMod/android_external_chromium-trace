@@ -1,26 +1,34 @@
-{% extends "base.html" %}
-{% block head %}
-
-  <title>Chrome Performance Dashboard</title>
+<!DOCTYPE html>
+<html>
+<head>
+  <link type="text/css" rel="stylesheet" href="/dashboard/static/base.css">
   <script>
+    'use strict';
     var TEST_SUITES = {{test_suites | safe}};
     var REVISION_INFO = {{revision_info | safe}};
     var XSRF_TOKEN = '{{xsrf_token}}';
-    {% if dev_version %}
-    var DEV_SERVER = true;
-    {% endif %}
+    var IS_INTERNAL_USER = ('{{is_internal_user}}' == 'True');
+    {% if dev_version %}var DEV_SERVER = true;{% endif %}
   </script>
-  {# Following line needed to avoid a spurious 404 for deps.js due to the use
-     --streamed_compiled_js flag used in app.sh in development environment. #}
-  <script>var CLOSURE_NO_DEPS = true;</script>
 
-  <script src="/third_party/jquery/jquery-2.1.4.min.js"></script>
-  <script src="/third_party/flot/jquery.flot.min.js"></script>
-  <script src="/third_party/flot/jquery.flot.crosshair.min.js"></script>
-  <script src="/third_party/flot/jquery.flot.fillbetween.min.js"></script>
-  <script src="/third_party/flot/jquery.flot.selection.min.js"></script>
+  <script src="/jquery/jquery-2.1.4.min.js"></script>
+  <script src="/flot/jquery.flot.min.js"></script>
+  <script src="/flot/jquery.flot.crosshair.min.js"></script>
+  <script src="/flot/jquery.flot.fillbetween.min.js"></script>
+  <script src="/flot/jquery.flot.selection.min.js"></script>
+
+  <link rel="import" href="/components/polymer/polymer.html">
+
+  <link rel="import" href="/dashboard/elements/chart-container.html">
+  <link rel="import" href="/dashboard/elements/custom-tooltip.html">
+  <link rel="import" href="/dashboard/elements/login-warning.html">
+  <link rel="import" href="/dashboard/elements/overlay-message.html">
+  <link rel="import" href="/dashboard/elements/report-container.html">
+
+  <title>Chrome Performance Dashboard</title>
 
   <script>
+    'use strict';
     // Workaround for document.contains returning false for elements in the
     // shadow DOM. jQuery mouse events need it to return true for scrolling
     // to be properly accounted for. For background, see
@@ -36,22 +44,14 @@
       return doc.contains(elem);
     };
   </script>
-
-  <link rel="import" href="/components/polymer/polymer.html">
-  <link rel="import" href="/elements/chart-container.html">
-  <link rel="import" href="/elements/custom-tooltip.html">
-  <link rel="import" href="/elements/login-warning.html">
-  <link rel="import" href="/elements/overlay-message.html">
-  <link rel="import" href="/elements/report-container.html">
-
-{% endblock %}
-{% block content %}
-
+</head>
+<body>
+  {% include 'nav.html' %}
   <h1>Chrome Performance Dashboard</h1>
 
   <overlay-message id="message-bar"></overlay-message>
 
-  {%if warning_message %}
+  {% if warning_message %}
     <overlay-message id="warning-message" opened="true" autoCloseDisabled duration="-1">
     {{warning_message}}
     {% if warning_bug %}
@@ -66,8 +66,9 @@
 
   <custom-tooltip id="tooltip"></custom-tooltip>
 
-  <report-container></report-container>
+  <report-container xsrfToken="{{xsrf_token | safe}}"></report-container>
   <section id="charts-container"></section>
 
-{% endblock %}
-{% include 'analytics.html' %}
+  {% include 'analytics.html' %}
+</body>
+</html>

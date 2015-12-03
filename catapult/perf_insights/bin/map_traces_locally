@@ -7,8 +7,10 @@ import os
 import sys
 
 if __name__ == '__main__':
+  sys.stderr.write(
+      'map_traces_locally is deprecated. Use map_traces instead.\n');
   perf_insights_path = os.path.abspath(os.path.join(os.path.dirname(__file__),
                                                     '..'))
   sys.path.append(perf_insights_path)
-  from perf_insights import map_traces_locally
-  sys.exit(map_traces_locally.Main(sys.argv))
+  from perf_insights import map_traces
+  sys.exit(map_traces.Main(sys.argv))

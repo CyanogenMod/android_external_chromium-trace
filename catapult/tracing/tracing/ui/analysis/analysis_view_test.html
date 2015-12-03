@@ -55,10 +55,10 @@ tr.b.unittest.testSuite(function() {
     var slice2 = newThreadSlice(thread, SCHEDULING_STATE.SLEEPING, 1, 2.718);
     thread.timeSlices = [slice1, slice2];
 
-    var record1 = new InteractionRecord('r1', 0, 200, 300);
+    var record1 = new InteractionRecord(model, 'r1', 0, 200, 300);
     record1.associatedEvents.push(sample1);
     record1.associatedEvents.push(slice1);
-    var record2 = new InteractionRecord('r2', 0, 600, 100);
+    var record2 = new InteractionRecord(model, 'r2', 0, 600, 100);
     record2.associatedEvents.push(sample2);
     record2.associatedEvents.push(sample3);
     record2.associatedEvents.push(slice1);
@@ -104,17 +104,17 @@ tr.b.unittest.testSuite(function() {
     controller.changeSelectionFromRequestSelectionChangeEvent(
         new EventSet([slice1, slice2, sample3, record1]));
     assert.lengthOf(tabView.tabs, 3);
-    var sampleTab4 = tabView.tabs[0];
+    var sampleTab4 = tabView.tabs[1];
     checkTab(sampleTab4,
         'tr-ui-a-counter-sample-sub-view',
         [sample3]);
     // Reuse tab (same event type and sub-view tag name).
     assert.strictEqual(sampleTab4, sampleTab2);
-    var singleRecordTab4 = tabView.tabs[1];
+    var singleRecordTab4 = tabView.tabs[2];
     checkTab(singleRecordTab4,
         'tr-ui-a-single-interaction-record-sub-view',
         [record1]);
-    var multiThreadSliceTab4 = tabView.tabs[2];
+    var multiThreadSliceTab4 = tabView.tabs[0];
     checkTab(multiThreadSliceTab4,
         'tr-ui-a-multi-thread-time-slice-sub-view',
         [slice1, slice2]);

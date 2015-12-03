@@ -4,6 +4,8 @@ Copyright (c) 2015 The Chromium Authors. All rights reserved.
 Use of this source code is governed by a BSD-style license that can be
 found in the LICENSE file.
 -->
+
+<link rel="import" href="/tracing/base/units/histogram.html">
 <link rel="import" href="/tracing/extras/rail/rail_interaction_record.html">
 
 <script>
@@ -13,47 +15,51 @@ found in the LICENSE file.
  * @fileoverview The Response phase of RAIL.
  */
 tr.exportTo('tr.e.rail', function() {
-  // User pain is hypothesized to rise exponentially as duration rises between
-  // 150ms and 1000ms.
+  // This histogram represents the number of people who we believe would have
+  // comfort with a response level of a certain value. We have set this with
+  // just a best-effort guess, though. In #1696, we plan to derive this
+  // experimentally.
+  var COMFORT_HISTOGRAM = tr.b.u.Histogram.fromDict({
+    unit: 'unitless',
+    min: 150,
+    max: 5000,
+    centralBinWidth: 485,
+    underflowBin: {min: -Number.MAX_VALUE, max: 150, count: 1000},
+    centralBins: [
+      {min: 150, max: 635, count: 708},
+      {min: 635, max: 1120, count: 223},
+      {min: 1120, max: 1605, count: 50},
+      {min: 1605, max: 2090, count: 33},
+      {min: 2090, max: 2575, count: 23},
+      {min: 2575, max: 3060, count: 17},
+      {min: 3060, max: 3545, count: 12},
+      {min: 3545, max: 4030, count: 8},
+      {min: 4030, max: 4515, count: 4},
+      {min: 4515, max: 5000, count: 1}
+    ],
+    overflowBin: {min: 5000, max: Number.MAX_VALUE, count: 0}
+  });
 
-  // If the duration of the Response is less than this, then pain is minimized.
-  var PAIN_STARTS_AT_MS = 150;
-
-  // If the duration of the Response is greater than this, then the pain is
-  // maximized.
-  var PAIN_PEAKS_AT_MS = 1000;
-
-  // PAIN_POWER is a tunable parameter that affects the shape of
-  // computeRawPain() in rail_interaction_record.html.  It must be greater than
-  // 0.
-  var PAIN_POWER = 1.5;
-
-  function ResponseInteractionRecord(start, duration) {
+  function ResponseInteractionRecord(parentModel, start, duration) {
     tr.e.rail.RAILInteractionRecord.call(
-        this, 'Response', 'rail_response',
-        start, duration);
+        this, parentModel, 'Response', 'rail_response', start, duration);
   }
 
   ResponseInteractionRecord.prototype = {
     __proto__: tr.e.rail.RAILInteractionRecord.prototype,
 
-    get normalizedUserPain() {
-      // User pain is derived from the time between when the user thinks they
+    get normalizedUserComfort() {
+      // User comfort is derived from the time between when the user thinks they
       // begin an interation (expectedStart) and the time when the screen first
       // changes to reflect the interaction (actualEnd).  There may be a delay
       // between expectedStart and when chrome first starts processing the
       // interaction (actualStart) if the main thread is busy.  The user doesn't
       // know when actualStart is, they only know when expectedStart is. User
-      // pain, by definition, considers only what the user experiences, so
+      // comfort, by definition, considers only what the user experiences, so
       // "duration" is defined as actualEnd - expectedStart.
 
-      // This function is graphed at
-      // https://www.desmos.com/calculator/fqhkz1ohia
-      return tr.e.rail.computeNormalizedPain(this.duration, {
-        min: PAIN_STARTS_AT_MS,
-        max: PAIN_PEAKS_AT_MS,
-        power: PAIN_POWER
-      });
+      return COMFORT_HISTOGRAM.getInterpolatedCountAt(this.duration) /
+        COMFORT_HISTOGRAM.maxCount;
     }
   };
 

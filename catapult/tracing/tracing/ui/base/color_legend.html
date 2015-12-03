@@ -5,8 +5,8 @@ Use of this source code is governed by a BSD-style license that can be
 found in the LICENSE file.
 -->
 
+<link rel="import" href="/tracing/base/color_scheme.html">
 <link rel="import" href="/tracing/model/compound_event_selection_state.html">
-<link rel="import" href="/tracing/ui/base/color_scheme.html">
 <link rel="import" href="/tracing/ui/base/dom_helpers.html">
 
 <!--
@@ -58,7 +58,8 @@ that label, using the getColorId* methods from base/color_scheme.
         return;
       }
 
-      var colorId = tr.ui.b.getColorIdForGeneralPurposeString(label);
+      var colorId = tr.b.ColorScheme.getColorIdForGeneralPurposeString(
+          label);
       this.setLabelAndColorId(label, colorId);
     },
 
@@ -68,13 +69,10 @@ that label, using the getColorId* methods from base/color_scheme.
       this.$.label.textContent = '';
       this.$.label.appendChild(tr.ui.b.asHTMLOrTextNode(label));
 
-      if (colorId === undefined) {
+      if (colorId === undefined)
         this.$.square.style.color = 'initial';
-      } else {
-        var paletteRaw = tr.ui.b.getRawColorPalette();
-        var color = tr.ui.b.colorToRGBString(paletteRaw[colorId]);
-        this.$.square.style.color = color;
-      }
+      else
+        this.$.square.style.color = tr.b.ColorScheme.colorsAsStrings[colorId];
     }
   });
   </script>

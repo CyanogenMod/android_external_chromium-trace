@@ -1,4 +1,4 @@
-<!DOCTYPE HTML>
+<!DOCTYPE html>
 <!--
 Copyright (c) 2015 The Chromium Authors. All rights reserved.
 Use of this source code is governed by a BSD-style license that can be
@@ -99,7 +99,7 @@ tr.exportTo('pi.tbm', function() {
       var frame = createRenderingFrameFromEvents(events);
       if (frame === undefined)
         continue;
-      if (frame.range.intersectsRange(timelineRange))
+      if (frame.range.intersectsRangeInclusive(timelineRange))
         frames.push(frame);
       frames.sort(function(a, b) {
         return a.range.min - b.range.min;

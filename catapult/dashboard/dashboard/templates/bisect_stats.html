@@ -1,5 +1,8 @@
-{% extends "base.html" %}
-{% block head %}
+<!DOCTYPE html>
+<html>
+<head>
+  <link type="text/css" rel="stylesheet" href="/dashboard/static/base.css">
+  <title>Bisect Statistics</title>
   <style>
     #content {
       margin-left: 20px;
@@ -18,10 +21,10 @@
   </style>
 
   <link rel="import" href="/components/polymer/polymer.html">
-  <link rel="import" href="/elements/quick-log.html">
-
-{% endblock %}
-{% block content %}
+  <link rel="import" href="/dashboard/elements/quick-log.html">
+</head>
+<body>
+  {% include 'nav.html' %}
   <h1>Bisect Statistics</h1>
 
   <div id="content">
@@ -48,18 +51,16 @@
                style="width:900px; height: 600px; display:block;"></quick-log>
   </div>
 
-  <script src="/third_party/jquery/jquery-2.1.4.min.js"></script>
-  <script src="/third_party/flot/jquery.flot.min.js"></script>
-  <script src="/third_party/flot/jquery.flot.time.min.js"></script>
-  <script src="/third_party/flot/jquery.flot.stack.min.js"></script>
+  <script src="/jquery/jquery-2.1.4.min.js"></script>
+  <script src="/flot/jquery.flot.min.js"></script>
+  <script src="/flot/jquery.flot.time.min.js"></script>
+  <script src="/flot/jquery.flot.stack.min.js"></script>
 
   <script>
     'use strict';
 
     var ONE_WEEK_MILLISECONDS = 1000 * 60 * 60 * 24 * 7;
-
     var GRAPH_WIDTH_PX = 900;
-
     var GAP_SIZE_PX = 5;
 
     // Data object for bisect results by platform.
@@ -214,4 +215,5 @@
     addChartForBisectSummary();
     addChartForBisectRunByPlatform();
   </script>
-{% endblock %}
+</body>
+</html>

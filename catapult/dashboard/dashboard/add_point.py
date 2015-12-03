@@ -17,6 +17,7 @@ from google.appengine.ext import ndb
 from dashboard import datastore_hooks
 from dashboard import math_utils
 from dashboard import post_data_handler
+from dashboard.models import anomaly
 from dashboard.models import graph_data
 
 _TASK_QUEUE_NAME = 'add-point-queue'
@@ -316,6 +317,10 @@ def _FlattenTrace(test_suite_name, chart_name, trace_name, trace,
   Raises:
     BadRequestError: The data wasn't valid.
   """
+  if '@@' in chart_name:
+    tir_label, chart_name = chart_name.split('@@')
+    chart_name = chart_name + '/' + tir_label
+
   trace_type = trace.get('type')
   if trace_type == 'scalar':
     value = trace.get('value')
@@ -369,7 +374,7 @@ def _FlattenTrace(test_suite_name, chart_name, trace_name, trace,
   elif trace_name != 'summary' and is_ref:
     name += '_ref'
 
-  return {
+  row_dict = {
       'test': name,
       'value': value,
       'error': error,
@@ -377,6 +382,15 @@ def _FlattenTrace(test_suite_name, chart_name, trace_name, trace,
       'tracing_uri': tracing_uri,
       'benchmark_description': benchmark_description,
   }
+
+  if 'improvement_direction' in trace:
+    improvement_direction_str = trace['improvement_direction']
+    if improvement_direction_str is None:
+      raise BadRequestError('improvement_direction must not be None')
+    row_dict['higher_is_better'] = _ImprovementDirectionToHigherIsBetter(
+        improvement_direction_str)
+
+  return row_dict
 
 
 def _EscapeName(name):
@@ -434,6 +448,30 @@ def _GeomMeanAndStdDevFromHistogram(histogram):
     if bucket['mean'] > 0:
       sum_of_squares += (bucket['mean'] - geom_mean) ** 2 * bucket['count']
   return geom_mean, math.sqrt(sum_of_squares / count)
+
+
+def _ImprovementDirectionToHigherIsBetter(improvement_direction_str):
+  """Converts an improvement direction string to a higher_is_better boolean.
+
+  Args:
+    improvement_direction_str: a string, either 'up' or 'down'.
+
+  Returns:
+    A boolean expressing the appropriate higher_is_better value.
+
+  Raises:
+    BadRequestError: if improvement_direction_str is invalid.
+  """
+  # If improvement_direction is provided, we want to use it. Otherwise, by not
+  # providing it we'll fall back to unit-info.json
+  # TODO(eakuefner): Fail instead of falling back after fixing crbug.com/459450.
+  if improvement_direction_str == 'up':
+    return True
+  elif improvement_direction_str == 'down':
+    return False
+  else:
+    raise BadRequestError('Invalid improvement direction string: ' +
+                          improvement_direction_str)
 
 
 def _ConstructTestPathMap(row_dicts):

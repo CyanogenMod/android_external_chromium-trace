@@ -76,6 +76,12 @@ tr.exportTo('tr.model', function() {
           tr.b.u.TimeStamp.format(this.start);
     },
 
+    get stableId() {
+      var parentSliceGroup = this.parentContainer.sliceGroup;
+      return parentSliceGroup.stableId + '.' +
+          parentSliceGroup.slices.indexOf(this);
+    },
+
     findDescendentSlice: function(targetTitle) {
       if (!this.subSlices)
         return undefined;
@@ -95,6 +101,20 @@ tr.exportTo('tr.model', function() {
         curSlice = curSlice.parentSlice;
 
       return curSlice;
+    },
+
+    getProcess: function() {
+      var thread = this.parentContainer;
+      if (thread && thread.getProcess)
+        return thread.getProcess();
+      return undefined;
+    },
+
+    get model() {
+      var process = this.getProcess();
+      if (process !== undefined)
+        return this.getProcess().model;
+      return undefined;
     },
 
     /**

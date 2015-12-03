@@ -66,24 +66,31 @@ tr.exportTo('tr.model', function() {
     },
 
     calculateGraphAttributes: function() {
-      // 1. Calculate the sizes of all memory allocator dumps (MADs).
+      // 1. Add ownership links from tracing MADs to descendants of malloc or
+      // winheap MADs so that tracing would be automatically discounted from
+      // them later (step 3).
+      this.setUpTracingOverheadOwnership();
+
+      // 2. Calculate the sizes of all memory allocator dumps (MADs). This step
+      // requires that the memory allocator dump graph has been finalized (step
+      // 1). Subsequent modifications of the graph will most likely break the
+      // calculation invariants.
       this.calculateSizes();
 
-      // 2. Calculate the effective sizes of all MADs. This step requires that
-      // the sizes of all MADs have already been calculated (step 1).
+      // 3. Calculate the effective sizes of all MADs. This step requires that
+      // the sizes of all MADs have already been calculated (step 2).
       this.calculateEffectiveSizes();
 
-      // 3. Aggregate all other attributes of all MADs. This step must be
-      // carried out after the sizes of all MADs were calculated (step 1).
-      // Otherwise, the sizes of all MADs would be aggregated as a direct sums
+      // 4. Aggregate all other attributes of all MADs. This step must be
+      // carried out after the sizes of all MADs were calculated (step 2).
+      // Otherwise, the sizes of all MADs would be aggregated as direct sums
       // of their children, which would most likely lead to double-counting.
       this.aggregateAttributes();
 
-      // 4. Discount tracing from VM regions stats and malloc or winheap
-      // allocator stats. This steps requires that the sizes (step 1),
-      // effective sizes (step 2), and resident sizes (step 3) of the relevant
-      // MADs have already been calculated.
-      this.discountTracingOverhead();
+      // 5. Discount tracing from VM regions stats. This steps requires that
+      // sizes (step 2) and resident sizes (step 4) of the tracing MADs have
+      // already been calculated.
+      this.discountTracingOverheadFromVmRegions();
     },
 
     /**
@@ -670,16 +677,59 @@ tr.exportTo('tr.model', function() {
     },
 
     aggregateAttributes: function() {
+      // 1. Aggregate attributes in this global memory dump.
       this.iterateRootAllocatorDumps(function(dump) {
         dump.aggregateAttributes(this.model);
       });
+
+      // 2. Propagate attributes from global memory allocator dumps to their
+      // owners.
+      this.iterateRootAllocatorDumps(this.propagateAttributesRecursively);
+
+      // 3. Aggregate attributes in the associated process memory dumps.
+      tr.b.iterItems(this.processMemoryDumps, function(pid, processMemoryDump) {
+        processMemoryDump.iterateRootAllocatorDumps(function(dump) {
+          dump.aggregateAttributes(this.model);
+        }, this);
+      }, this);
     },
 
-    discountTracingOverhead: function() {
+    propagateAttributesRecursively: function(globalAllocatorDump) {
+      tr.b.iterItems(globalAllocatorDump.attributes, function(attrName, attr) {
+        if (attrName === SIZE_ATTRIBUTE_NAME ||
+            attrName === EFFECTIVE_SIZE_ATTRIBUTE_NAME) {
+          // We cannot propagate size and effective_size attributes because it
+          // would break the complex maths [see calculateSizes() and
+          // calculateEffectiveSizes()].
+          return;
+        }
+        globalAllocatorDump.ownedBy.forEach(function(ownershipLink) {
+          var processAllocatorDump = ownershipLink.source;
+          if (processAllocatorDump.attributes[attrName] !== undefined) {
+            // Attributes provided by process memory allocator dumps themselves
+            // have precedence over attributes propagated from global memory
+            // allocator dumps.
+            return;
+          }
+          processAllocatorDump.attributes[attrName] = attr;
+        });
+      });
+      // Recursively propagate attributes from all child memory allocator dumps.
+      globalAllocatorDump.children.forEach(
+          this.propagateAttributesRecursively, this);
+    },
+
+    setUpTracingOverheadOwnership: function() {
+      tr.b.iterItems(this.processMemoryDumps, function(pid, dump) {
+        dump.setUpTracingOverheadOwnership(this.model);
+      }, this);
+    },
+
+    discountTracingOverheadFromVmRegions: function() {
       // TODO(petrcermak): Consider factoring out all the finalization code and
       // constants to a single file.
       tr.b.iterItems(this.processMemoryDumps, function(pid, dump) {
-        dump.discountTracingOverhead(this.model);
+        dump.discountTracingOverheadFromVmRegions(this.model);
       }, this);
     },
 
@@ -690,12 +740,9 @@ tr.exportTo('tr.model', function() {
       }, this);
     },
 
-    iterateRootAllocatorDumps: function(fn) {
+    iterateAllRootAllocatorDumps: function(fn) {
       this.iterateContainerDumps(function(containerDump) {
-        var memoryAllocatorDumps = containerDump.memoryAllocatorDumps;
-        if (memoryAllocatorDumps === undefined)
-          return;
-        memoryAllocatorDumps.forEach(fn, this);
+        containerDump.iterateRootAllocatorDumps(fn, this);
       });
     },
 
@@ -732,7 +779,7 @@ tr.exportTo('tr.model', function() {
         openDumps.delete(dump);
       }
 
-      this.iterateRootAllocatorDumps(visit);
+      this.iterateAllRootAllocatorDumps(visit);
     },
 
     /**
@@ -771,7 +818,7 @@ tr.exportTo('tr.model', function() {
         dump.children.forEach(visit, this);
       }
 
-      this.iterateRootAllocatorDumps(visit);
+      this.iterateAllRootAllocatorDumps(visit);
     }
   };
 
@@ -780,8 +827,8 @@ tr.exportTo('tr.model', function() {
       {
         name: 'globalMemoryDump',
         pluralName: 'globalMemoryDumps',
-        singleViewElementName: 'tr-ui-a-single-global-memory-dump-sub-view',
-        multiViewElementName: 'tr-ui-a-multi-global-memory-dump-sub-view'
+        singleViewElementName: 'tr-ui-a-container-memory-dump-sub-view',
+        multiViewElementName: 'tr-ui-a-container-memory-dump-sub-view'
       });
 
   return {

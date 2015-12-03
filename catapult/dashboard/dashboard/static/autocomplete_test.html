@@ -1,16 +1,18 @@
 <!DOCTYPE html>
+<!--
+Copyright 2015 The Chromium Authors. All rights reserved.
+Use of this source code is governed by a BSD-style license that can be
+found in the LICENSE file.
+-->
 
-<html>
-<head>
-  <meta charset="utf-8">
-  <script src="../../web-component-tester/browser.js"></script>
-  <link rel="import" href="autocomplete.html">
-</head>
-<body>
+<link rel="import" href="/tracing/core/test_utils.html">
+
+<link rel="import" href="/dashboard/static/autocomplete.html">
 
 <script>
+'use strict';
 
-suite('autocomplete', function() {
+tr.b.unittest.testSuite(function() {
 
   test('basic search', function() {
     var dataList = [{name: 'apple'}, {name: 'bannana'}, {name: 'blueberry'},
@@ -68,6 +70,26 @@ suite('autocomplete', function() {
     assert.deepEqual(dataList, a.search(''));
   });
 
+  test('search, exact match should always be first', function() {
+    var dataList = [{name: 'apple'},
+                    {name: 'apple apple apple'},
+                    {name: 'applepie'},
+                    {name: 'apple seed'},
+                    {name: 'apple_seed'}];
+    var a = new autocomplete.Trie(dataList);
+
+    assert.deepEqual(
+        {name: 'apple apple apple'},
+        a.search('apple apple apple')[0]);
+    assert.deepEqual(
+        {name: 'applepie'},
+        a.search('applepie')[0]);
+    assert.deepEqual(
+        {name: 'apple_seed'},
+        a.search('apple_seed')[0]);
+    assert.deepEqual(dataList, a.search(''));
+  });
+
   test('search with grouping', function() {
     var dataList = [{name: 'pie', head: true},
                     {name: 'deep fried apple pie', group: 'pie'},
@@ -96,7 +118,4 @@ suite('autocomplete', function() {
   });
 
 });
-
 </script>
-</body>
-</html>

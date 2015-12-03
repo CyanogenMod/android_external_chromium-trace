@@ -32,7 +32,6 @@ _EXPECTED_BISECT_CONFIG_DIFF = """config = {
 -  'metric': '',
 -  'repeat_count':'',
 -  'max_time_minutes': '',
--  'truncate_percent':'',
 +  "bad_revision": "215828",
 +  "bisect_mode": "mean",
 +  "bug_id": "12345",
@@ -42,8 +41,7 @@ _EXPECTED_BISECT_CONFIG_DIFF = """config = {
 +  "max_time_minutes": "20",
 +  "metric": "jslib/jslib",
 +  "repeat_count": "20",
-+  "target_arch": "ia32",
-+  "truncate_percent": "25"
++  "target_arch": "ia32"
  }
 """
 
@@ -54,7 +52,6 @@ _EXPECTED_BISECT_CONFIG_DIFF_FOR_INTERNAL_TEST = """config = {
 -  'metric': '',
 -  'repeat_count':'',
 -  'max_time_minutes': '',
--  'truncate_percent':'',
 +  "bad_revision": "f14a8f733cce874d5d66e8e6b86e75bbac240b0e",
 +  "bisect_mode": "mean",
 +  "bug_id": "12345",
@@ -64,8 +61,7 @@ _EXPECTED_BISECT_CONFIG_DIFF_FOR_INTERNAL_TEST = """config = {
 +  "max_time_minutes": "20",
 +  "metric": "foreground_tab_request_start/foreground_tab_request_start",
 +  "repeat_count": "20",
-+  "target_arch": "ia32",
-+  "truncate_percent": "25"
++  "target_arch": "ia32"
  }
 """
 
@@ -76,7 +72,6 @@ _EXPECTED_BISECT_CONFIG_DIFF_WITH_ARCHIVE = """config = {
 -  'metric': '',
 -  'repeat_count':'',
 -  'max_time_minutes': '',
--  'truncate_percent':'',
 +  "bad_revision": "215828",
 +  "bisect_mode": "mean",
 +  "bug_id": "12345",
@@ -86,8 +81,7 @@ _EXPECTED_BISECT_CONFIG_DIFF_WITH_ARCHIVE = """config = {
 +  "max_time_minutes": "20",
 +  "metric": "jslib/jslib",
 +  "repeat_count": "20",
-+  "target_arch": "ia32",
-+  "truncate_percent": "25"
++  "target_arch": "ia32"
  }
 """
 
@@ -96,13 +90,11 @@ _EXPECTED_PERF_CONFIG_DIFF = """config = {
 -  'metric': '',
 -  'repeat_count': '',
 -  'max_time_minutes': '',
--  'truncate_percent': '',
 +  "bad_revision": "215828",
 +  "command": "tools/perf/run_benchmark -v --browser=release --output-format=buildbot --also-run-disabled-tests dromaeo.jslibstylejquery",
 +  "good_revision": "215806",
 +  "max_time_minutes": "60",
-+  "repeat_count": "1",
-+  "truncate_percent": "0"
++  "repeat_count": "1"
  }
 """
 
@@ -142,7 +134,6 @@ Args:
   'repeat_count': The number of times to repeat the performance test.
   'max_time_minutes': The script will attempt to run the performance test
       "repeat_count" times, unless it exceeds "max_time_minutes".
-  'truncate_percent': Discard the highest/lowest % values from performance test.
 
 Sample config:
 
@@ -154,7 +145,6 @@ config = {
   'metric': 'times/t',
   'repeat_count': '20',
   'max_time_minutes': '20',
-  'truncate_percent': '25',
 }
 
 On Windows:
@@ -168,7 +158,6 @@ config = {
   'metric': 'Total/Total',
   'repeat_count': '20',
   'max_time_minutes': '20',
-  'truncate_percent': '25',
 }
 
 
@@ -186,7 +175,6 @@ config = {
   'metric': 'jslib/jslib',
   'repeat_count': '20',
   'max_time_minutes': '20',
-  'truncate_percent': '25',
 }
 
 \"\"\"
@@ -198,7 +186,6 @@ config = {
   'metric': '',
   'repeat_count':'',
   'max_time_minutes': '',
-  'truncate_percent':'',
 }
 
 # Workaround git try issue, see crbug.com/257689"""
@@ -229,7 +216,6 @@ Args:
   'repeat_count': The number of times to repeat the performance test.
   'max_time_minutes': The script will attempt to run the performance test
       "repeat_count" times, unless it exceeds "max_time_minutes".
-  'truncate_percent': Discard the highest/lowest % values from performance test.
 
 Sample config:
 
@@ -238,7 +224,6 @@ config = {
   'metric': 'mean_frame_time/mean_frame_time',
   'repeat_count': '20',
   'max_time_minutes': '20',
-  'truncate_percent': '25',
 }
 
 On Windows:
@@ -250,7 +235,6 @@ config = {
   'metric': 'mean_frame_time/mean_frame_time',
   'repeat_count': '20',
   'max_time_minutes': '20',
-  'truncate_percent': '25',
 }
 
 
@@ -266,7 +250,6 @@ config = {
   'metric': 'mean_frame_time/mean_frame_time',
   'repeat_count': '20',
   'max_time_minutes': '20',
-  'truncate_percent': '25',
 }
 
 \"\"\"
@@ -276,7 +259,6 @@ config = {
   'metric': '',
   'repeat_count': '',
   'max_time_minutes': '',
-  'truncate_percent': '',
 }
 
 # Workaround git try issue, see crbug.com/257689"""
@@ -295,6 +277,10 @@ def _MockFetch(url=None):
   elif start_try_job._PERF_CONFIG_PATH in url:
     return testing_common.FakeResponseObject(
         200, base64.encodestring(_PERF_CONFIG_CONTENTS))
+
+
+def _MockFailedFetch(url=None):  # pylint: disable=unused-argument
+    return testing_common.FakeResponseObject(404, {})
 
 
 def _MockMakeRequest(path, *args, **kwargs):  # pylint: disable=unused-argument
@@ -351,7 +337,22 @@ class StartBisectTest(testing_common.TestCase):
     namespaced_stored_object.Set(
         start_try_job._BUILDER_TYPES_KEY,
         {'ChromiumPerf': 'perf', 'OtherMaster': 'foo'})
+    namespaced_stored_object.Set(
+        start_try_job._BOT_BROWSER_MAP_KEY,
+        [
+            ['android', 'android-chromium'],
+            ['winx64', 'release_x64'],
+            ['win_x64', 'release_x64'],
+            ['', 'release'],
+        ])
     testing_common.SetSheriffDomains(['chromium.org'])
+    # Add fake Rietveld auth info.
+    rietveld_config = rietveld_service.RietveldConfig(
+        id='default_rietveld_config',
+        client_email='sullivan@chromium.org',
+        service_account_key='Fake Account Key',
+        server_url='https://test-rietveld.appspot.com')
+    rietveld_config.put()
 
   def testPost_InvalidUser_ShowsErrorMessage(self):
     self.SetCurrentUser('foo@yahoo.com')
@@ -488,7 +489,6 @@ class StartBisectTest(testing_common.TestCase):
             'bad_revision': '265556',
             'repeat_count': '15',
             'max_time_minutes': '8',
-            'truncate_percent': '30',
             'bug_id': '-1',
             'use_archive': '',
         },
@@ -502,7 +502,6 @@ class StartBisectTest(testing_common.TestCase):
             'metric': 'times/page_load_time',
             'repeat_count': '15',
             'max_time_minutes': '8',
-            'truncate_percent': '30',
             'bug_id': '-1',
             'builder_type': '',
             'target_arch': 'ia32',
@@ -520,7 +519,6 @@ class StartBisectTest(testing_common.TestCase):
             'bad_revision': '265556',
             'repeat_count': '15',
             'max_time_minutes': '8',
-            'truncate_percent': '30',
             'bug_id': '-1',
             'use_archive': 'true',
             'use_buildbucket': True,
@@ -535,7 +533,6 @@ class StartBisectTest(testing_common.TestCase):
             'metric': 'times/page_load_time',
             'repeat_count': '15',
             'max_time_minutes': '8',
-            'truncate_percent': '30',
             'bug_id': '-1',
             'builder_type': 'perf',
             'target_arch': 'ia32',
@@ -556,7 +553,6 @@ class StartBisectTest(testing_common.TestCase):
             'bad_revision': '265556',
             'repeat_count': '15',
             'max_time_minutes': '8',
-            'truncate_percent': '30',
             'bug_id': '-1',
             'use_archive': '',
         },
@@ -570,7 +566,6 @@ class StartBisectTest(testing_common.TestCase):
             'metric': 'times/page_load_time',
             'repeat_count': '15',
             'max_time_minutes': '8',
-            'truncate_percent': '30',
             'bug_id': '-1',
             'builder_type': '',
             'target_arch': 'ia32',
@@ -588,7 +583,6 @@ class StartBisectTest(testing_common.TestCase):
             'bad_revision': '23456',
             'repeat_count': '15',
             'max_time_minutes': '8',
-            'truncate_percent': '30',
             'bug_id': '-1',
         },
         {
@@ -601,7 +595,6 @@ class StartBisectTest(testing_common.TestCase):
             'metric': 'times/page_load_time',
             'repeat_count': '15',
             'max_time_minutes': '8',
-            'truncate_percent': '30',
             'bug_id': '-1',
             'builder_type': '',
             'target_arch': 'ia32',
@@ -619,7 +612,6 @@ class StartBisectTest(testing_common.TestCase):
             'bad_revision': '265556',
             'repeat_count': '15',
             'max_time_minutes': '8',
-            'truncate_percent': '30',
             'bug_id': '-1',
             'use_archive': '',
             'bisect_mode': 'return_code',
@@ -634,7 +626,6 @@ class StartBisectTest(testing_common.TestCase):
             'metric': 'times/page_load_time',
             'repeat_count': '15',
             'max_time_minutes': '8',
-            'truncate_percent': '30',
             'bug_id': '-1',
             'builder_type': '',
             'target_arch': 'ia32',
@@ -653,7 +644,6 @@ class StartBisectTest(testing_common.TestCase):
             'bad_revision': '265556',
             'repeat_count': '15',
             'max_time_minutes': '8',
-            'truncate_percent': '10',
             'bug_id': '-1',
             'use_archive': '',
             'use_buildbucket': False,
@@ -689,26 +679,6 @@ class StartBisectTest(testing_common.TestCase):
          '--gtest_filter=IndexedDBTest.Perf'),
         bisect_bot='win_perf_bisect',
         suite='idb_perf')
-
-  def testGetConfig_Startup_ProfileDirFlagAdded(self):
-    self._TestGetConfigCommand(
-        ('python tools/perf/run_benchmark -v '
-         '--browser=release --output-format=buildbot '
-         '--also-run-disabled-tests '
-         '--profile-dir=out/Release/generated_profile/small_profile '
-         'startup.cold.blank_page'),
-        bisect_bot='win_perf_bisect',
-        suite='startup.cold.dirty.blank_page')
-
-  def testGetConfig_SessionRestore_ProfileDirFlagAdded(self):
-    self._TestGetConfigCommand(
-        ('python tools/perf/run_benchmark -v '
-         '--browser=release --output-format=buildbot '
-         '--also-run-disabled-tests '
-         '--profile-dir=out/Release/generated_profile/small_profile '
-         'session_restore.warm.typical_25'),
-        bisect_bot='win_perf_bisect',
-        suite='session_restore.warm.typical_25')
 
   def testGetConfig_PerformanceBrowserTests(self):
     self._TestGetConfigCommand(
@@ -746,12 +716,6 @@ class StartBisectTest(testing_common.TestCase):
                      mock.MagicMock(return_value='1234567'))
   def testPerformBuildbucketBisect(self):
     self.SetCurrentUser('foo@chromium.org')
-    cfg = rietveld_service.RietveldConfig(
-        id='default_rietveld_config',
-        client_email='sullivan@chromium.org',
-        service_account_key='Fake Account Key',
-        server_url='https://test-rietveld.appspot.com')
-    cfg.put()
 
     bug_data.Bug(id=12345).put()
 
@@ -763,7 +727,6 @@ class StartBisectTest(testing_common.TestCase):
         'bad_revision': '215828',
         'repeat_count': '20',
         'max_time_minutes': '20',
-        'truncate_percent': '25',
         'bug_id': 12345,
         'use_archive': '',
         'step': 'perform-bisect',
@@ -777,21 +740,26 @@ class StartBisectTest(testing_common.TestCase):
     self.assertEqual(1, len(job_entities))
     self.assertTrue(job_entities[0].use_buildbucket)
 
+  def testPerformBisect_InvalidConfig_ReturnsError(self):
+    bisect_job = try_job.TryJob(
+        bot='foo',
+        config='config = {}',
+        master_name='ChromiumPerf',
+        internal_only=False,
+        job_type='bisect',
+        use_buildbucket=True)
+    self.assertEqual(
+        {'error': 'No "recipe_tester_name" given.'},
+        start_try_job.PerformBisect(bisect_job))
+
   @mock.patch(
       'google.appengine.api.urlfetch.fetch',
       mock.MagicMock(side_effect=_MockFetch))
   @mock.patch.object(
-      start_try_job.rietveld_service.RietveldService, '_MakeRequest',
+      start_try_job.rietveld_service.RietveldService, 'MakeRequest',
       mock.MagicMock(side_effect=_MockMakeRequest))
   def testPerformBisect(self):
     self.SetCurrentUser('foo@chromium.org')
-    # Fake Rietveld auth info
-    cfg = rietveld_service.RietveldConfig(
-        id='default_rietveld_config',
-        client_email='sullivan@chromium.org',
-        service_account_key='Fake Account Key',
-        server_url='https://test-rietveld.appspot.com')
-    cfg.put()
 
     # Create bug.
     bug_data.Bug(id=12345).put()
@@ -804,7 +772,6 @@ class StartBisectTest(testing_common.TestCase):
         'bad_revision': '215828',
         'repeat_count': '20',
         'max_time_minutes': '20',
-        'truncate_percent': '25',
         'bug_id': 12345,
         'use_archive': '',
         'step': 'perform-bisect',
@@ -825,17 +792,10 @@ class StartBisectTest(testing_common.TestCase):
       'google.appengine.api.urlfetch.fetch',
       mock.MagicMock(side_effect=_MockFetch))
   @mock.patch.object(
-      start_try_job.rietveld_service.RietveldService, '_MakeRequest',
+      start_try_job.rietveld_service.RietveldService, 'MakeRequest',
       mock.MagicMock(side_effect=_MockMakeRequest))
   def testPerformPerfTry(self):
     self.SetCurrentUser('foo@chromium.org')
-    # Fake Rietveld auth info
-    cfg = rietveld_service.RietveldConfig(
-        id='default_rietveld_config',
-        client_email='sullivan@chromium.org',
-        service_account_key='Fake Account Key',
-        server_url='https://test-rietveld.appspot.com/')
-    cfg.put()
 
     query_parameters = {
         'bisect_bot': 'linux_perf_bisect',
@@ -853,6 +813,76 @@ class StartBisectTest(testing_common.TestCase):
     _TEST_EXPECTED_BOT = 'linux_perf_bisect'
     response = self.testapp.post('/start_try_job', query_parameters)
     self.assertEqual(json.dumps({'issue_id': '33001'}), response.body)
+
+  @mock.patch(
+      'google.appengine.api.urlfetch.fetch',
+      mock.MagicMock(side_effect=_MockFailedFetch))
+  @mock.patch.object(
+      start_try_job.rietveld_service.RietveldService, 'MakeRequest',
+      mock.MagicMock(side_effect=_MockMakeRequest))
+  def testPerformBisectStep_DeleteJobOnFailedBisect(self):
+    self.SetCurrentUser('foo@chromium.org')
+    # Fake Rietveld auth info
+    cfg = rietveld_service.RietveldConfig(
+        id='default_rietveld_config',
+        client_email='sullivan@chromium.org',
+        service_account_key='Fake Account Key',
+        server_url='https://test-rietveld.appspot.com/')
+    cfg.put()
+
+    query_parameters = {
+        'bisect_bot': 'linux_perf_bisect',
+        'suite': 'dromaeo.jslibstylejquery',
+        'good_revision': '215806',
+        'bad_revision': '215828',
+        'rerun_option': '',
+    }
+    global _EXPECTED_CONFIG_DIFF
+    global _TEST_EXPECTED_CONFIG_CONTENTS
+    global _TEST_EXPECTED_BOT
+    _EXPECTED_CONFIG_DIFF = _EXPECTED_PERF_CONFIG_DIFF
+    _TEST_EXPECTED_CONFIG_CONTENTS = _PERF_CONFIG_CONTENTS
+    _TEST_EXPECTED_BOT = 'linux_perf_bisect'
+
+    query_parameters['step'] = 'perform-bisect'
+    self.testapp.post('/start_try_job', query_parameters)
+    try_jobs = try_job.TryJob.query().fetch()
+    self.assertEqual(0, len(try_jobs))
+
+  @mock.patch(
+      'google.appengine.api.urlfetch.fetch',
+      mock.MagicMock(side_effect=_MockFailedFetch))
+  @mock.patch.object(
+      start_try_job.rietveld_service.RietveldService, 'MakeRequest',
+      mock.MagicMock(side_effect=_MockMakeRequest))
+  def testPerformPerfTryStep_DeleteJobOnFailedBisect(self):
+    self.SetCurrentUser('foo@chromium.org')
+    # Fake Rietveld auth info
+    cfg = rietveld_service.RietveldConfig(
+        id='default_rietveld_config',
+        client_email='sullivan@chromium.org',
+        service_account_key='Fake Account Key',
+        server_url='https://test-rietveld.appspot.com/')
+    cfg.put()
+
+    query_parameters = {
+        'bisect_bot': 'linux_perf_bisect',
+        'suite': 'dromaeo.jslibstylejquery',
+        'good_revision': '215806',
+        'bad_revision': '215828',
+        'rerun_option': '',
+    }
+    global _EXPECTED_CONFIG_DIFF
+    global _TEST_EXPECTED_CONFIG_CONTENTS
+    global _TEST_EXPECTED_BOT
+    _EXPECTED_CONFIG_DIFF = _EXPECTED_PERF_CONFIG_DIFF
+    _TEST_EXPECTED_CONFIG_CONTENTS = _PERF_CONFIG_CONTENTS
+    _TEST_EXPECTED_BOT = 'linux_perf_bisect'
+
+    query_parameters['step'] = 'perform-perf-try'
+    self.testapp.post('/start_try_job', query_parameters)
+    try_jobs = try_job.TryJob.query().fetch()
+    self.assertEqual(0, len(try_jobs))
 
   @mock.patch(
       'google.appengine.api.urlfetch.fetch',
@@ -876,7 +906,6 @@ class StartBisectTest(testing_common.TestCase):
         'bad_revision': '215828',
         'repeat_count': '20',
         'max_time_minutes': '20',
-        'truncate_percent': '25',
         'bug_id': 12345,
         'use_archive': 'true',
         'bisect_mode': 'mean',
@@ -900,7 +929,6 @@ class StartBisectTest(testing_common.TestCase):
             'bad_revision': '23456',
             'repeat_count': '15',
             'max_time_minutes': '8',
-            'truncate_percent': '30',
             'bug_id': '-1',
             'use_archive': 'true',
         },
@@ -914,7 +942,6 @@ class StartBisectTest(testing_common.TestCase):
             'metric': 'times/page_load_time',
             'repeat_count': '15',
             'max_time_minutes': '8',
-            'truncate_percent': '30',
             'bug_id': '-1',
             'builder_type': 'perf',
             'target_arch': 'ia32',
@@ -932,7 +959,6 @@ class StartBisectTest(testing_common.TestCase):
             'bad_revision': '265556',
             'repeat_count': '15',
             'max_time_minutes': '8',
-            'truncate_percent': '30',
             'bug_id': '-1',
             'use_archive': ''
         },
@@ -946,14 +972,13 @@ class StartBisectTest(testing_common.TestCase):
             'metric': 'times/page_load_time',
             'repeat_count': '15',
             'max_time_minutes': '8',
-            'truncate_percent': '30',
             'bug_id': '-1',
             'builder_type': '',
             'target_arch': 'x64',
             'bisect_mode': 'mean',
         })
 
-  def testGetConfig_Usebuildbucket_AndroidTelemetryTest(self):
+  def testGetConfig_UseBuildbucket_AndroidTelemetryTest(self):
     self._TestGetConfigCommand(
         ('src/tools/perf/run_benchmark -v '
          '--browser=android-chromium --output-format=chartjson '
@@ -963,7 +988,7 @@ class StartBisectTest(testing_common.TestCase):
         suite='page_cycler.morejs',
         use_buildbucket=True)
 
-  def testGetConfig_Usebuildbucket_CCPerftests(self):
+  def testGetConfig_UseBuildbucket_CCPerftests(self):
     self._TestGetConfigCommand(
         ('./src/out/Release/cc_perftests '
          '--test-launcher-print-test-stdio=always'),
@@ -971,14 +996,14 @@ class StartBisectTest(testing_common.TestCase):
         suite='cc_perftests',
         use_buildbucket=True)
 
-  def testGetConfig_Usebuildbucket_AndroidCCPerftests(self):
+  def testGetConfig_UseBuildbucket_AndroidCCPerftests(self):
     self._TestGetConfigCommand(
         'src/build/android/test_runner.py gtest --release -s cc_perftests',
         bisect_bot='android_nexus7_perf_bisect',
         suite='cc_perftests',
         use_buildbucket=True)
 
-  def testGetConfig_Usebuildbucket_IdbPerf(self):
+  def testGetConfig_UseBuildbucket_IdbPerf(self):
     self._TestGetConfigCommand(
         ('.\src\out\Release\performance_ui_tests.exe '
          '--gtest_filter=IndexedDBTest.Perf'),
@@ -986,29 +1011,7 @@ class StartBisectTest(testing_common.TestCase):
         suite='idb_perf',
         use_buildbucket=True)
 
-  def testGetConfig_Usebuildbucket_Startup_ProfileDirFlagAdded(self):
-    self._TestGetConfigCommand(
-        ('python src/tools/perf/run_benchmark -v '
-         '--browser=release --output-format=chartjson '
-         '--also-run-disabled-tests '
-         '--profile-dir=src/out/Release/generated_profile/small_profile '
-         'startup.cold.blank_page'),
-        bisect_bot='win_perf_bisect',
-        suite='startup.cold.dirty.blank_page',
-        use_buildbucket=True)
-
-  def testGetConfig_Usebuildbucket_SessionRestore_ProfileDirFlagAdded(self):
-    self._TestGetConfigCommand(
-        ('python src/tools/perf/run_benchmark -v '
-         '--browser=release --output-format=chartjson '
-         '--also-run-disabled-tests '
-         '--profile-dir=src/out/Release/generated_profile/small_profile '
-         'session_restore.warm.typical_25'),
-        bisect_bot='win_perf_bisect',
-        suite='session_restore.warm.typical_25',
-        use_buildbucket=True)
-
-  def testGetConfig_Usebuildbucket_PerformanceBrowserTests(self):
+  def testGetConfig_UseBuildbucket_PerformanceBrowserTests(self):
     self._TestGetConfigCommand(
         ('./src/out/Release/performance_browser_tests '
          '--test-launcher-print-test-stdio=always '
@@ -1016,6 +1019,45 @@ class StartBisectTest(testing_common.TestCase):
         bisect_bot='linux_perf_bisect',
         suite='performance_browser_tests',
         use_buildbucket=True)
+
+  def testGetConfig_X64Bot_UsesX64ReleaseDirectory(self):
+    self._TestGetConfigCommand(
+        ('.\\src\\out\\Release_x64\\performance_browser_tests.exe '
+         '--test-launcher-print-test-stdio=always '
+         '--enable-gpu'),
+        bisect_bot='winx64nvidia_perf_bisect',
+        suite='performance_browser_tests',
+        use_buildbucket=True)
+
+  def testGuessMetric_SummaryMetricWithNoTIRLabel(self):
+    testing_common.AddTests(
+        ['M'], ['b'],
+        {'benchmark': {'chart': {'page': {}}}})
+    self.assertEqual(
+        'chart/chart',
+        start_try_job.GuessMetric('M/b/benchmark/chart'))
+
+  def testGuessMetric_SummaryMetricWithTIRLabel(self):
+    testing_common.AddTests(
+        ['M'], ['b'],
+        {'benchmark': {'chart': {'tir_label': {'page': {}}}}})
+    self.assertEqual(
+        'tir_label-chart/tir_label-chart',
+        start_try_job.GuessMetric('M/b/benchmark/chart/tir_label'))
+
+
+class RewriteMetricNameTests(testing_common.TestCase):
+
+  def testRewriteMetricWithoutInteractionRecord(self):
+    self.assertEqual(
+        'old/skool',
+        start_try_job._RewriteMetricName('old/skool'))
+
+  def testRewriteMetricWithInteractionRecord(self):
+    self.assertEqual(
+        'interaction-chart/trace',
+        start_try_job._RewriteMetricName('chart/interaction/trace'))
+
 
 if __name__ == '__main__':
   unittest.main()

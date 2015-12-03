@@ -141,6 +141,56 @@ tr.b.unittest.testSuite(function() {
     assert.equal(dstDict.b, 30);
   });
 
+  test('invertArrayOfDicts_defaultGetter', function() {
+    var array = [
+      {a: 6, b: 5},
+      undefined,
+      {a: 4, b: 3, c: 2},
+      {b: 1, c: 0}
+    ];
+    var dict = tr.b.invertArrayOfDicts(array);
+    assert.sameMembers(Object.keys(dict), ['a', 'b', 'c']);
+    assert.deepEqual(tr.b.asArray(dict['a']), [6, undefined, 4, undefined]);
+    assert.deepEqual(tr.b.asArray(dict['b']), [5, undefined, 3, 1]);
+    assert.deepEqual(tr.b.asArray(dict['c']), [undefined, undefined, 2, 0]);
+  });
+
+  test('invertArrayOfDicts_customGetter', function() {
+    var fakeThis = { itemToDict: JSON.parse };
+    var array = [
+      '{"a": "test", "b": true}',
+      '{}',
+      '{invalid-json}',
+      '{"a": 42, "c": false}'
+    ];
+    var dict = tr.b.invertArrayOfDicts(array, function(item) {
+      try {
+        return this.itemToDict(item);
+      } catch (e) {
+        return undefined;
+      }
+    }, fakeThis);
+    assert.sameMembers(Object.keys(dict), ['a', 'b', 'c']);
+    assert.deepEqual(
+        tr.b.asArray(dict['a']), ['test', undefined, undefined, 42]);
+    assert.deepEqual(
+        tr.b.asArray(dict['b']), [true, undefined, undefined, undefined]);
+    assert.deepEqual(
+        tr.b.asArray(dict['c']), [undefined, undefined, undefined, false]);
+  });
+
+  test('arrayToDict', function() {
+    var fakeThis = { prefix: 'key_' };
+    var array = [5, undefined, 'test'];
+    var dict = tr.b.arrayToDict(array, function(value) {
+      return this.prefix + value;
+    }, fakeThis);
+    assert.deepEqual(dict, {
+      'key_5': 5,
+      'key_undefined': undefined,
+      'key_test': 'test'
+    });
+  });
 
   test('identity', function() {
     // Undefined value.
@@ -173,6 +223,55 @@ tr.b.unittest.testSuite(function() {
       return false;
     }, this);
     assert.equal(k, undefined);
+  });
+
+  test('dictionaryContainsValue', function() {
+    var emptyDict = {};
+    assert.isFalse(tr.b.dictionaryContainsValue(emptyDict, 'missing'));
+
+    var nonEmptyDict = {a: 42, b: 'value'};
+    assert.isTrue(tr.b.dictionaryContainsValue(nonEmptyDict, 42));
+    assert.isTrue(tr.b.dictionaryContainsValue(nonEmptyDict, 'value'));
+    assert.isFalse(tr.b.dictionaryContainsValue(nonEmptyDict, 'a'));
+    assert.isFalse(tr.b.dictionaryContainsValue(nonEmptyDict, 'b'));
+    assert.isFalse(tr.b.dictionaryContainsValue(nonEmptyDict, 'missing'));
+  });
+
+  test('mapValues', function() {
+    var map = new Map();
+    map.set('a', 1);
+    map.set('b', 2);
+    map.set('c', 3);
+    var values = tr.b.mapValues(map);
+    assert.strictEqual(values.length, 3);
+    assert.sameMembers([1, 2, 3], values);
+  });
+
+  test('iterMapItems', function() {
+    var map = new Map();
+    map.set('a', 'aa');
+    map.set('b', 'bb');
+    map.set('c', 'cc');
+    var counter = 0;
+    var keyCheck = ['a', 'b', 'c'];
+    var valueCheck = ['aa', 'bb', 'cc'];
+    tr.b.iterMapItems(map, function(key, value) {
+      assert.strictEqual(key, keyCheck[counter]);
+      assert.strictEqual(value, valueCheck[counter]);
+      ++counter;
+    });
+    assert.strictEqual(counter, 3);
+
+    // Optional 'this' argument.
+    var retObj = {delimiter: '=', result: {}};
+    assert.lengthOf(Object.keys(retObj.result), 0);
+    tr.b.iterMapItems(map, function(key, value) {
+      this.result[key] = key + this.delimiter + value;
+    }, retObj);
+    assert.lengthOf(Object.keys(retObj.result), 3);
+    assert.equal(retObj.result.a, 'a=aa');
+    assert.equal(retObj.result.b, 'b=bb');
+    assert.equal(retObj.result.c, 'c=cc');
   });
 });
 </script>

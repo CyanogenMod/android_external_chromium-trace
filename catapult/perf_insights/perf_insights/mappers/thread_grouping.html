@@ -1,4 +1,4 @@
-<!DOCTYPE HTML>
+<!DOCTYPE html>
 <!--
 Copyright (c) 2015 The Chromium Authors. All rights reserved.
 Use of this source code is governed by a BSD-style license that can be
@@ -12,7 +12,7 @@ found in the LICENSE file.
 <script>
 'use strict';
 
-tr.exportTo('pi.wr', function() {
+tr.exportTo('pi.m', function() {
   function ThreadGrouping() {
     this.groupNameForThreadGUID_ = {};
   }
@@ -21,23 +21,26 @@ tr.exportTo('pi.wr', function() {
     autoInitUsingHelpers: function(model) {
       // Everything is 'other' by default.
       model.getAllThreads().forEach(function(thread) {
-        this.groupNameForThreadGUID_[thread.guid] = 'other';
+        this.groupNameForThreadGUID_[thread.guid] = 'Other';
       }, this);
 
       if (tr.e.audits.ChromeModelHelper.supportsModel(model)) {
         var chromeHelper = new tr.e.audits.ChromeModelHelper(model);
 
         var browserHelper = chromeHelper.browserHelper;
-        this.addThreadsInProcessToGroup_(browserHelper.process, 'browser');
+        this.addThreadsInProcessToGroup_(browserHelper.process, 'Browser');
 
-        // TODO(nduca): Detect clank browser gpu thread and assign it to the GPU
-        // group.
-        for (var pid in chromeHelper.rendererHelpers) {
-          var rendererHelper = chromeHelper.rendererHelpers[pid];
-          this.addThreadsInProcessToGroup_(rendererHelper.process, 'renderer');
+        var gpuHelper = chromeHelper.gpuHelper;
+        if (gpuHelper) {
+          this.addThreadsInProcessToGroup_(gpuHelper.process, 'GPU');
         }
 
-        // TODO(nduca): Modify the helpers to detect plugin and gpu processes
+        for (var pid in chromeHelper.rendererHelpers) {
+          var rendererHelper = chromeHelper.rendererHelpers[pid];
+          this.addThreadsInProcessToGroup_(rendererHelper.process, 'Renderer');
+        }
+
+        // TODO(nduca): Modify the helpers to detect plugin processes
         // and include those in separate processes.
       }
 
@@ -51,14 +54,14 @@ tr.exportTo('pi.wr', function() {
 
       var groupName = this.groupNameForThreadGUID_[thread.guid];
       if (groupName === undefined)
-        return 'other';
+        return 'Other';
       return groupName;
     },
 
     getGroupNameForEvent: function(event) {
       var parentContainer = event.parentContainer;
       if (parentContainer === undefined)
-        return 'unknown';
+        return 'Unknown';
       return this.getGroupNameForThread(parentContainer);
     },
 
@@ -93,7 +96,7 @@ tr.exportTo('pi.wr', function() {
 
         var groupName = this.groupNameForThreadGUID_[parentContainer.guid];
         if (groupName === undefined)
-          groupName = 'other';
+          groupName = 'Other';
         resultingEventSets[groupName].push(event);
 
       }, this);

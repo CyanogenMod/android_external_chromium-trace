@@ -47,7 +47,10 @@ class TryJob(internal_only_model.InternalOnlyModel):
 
   job_type = ndb.StringProperty(
       default='bisect',
-      choices=['bisect', 'perf-try'])
+      choices=['bisect', 'bisect-fyi', 'perf-try'])
+
+  # job_name attribute is used by try jobs of bisect FYI.
+  job_name = ndb.StringProperty(default=None)
 
   def SetStarted(self):
     self.status = 'started'

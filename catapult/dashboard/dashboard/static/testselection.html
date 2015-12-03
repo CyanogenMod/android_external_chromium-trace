@@ -1,4 +1,12 @@
+<!DOCTYPE html>
+<!--
+Copyright 2015 The Chromium Authors. All rights reserved.
+Use of this source code is governed by a BSD-style license that can be
+found in the LICENSE file.
+-->
+
 <script>
+'use strict';
 
 /**
  * This file contains TestSelection, a class for managing a set
@@ -40,8 +48,8 @@ var testselection = (function() {
     var testSuiteName = parts[0];
     var subTestPath = parts.slice(1).join('/');
     if (window['TEST_SUITES'] && window['TEST_SUITES'][testSuiteName]) {
-      var important = window['TEST_SUITES'][testSuiteName]['monitored'];
-      if (important.indexOf(subTestPath) != -1) {
+      var important = window['TEST_SUITES'][testSuiteName]['mon'];
+      if (important && important.indexOf(subTestPath) != -1) {
         return true;
       }
     }
@@ -87,7 +95,6 @@ var testselection = (function() {
   /**
    * Checks whether the selection could be graphed.
    * A selection must have at least one test and one bot to be graphed.
-   * @return {boolean}
    */
   TestSelection.prototype.isValid = function() {
     return Boolean(this.getTests().length);
@@ -109,7 +116,6 @@ var testselection = (function() {
   /**
    * Returns a list of two-item Arrays, each of which contains a test path and
    *     Array of selected series under that test path.
-   * @return {Array.<Array>}
    */
   TestSelection.prototype.getTestPathAndSelectedSeries = function() {
     var testPathAndSelected = [];
@@ -136,8 +142,8 @@ var testselection = (function() {
   };
 
   /**
-   * Gets a list of core test paths.
-   * @return {Object.<string,boolean>}
+   * Gets a dict of core test paths.
+   * @return {Object.<string,boolean>} Dict of core test to important boolean.
    */
   TestSelection.prototype.getCoreTests_ = function() {
     var core = {};

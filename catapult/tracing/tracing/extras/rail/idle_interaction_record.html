@@ -14,17 +14,17 @@ found in the LICENSE file.
  * @fileoverview Base class for trace data Auditors.
  */
 tr.exportTo('tr.e.rail', function() {
-  function IdleInteractionRecord(start, duration) {
+  function IdleInteractionRecord(parentModel, start, duration) {
     tr.e.rail.RAILInteractionRecord.call(
-        this, 'Idle', 'rail_idle',
+        this, parentModel, 'Idle', 'rail_idle',
         start, duration);
   }
 
   IdleInteractionRecord.prototype = {
     __proto__: tr.e.rail.RAILInteractionRecord.prototype,
 
-    get normalizedUserPain() {
-      return 0;
+    get normalizedUserComfort() {
+      return 1;
     },
 
     // Unlike during active IRs, while the user is idle, the CPU should not be

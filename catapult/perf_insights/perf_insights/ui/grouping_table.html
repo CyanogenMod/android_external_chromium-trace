@@ -35,6 +35,7 @@ tr.exportTo('pi.ui', function() {
     this.subRowsBuilt_ = false;
     this.subRows_ = undefined;
   }
+
   Row.prototype = {
     getCurrentGroupingKeyFunc_: function() {
       if (this.groupingKeyFuncs_.length === 0)
@@ -80,6 +81,12 @@ tr.exportTo('pi.ui', function() {
       }
     },
 
+    get isExpanded() {
+      return (this.subRows &&
+              (this.subRows.length > 0) &&
+              (this.subRows.length < 5));
+    },
+
     get subRows() {
       this.rebuildSubRowsIfNeeded_();
       return this.subRows_;
@@ -100,6 +107,10 @@ tr.exportTo('pi.ui', function() {
       this.$.table.tableColumns = tableColumns;
     },
 
+    get tableRows() {
+      return this.$.table.tableRows;
+    },
+
     get sortColumnIndex() {
       return this.$.table.sortColumnIndex;
     },
@@ -116,28 +127,28 @@ tr.exportTo('pi.ui', function() {
       this.$.table.sortDescending = sortDescending;
     },
 
-    get rowHighlightEnabled() {
-      return this.$.table.rowHighlightEnabled;
+    get selectionMode() {
+      return this.$.table.selectionMode;
     },
 
-    set rowHighlightEnabled(rowHighlightEnabled) {
-      this.$.table.rowHighlightEnabled = rowHighlightEnabled;
+    set selectionMode(selectionMode) {
+      this.$.table.selectionMode = selectionMode;
     },
 
-    get supportsSelection() {
-      return this.$.table.supportsSelection;
+    get rowHighlightStyle() {
+      return this.$.table.rowHighlightStyle;
     },
 
-    set supportsSelection(supportsSelection) {
-      this.$.table.supportsSelection = supportsSelection;
+    set rowHighlightStyle(rowHighlightStyle) {
+      this.$.table.rowHighlightStyle = rowHighlightStyle;
     },
 
-    get cellSelectionMode() {
-      return this.$.table.cellSelectionMode;
+    get cellHighlightStyle() {
+      return this.$.table.cellHighlightStyle;
     },
 
-    set cellSelectionMode(cellSelectionMode) {
-      this.$.table.cellSelectionMode = cellSelectionMode;
+    set cellHighlightStyle(cellHighlightStyle) {
+      this.$.table.cellHighlightStyle = cellHighlightStyle;
     },
 
     get selectedColumnIndex() {
@@ -159,6 +170,7 @@ tr.exportTo('pi.ui', function() {
     get groupBy() {
       return this.groupBy_;
     },
+
     set groupBy(groupBy) {
       this.groupBy_ = groupBy;
       this.updateContents_();
@@ -167,6 +179,7 @@ tr.exportTo('pi.ui', function() {
     get dataToGroup() {
       return this.dataToGroup_;
     },
+
     set dataToGroup(dataToGroup) {
       this.dataToGroup_ = dataToGroup;
       this.updateContents_();

@@ -6,15 +6,13 @@ the bisect process after the user clicks on the bisect button.
 <link rel="import" href="/components/paper-dialog/paper-action-dialog.html">
 <link rel="import" href="/components/paper-spinner/paper-spinner.html">
 
-<link rel="import" href="base-form.html">
-<link rel="import" href="xhr-element.html">
+<link rel="import" href="/dashboard/elements/base-form.html">
+<link rel="import" href="/dashboard/static/simple_xhr.html">
 
 <polymer-element name="bisect-form" extends="base-form"
                  attributes="xsrfToken testPath
                              earlierRevision laterRevision bugId">
   <template>
-
-    <xhr-element id="xhr"></xhr-element>
 
     <paper-action-dialog id="container" autoCloseDisabled="true">
       <!-- Styling for paper-action-dialog's children. -->
@@ -96,10 +94,6 @@ the bisect process after the user clicks on the bisect button.
             <td>Max time (min):</td>
             <td><input type="number" min="1" max="60" value="{{MAX_TIME_MINUTES}}"></td>
           </tr>
-          <tr>
-            <td>Truncate percent:</td>
-            <td><input type="number" min="1" max="49" value="{{TRUNCATE_PERCENT}}"></td>
-          </tr>
 
           <template if="{{canUseArchive}}">
             <tr>
@@ -134,6 +128,9 @@ the bisect process after the user clicks on the bisect button.
           </tr>
         </table>
       </form>
+
+      <p><a href="http://www.chromium.org/developers/speed-infra/perf-try-bots-bisect-bots/config">
+        About the config parameters</a></p>
 
       <p class="error">{{error}}</p>
 
@@ -172,7 +169,6 @@ the bisect process after the user clicks on the bisect button.
         // See: http://goo.gl/I94Kyj
         REPEAT_COUNT: 20,
         MAX_TIME_MINUTES: 20,
-        TRUNCATE_PERCENT: 25,
         BISECT_MODE: 'mean',
 
         /**
@@ -184,10 +180,11 @@ the bisect process after the user clicks on the bisect button.
           this.useArchive = true,
           this.loading = true;
           this.open();
-          this.$.xhr.send('/start_try_job', this.xsrfToken,
+          simple_xhr.send('/start_try_job',
             {
               'test_path': this.testPath,
-              'step': 'prefill-info'
+              'step': 'prefill-info',
+              'xsrf_token': this.xsrfToken
             },
             function successCallback(info) {
               this.bot = info['bisect_bot'];
@@ -223,18 +220,18 @@ the bisect process after the user clicks on the bisect button.
               'bad_revision': this.laterRevision,
               'repeat_count': this.REPEAT_COUNT,
               'max_time_minutes': this.MAX_TIME_MINUTES,
-              'truncate_percent': this.TRUNCATE_PERCENT,
               'use_archive': this.useArchive ? 'true' : '',
               'bypass_no_repro_check': this.bypassNoRepro ? 'true' : '',
               'master': this.master,
               'internal_only': this.internalOnly,
-              'bisect_mode': this.BISECT_MODE
+              'bisect_mode': this.BISECT_MODE,
+              'xsrf_token': this.xsrfToken
           };
           if (this.bugId) {
             params['bug_id'] = this.bugId;
           }
-          this.$.xhr.send(
-              '/start_try_job', this.xsrfToken, params,
+          simple_xhr.send(
+              '/start_try_job', params,
               function successCallback(info) {
                 var message = '<b>Job submitted!</b> ' +
                               '<a href="{{issue_url}}" target="_blank">' +
