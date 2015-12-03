@@ -1,4 +1,4 @@
-<!DOCTYPE HTML>
+<!DOCTYPE html>
 <!--
 Copyright (c) 2015 The Chromium Authors. All rights reserved.
 Use of this source code is governed by a BSD-style license that can be
@@ -6,11 +6,12 @@ found in the LICENSE file.
 -->
 <link rel="import" href="/tracing/base/iteration_helpers.html">
 <link rel="import" href="/tracing/ui/base/dom_helpers.html">
-<link rel="import" href="/tracing/ui/base/info_bar_group.html">
 <link rel="import" href="/tracing/ui/base/overlay.html">
+<link rel="import" href="/tracing/ui/analysis/tab_view.html">
 <link rel="import" href="/perf_insights/results/results.html">
 <link rel="import" href="/perf_insights/ui/reports/pi_report.html">
 <link rel="import" href="/perf_insights/ui/reports/rail_score_report.html">
+<link rel="import" href="/perf_insights/ui/reports/coverage_report.html">
 <link rel="import" href="/perf_insights/ui/reports/slice_cost_report.html">
 <link rel="import" href="/perf_insights/ui/grouping_table.html">
 <link rel="import" href="/perf_insights/ui/generic_results_view.html">
@@ -25,20 +26,28 @@ found in the LICENSE file.
         display: flex;
         flex-direction: column;
       }
-      h1 {
-        margin: 20px 0 0px 0;
-        font-size: 12pt;
-      }
-      .sub-report {
-        margin-left: 10px;
+
+      tr-ui-a-tab-view {
+        flex: 1 1 auto;
+        min-height: 0;
       }
     </style>
-    <tr-ui-b-info-bar-group id="infobars"></tr-ui-b-info-bar-group>
-    <h1>Slice costs</h1>
-    <pi-ui-r-slice-cost-report class="sub-report"></pi-ui-r-slice-cost-report>
+    <tr-ui-a-tab-view>
+      <div tab-label="Slice costs" selected>
+        <pi-ui-r-slice-cost-report class="sub-report">
+        </pi-ui-r-slice-cost-report>
+      </div>
 
-    <h1>RAIL</h1>
-    <pi-ui-r-rail-score-report class="sub-report"></pi-ui-r-rail-score-report>
+      <div tab-label="RAIL">
+        <pi-ui-r-rail-score-report class="sub-report">
+        </pi-ui-r-rail-score-report>
+      </div>
+
+      <div tab-label="Coverage">
+        <pi-ui-wr-coverage-report class="sub-report">
+        </pi-ui-wr-coverage-report>
+      </div>
+    </tr-ui-a-tab-view>
   </template>
   <script>
   'use strict';
@@ -62,41 +71,14 @@ found in the LICENSE file.
       if (!results)
         results = new tr.r.Results();
 
-      this.$.infobars.clearMessages();
-      this.maybeAddFailuresInfoBarMessage_(results);
+      var tabView = this.shadowRoot.querySelector('tr-ui-a-tab-view');
+      tabView.tabStripHeadingText = results.allRunInfos.length + ' traces: ';
 
       var reports = tr.b.asArray(
           this.shadowRoot.querySelectorAll('.sub-report'));
       reports.forEach(function(report) {
         report.mapResults = results;
       });
-    },
-
-    maybeAddFailuresInfoBarMessage_: function(results) {
-      if (!results.hadFailures)
-        return;
-
-      function onTellMeMore() {
-        var dlg = new tr.ui.b.Overlay();
-        dlg.dlg = 'Results summary';
-
-        var grv = document.createElement('pi-ui-generic-results-view');
-
-        grv.mapResults = results;
-        grv.style.minHeight = '500px';
-        dlg.appendChild(grv);
-        dlg.visible = true;
-      }
-
-      var numFailedRuns = results.failedRunInfos.length;
-      this.$.infobars.addMessage(
-          'There were ' + numFailedRuns + ' traces that did not process.',
-          [
-            {
-              buttonText: 'Tell me more...',
-              onClick: onTellMeMore
-            }
-          ]);
     }
   });
   </script>

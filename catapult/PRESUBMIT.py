@@ -51,11 +51,11 @@ def GetPreferredTryMasters(project, change):  # pylint: disable=unused-argument
 
 def CheckChangeLogBug(input_api, output_api):
   if input_api.change.BUG is None or re.match(
-      '(\#\d+)(,\s*\#\d+)*$', input_api.change.BUG):
+      '(catapult\:\#\d+)(,\s*\#\d+)*$', input_api.change.BUG):
     return []
   return [output_api.PresubmitError(
-      ('Invalid bug "%s". BUG= should either not be present or start with # '
-       'for a github issue.' % input_api.change.BUG))]
+      ('Invalid bug "%s". BUG= should either not be present or start with '
+       '"catapult:#"" for a github issue.' % input_api.change.BUG))]
 
 
 def CheckChange(input_api, output_api):
@@ -63,12 +63,15 @@ def CheckChange(input_api, output_api):
   try:
     sys.path += [input_api.PresubmitLocalPath()]
     from catapult_build import js_checks
+    from catapult_build import html_checks
     results += input_api.canned_checks.PanProjectChecks(
         input_api, output_api, excluded_paths=_EXCLUDED_PATHS)
     results += input_api.canned_checks.RunPylint(
         input_api, output_api, black_list=_EXCLUDED_PATHS)
     results += CheckChangeLogBug(input_api, output_api)
     results += js_checks.RunChecks(
+        input_api, output_api, excluded_paths=_EXCLUDED_PATHS)
+    results += html_checks.RunChecks(
         input_api, output_api, excluded_paths=_EXCLUDED_PATHS)
   finally:
     sys.path.remove(input_api.PresubmitLocalPath())

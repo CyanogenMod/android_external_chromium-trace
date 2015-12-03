@@ -1,4 +1,4 @@
-<!DOCTYPE HTML>
+<!DOCTYPE html>
 <!--
 Copyright (c) 2015 The Chromium Authors. All rights reserved.
 Use of this source code is governed by a BSD-style license that can be
@@ -6,20 +6,20 @@ found in the LICENSE file.
 -->
 
 <link rel="import" href="/perf_insights/mappers/thread_grouping.html">
-<link rel="import" href="/perf_insights/map_function.html">
+<link rel="import" href="/perf_insights/function_handle.html">
 <link rel="import" href="/perf_insights/value/value.html">
 <link rel="import" href="/tracing/base/units/histogram.html">
 <link rel="import" href="/tracing/model/flow_event.html">
 <link rel="import" href="/tracing/model/slice.html">
 
 <script>
-tr.exportTo('pie', function() {
+tr.exportTo('pi.m', function() {
   // Granularity of the histogram.
   var HISTOGRAM_MAX = 250;
   var NUM_BINS = 50;
 
   function taskInfoMapFunction(results, run_info, model) {
-    var threadGrouping = new pi.wr.ThreadGrouping();
+    var threadGrouping = new pi.m.ThreadGrouping();
     threadGrouping.autoInitUsingHelpers(model);
     addTimeInQueue(results, run_info, model, threadGrouping);
     addTopLevelTasksDuration(results, run_info, model, threadGrouping);
@@ -50,7 +50,8 @@ tr.exportTo('pie', function() {
         return;
       var threadName = eatTrailingDigits(thread.name) || 'Unknown';
       var processName = threadGrouping.getGroupNameForThread(thread);
-      addToHistogram(timeInQueue, processName, threadName, flowEvent.duration);
+      addToHistogram(timeInQueue, processName, threadName, flowEvent.duration,
+          run_info);
     });
     histogramsToDict(timeInQueue);
     results.addValue(new pi.v.DictValue(
@@ -73,9 +74,10 @@ tr.exportTo('pie', function() {
       thread.sliceGroup.slices.forEach(function(slice) {
         if (!isTopLevelTask(slice))
           return;
-        addToHistogram(timeInTask, processName, threadName, slice.duration);
+        addToHistogram(timeInTask, processName, threadName, slice.duration,
+            run_info);
         addToHistogram(cpuTimeInTask, processName, threadName,
-            slice.cpuDuration);
+            slice.cpuDuration, run_info);
       });
     });
     histogramsToDict(timeInTask);
@@ -98,17 +100,17 @@ tr.exportTo('pie', function() {
     return !slice.parentSlice || !isTopLevelTask(slice.parentSlice);
   }
 
-  function addToHistogram(dict, processName, threadName, value) {
+  function addToHistogram(dict, processName, threadName, value, url) {
     dict[processName] = dict[processName] || {};
     dict[processName][threadName] = dict[processName][threadName] ||
         tr.b.u.Histogram.createLinear(
             tr.b.u.Units.timeDurationInMs,
             tr.b.Range.fromExplicitRange(0, HISTOGRAM_MAX),
             NUM_BINS);
-    dict[processName][threadName].add(value);
+    dict[processName][threadName].add(value, url);
   }
 
-  pi.MapFunction.register(taskInfoMapFunction);
+  pi.FunctionRegistry.register(taskInfoMapFunction);
 
   // Exporting for tests.
   return {

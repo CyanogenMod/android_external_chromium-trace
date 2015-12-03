@@ -16,6 +16,7 @@ found in the LICENSE file.
  */
 tr.exportTo('tr.e.importer.linux_perf', function() {
 
+  var ColorScheme = tr.b.ColorScheme;
   var Parser = tr.e.importer.linux_perf.Parser;
 
   /**
@@ -33,6 +34,8 @@ tr.exportTo('tr.e.importer.linux_perf', function() {
 
     importer.registerEventHandler('cpu_frequency',
         PowerParser.prototype.cpuFrequencyEvent.bind(this));
+    importer.registerEventHandler('cpu_frequency_limits',
+        PowerParser.prototype.cpuFrequencyLimitsEvent.bind(this));
     importer.registerEventHandler('cpu_idle',
         PowerParser.prototype.cpuIdleEvent.bind(this));
   }
@@ -54,7 +57,7 @@ tr.exportTo('tr.e.importer.linux_perf', function() {
       powerCounter = targetCpu.getOrCreateCounter('', 'C-State');
       if (powerCounter.numSeries === 0) {
         powerCounter.addSeries(new tr.model.CounterSeries('state',
-            tr.ui.b.getColorIdForGeneralPurposeString(
+            ColorScheme.getColorIdForGeneralPurposeString(
                 powerCounter.name + '.' + 'state')));
       }
       powerCounter.series.forEach(function(series) {
@@ -67,7 +70,7 @@ tr.exportTo('tr.e.importer.linux_perf', function() {
       var powerCounter = targetCpu.getOrCreateCounter('', 'C-State');
       if (powerCounter.numSeries === 0) {
         powerCounter.addSeries(new tr.model.CounterSeries('state',
-            tr.ui.b.getColorIdForGeneralPurposeString(powerCounter.name)));
+            ColorScheme.getColorIdForGeneralPurposeString(powerCounter.name)));
       }
       // NB: 4294967295/-1 means an exit from the current state
       var val = (cpuState != 4294967295 ? cpuState + 1 : 0);
@@ -82,7 +85,7 @@ tr.exportTo('tr.e.importer.linux_perf', function() {
           targetCpu.getOrCreateCounter('', 'Clock Frequency');
       if (powerCounter.numSeries === 0) {
         powerCounter.addSeries(new tr.model.CounterSeries('state',
-            tr.ui.b.getColorIdForGeneralPurposeString(
+            ColorScheme.getColorIdForGeneralPurposeString(
                 powerCounter.name + '.' + 'state')));
       }
       powerCounter.series.forEach(function(series) {
@@ -90,11 +93,31 @@ tr.exportTo('tr.e.importer.linux_perf', function() {
       });
     },
 
+    cpuFrequencyLimitsSlice: function(ts, targetCpuNumber, minFreq, maxFreq) {
+      var targetCpu = this.importer.getOrCreateCpu(targetCpuNumber);
+      var powerCounter =
+          targetCpu.getOrCreateCounter('', 'Clock Frequency Limits');
+      if (powerCounter.numSeries === 0) {
+        powerCounter.addSeries(new tr.model.CounterSeries('Min Frequency',
+            ColorScheme.getColorIdForGeneralPurposeString(
+                powerCounter.name + '.' + 'Min Frequency')));
+        powerCounter.addSeries(new tr.model.CounterSeries('Max Frequency',
+            ColorScheme.getColorIdForGeneralPurposeString(
+                powerCounter.name + '.' + 'Max Frequency')));
+      }
+      powerCounter.series.forEach(function(series) {
+        if (series.name == 'Min Frequency')
+          series.addCounterSample(ts, minFreq);
+        if (series.name == 'Max Frequency')
+          series.addCounterSample(ts, maxFreq);
+      });
+    },
+
     /**
      * Parses power events and sets up state in the importer.
      */
     powerStartEvent: function(eventName, cpuNumber, pid, ts, eventBase) {
-      var event = /type=(\d+) state=(\d) cpu_id=(\d)+/.exec(eventBase.details);
+      var event = /type=(\d+) state=(\d) cpu_id=(\d+)/.exec(eventBase.details);
       if (!event)
         return false;
 
@@ -105,7 +128,7 @@ tr.exportTo('tr.e.importer.linux_perf', function() {
     },
 
     powerFrequencyEvent: function(eventName, cpuNumber, pid, ts, eventBase) {
-      var event = /type=(\d+) state=(\d+) cpu_id=(\d)+/
+      var event = /type=(\d+) state=(\d+) cpu_id=(\d+)/
           .exec(eventBase.details);
       if (!event)
         return false;
@@ -117,7 +140,7 @@ tr.exportTo('tr.e.importer.linux_perf', function() {
     },
 
     cpuFrequencyEvent: function(eventName, cpuNumber, pid, ts, eventBase) {
-      var event = /state=(\d+) cpu_id=(\d)+/.exec(eventBase.details);
+      var event = /state=(\d+) cpu_id=(\d+)/.exec(eventBase.details);
       if (!event)
         return false;
 
@@ -127,8 +150,20 @@ tr.exportTo('tr.e.importer.linux_perf', function() {
       return true;
     },
 
+    cpuFrequencyLimitsEvent: function(eventName, cpu, pid, ts, eventBase) {
+      var event = /min=(\d+) max=(\d+) cpu_id=(\d+)/.exec(eventBase.details);
+      if (!event)
+        return false;
+
+      var targetCpuNumber = parseInt(event[3]);
+      var minFreq = parseInt(event[1]);
+      var maxFreq = parseInt(event[2]);
+      this.cpuFrequencyLimitsSlice(ts, targetCpuNumber, minFreq, maxFreq);
+      return true;
+    },
+
     cpuIdleEvent: function(eventName, cpuNumber, pid, ts, eventBase) {
-      var event = /state=(\d+) cpu_id=(\d)+/.exec(eventBase.details);
+      var event = /state=(\d+) cpu_id=(\d+)/.exec(eventBase.details);
       if (!event)
         return false;
 

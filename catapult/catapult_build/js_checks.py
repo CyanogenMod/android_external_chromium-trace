@@ -4,6 +4,12 @@
 
 import os
 import re
+import sys
+import warnings
+
+from py_vulcanize import strip_js_comments
+
+from catapult_build import parse_html
 
 
 class JSChecker(object):
@@ -17,12 +23,13 @@ class JSChecker(object):
       self.file_filter = lambda x: True
 
   def RegexCheck(self, line_number, line, regex, message):
-    """Searches for |regex| in |line| to check for a particular style
-       violation, returning a message like the one below if the regex matches.
-       The |regex| must have exactly one capturing group so that the relevant
-       part of |line| can be highlighted. If more groups are needed, use
-       "(?:...)" to make a non-capturing group. Sample message:
+    """Searches for |regex| in |line| to check for a style violation.
 
+    The |regex| must have exactly one capturing group so that the relevant
+    part of |line| can be highlighted. If more groups are needed, use
+    "(?:...)" to make a non-capturing group. Sample message:
+
+    Returns a message like the one below if the regex matches.
        line 6: Use var instead of const.
            const foo = bar();
            ^^^^^
@@ -36,44 +43,41 @@ class JSChecker(object):
           line_number,
           message,
           line,
-          self.error_highlight(start, length))
+          self._ErrorHighlight(start, length))
     return ''
 
   def ConstCheck(self, i, line):
-    """Check for use of the 'const' keyword."""
+    """Checks for use of the 'const' keyword."""
     if re.search(r'\*\s+@const', line):
-      # Probably a JsDoc line
+      # Probably a JsDoc line.
       return ''
 
-    return self.RegexCheck(i, line, r'(?:^|\s|\()(const)\s',
-                           'Use var instead of const.')
+    return self.RegexCheck(
+        i, line, r'(?:^|\s|\()(const)\s', 'Use var instead of const.')
 
-  def error_highlight(self, start, length):
-    """Takes a start position and a length, and produces a row of '^'s to
-       highlight the corresponding part of a string.
-    """
+  def _ErrorHighlight(self, start, length):
+    """Produces a row of '^'s to underline part of a string."""
     return start * ' ' + length * '^'
 
-  def _makeErrorOrWarning(self, output_api, error_text):
+  def _MakeErrorOrWarning(self, output_api, error_text):
     return output_api.PresubmitError(error_text)
 
   def RunChecks(self):
-    """Check for violations of the Chromium JavaScript style guide. See
-       http://chromium.org/developers/web-development-style-guide#TOC-JavaScript
-    """
+    """Checks for violations of the Chromium JavaScript style guide.
 
-    import sys
-    import warnings
+    See:
+    http://chromium.org/developers/web-development-style-guide#TOC-JavaScript
+    """
     old_path = sys.path
     old_filters = warnings.filters
 
     try:
       base_path = os.path.abspath(os.path.join(
-          os.path.dirname(__file__), '..'))
+        os.path.dirname(__file__), '..'))
       closure_linter_path = os.path.join(
-          base_path, 'third_party', 'closure_linter')
+        base_path, 'third_party', 'closure_linter')
       gflags_path = os.path.join(
-          base_path, 'third_party', 'python_gflags')
+        base_path, 'third_party', 'python_gflags')
       sys.path.insert(0, closure_linter_path)
       sys.path.insert(0, gflags_path)
 
@@ -97,7 +101,7 @@ class JSChecker(object):
         self._filename = filename
 
       def HandleError(self, error):
-        if (self._valid(error)):
+        if self._Valid(error):
           error.filename = self._filename
           self._errors.append(error)
 
@@ -107,13 +111,13 @@ class JSChecker(object):
       def HasErrors(self):
         return bool(self._errors)
 
-      def _valid(self, error):
-        """Check whether an error is valid. Most errors are valid, with a few
-           exceptions which are listed here.
-        """
+      def _Valid(self, error):
+        """Checks whether an error is valid.
 
+        Most errors are valid, with a few exceptions which are listed here.
+        """
         is_grit_statement = bool(
-            re.search("</?(include|if)", error.token.line))
+          re.search('</?(include|if)', error.token.line))
 
         return not is_grit_statement and error.code not in [
             errors.JSDOC_ILLEGAL_QUESTION_WITH_PIPE,
@@ -127,7 +131,7 @@ class JSChecker(object):
       affected_files = self.input_api.AffectedFiles(
           file_filter=self.file_filter,
           include_deletes=False)
-    except:  # pylint: disable=bare-except
+    except Exception:
       affected_files = []
 
     def ShouldCheck(f):
@@ -141,12 +145,15 @@ class JSChecker(object):
     for f in affected_js_files:
       error_lines = []
 
-      for i, line in enumerate(f.NewContents(), start=1):
-        error_lines += filter(None, [
-            self.ConstCheck(i, line),
-        ])
+      contents = list(f.NewContents())
+      error_lines += CheckStrictMode(
+          '\n'.join(contents),
+          is_html_file=f.LocalPath().endswith('.html'))
 
-      # Use closure_linter to check for several different errors
+      for i, line in enumerate(contents, start=1):
+        error_lines += filter(None, [self.ConstCheck(i, line)])
+
+      # Use closure_linter to check for several different errors.
       import gflags as flags
       flags.FLAGS.strict = True
       error_handler = ErrorHandlerImpl()
@@ -154,7 +161,7 @@ class JSChecker(object):
       js_checker.Check(f.AbsoluteLocalPath())
 
       for error in error_handler.GetErrors():
-        highlight = self.error_highlight(
+        highlight = self._ErrorHighlight(
             error.token.start_index, error.token.length)
         error_msg = '  line %d: E%04d: %s\n%s\n%s' % (
             error.token.line_number,
@@ -169,9 +176,39 @@ class JSChecker(object):
             'Found JavaScript style violations in %s:' %
             f.LocalPath()] + error_lines
         results.append(
-            self._makeErrorOrWarning(self.output_api, '\n'.join(error_lines)))
+            self._MakeErrorOrWarning(self.output_api, '\n'.join(error_lines)))
 
     return results
+
+
+def CheckStrictMode(contents, is_html_file=False):
+  statements_to_check = []
+  if is_html_file:
+    statements_to_check.extend(_FirstStatementsInScriptElements(contents))
+  else:
+    statements_to_check.append(_FirstStatement(contents))
+  error_lines = []
+  for s in statements_to_check:
+    if s !=  "'use strict'":
+      error_lines.append('Expected "\'use strict\'" as first statement, '
+                         'but found "%s" instead.' % s)
+  return error_lines
+
+
+def _FirstStatementsInScriptElements(contents):
+  """Returns a list of first statements found in each <script> element."""
+  soup = parse_html.BeautifulSoup(contents)
+  script_elements = soup.find_all('script', src=None)
+  return [_FirstStatement(e.get_text()) for e in script_elements]
+
+
+def _FirstStatement(contents):
+  """Extracts the first statement in some JS source code."""
+  stripped_contents = strip_js_comments.StripJSComments(contents).strip()
+  matches = re.match('^(.*?);', stripped_contents, re.DOTALL)
+  if not matches:
+    return ''
+  return matches.group(1).strip()
 
 
 def RunChecks(input_api, output_api, excluded_paths=None):

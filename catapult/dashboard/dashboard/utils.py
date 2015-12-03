@@ -4,17 +4,61 @@
 
 """General functions which are useful throughout this project."""
 
+import base64
+import binascii
+import json
+import logging
 import re
 import time
 
+from apiclient import discovery
+from google.appengine.api import urlfetch
 from google.appengine.api import users
 from google.appengine.ext import ndb
+from oauth2client.client import GoogleCredentials
 
 from dashboard import stored_object
 
 INTERNAL_DOMAIN_KEY = 'internal_domain_key'
 SHERIFF_DOMAINS_KEY = 'sheriff_domains_key'
 IP_WHITELIST_KEY = 'ip_whitelist'
+_PROJECT_ID_KEY = 'project_id'
+_DEFAULT_CUSTOM_METRIC_VAL = 1
+
+
+def _GetNowRfc3339():
+  """Returns the current time formatted per RFC 3339."""
+  return time.strftime('%Y-%m-%dT%H:%M:%SZ', time.gmtime())
+
+
+def TickMonitoringCustomMetric(metric_name):
+  """Increments the stackdriver custom metric with the given name.
+
+  This is used for cron job monitoring; if these metrics stop being received
+  an alert mail is sent. For more information on custom metrics, see
+  https://cloud.google.com/monitoring/custom-metrics/using-custom-metrics
+
+  Args:
+    metric_name: The name of the metric being monitored.
+  """
+  credentials = GoogleCredentials.get_application_default()
+  monitoring = discovery.build(
+      'cloudmonitoring', 'v2beta2', credentials=credentials)
+  now = _GetNowRfc3339()
+  project_id = stored_object.Get(_PROJECT_ID_KEY)
+  desc = {
+      'project': project_id,
+      'metric': 'custom.cloudmonitoring.googleapis.com/%s' % metric_name
+  }
+  point = {
+      'start': now,
+      'end': now,
+      'int64Value': _DEFAULT_CUSTOM_METRIC_VAL
+  }
+  write_request = monitoring.timeseries().write(
+      project=project_id,
+      body={'timeseries': [{'timeseriesDesc': desc, 'point': point}]})
+  write_request.execute()
 
 
 def TestPath(key):
@@ -194,3 +238,43 @@ def IsValidSheriffUser():
 def GetIpWhitelist():
   """Returns a list of IP address strings in the whitelist."""
   return stored_object.Get(IP_WHITELIST_KEY)
+
+
+def BisectConfigPythonString(config):
+  """Turns a bisect config dict into a properly formatted Python string.
+
+  Args:
+    config: A bisect config dict (see start_try_job.GetBisectConfig)
+
+  Returns:
+    A config string suitable to store in a TryJob entity.
+  """
+  return 'config = %s\n' % json.dumps(
+      config, sort_keys=True, indent=2, separators=(',', ': '))
+
+
+def DownloadChromiumFile(path):
+  """Downloads a file in the chromium/src repository.
+
+  This function uses gitiles to fetch files. As of September 2015,
+  gitiles supports fetching base-64 encoding of files. If it supports
+  fetching plain text in the future, that may be simpler.
+
+  Args:
+    path: Path to a file in src repository, without a leading slash or "src/".
+
+  Returns:
+    The contents of the file as a string, or None.
+  """
+  base_url = 'https://chromium.googlesource.com/chromium/src/+/master/'
+  url = '%s%s?format=TEXT' % (base_url, path)
+  response = urlfetch.fetch(url)
+  if response.status_code != 200:
+    logging.error('Got %d fetching "%s".', response.status_code, url)
+    return None
+  try:
+    plaintext_content = base64.decodestring(response.content)
+  except binascii.Error:
+    logging.error('Failed to decode "%s" from "%s".', response.content, url)
+    return None
+  return plaintext_content

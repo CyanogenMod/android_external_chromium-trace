@@ -1,4 +1,4 @@
-<!DOCTYPE HTML>
+<!DOCTYPE html>
 <!--
 Copyright (c) 2015 The Chromium Authors. All rights reserved.
 Use of this source code is governed by a BSD-style license that can be
@@ -6,7 +6,7 @@ found in the LICENSE file.
 -->
 <link rel="import" href="/tracing/base/units/units.html">
 <link rel="import" href="/tracing/base/units/histogram.html">
-<link rel="import" href="/perf_insights/map_function.html">
+<link rel="import" href="/perf_insights/function_handle.html">
 <link rel="import" href="/perf_insights/value/value.html">
 <link rel="import" href="/perf_insights/mappers/slice_cost.html">
 <link rel="import" href="/perf_insights/mappers/thread_grouping.html">
@@ -17,7 +17,7 @@ found in the LICENSE file.
 <link rel="import" href="/tracing/model/ir_coverage.html">
 
 <script>
-tr.exportTo('pi.wr', function() {
+tr.exportTo('pi.m', function() {
 
   function getWeatherReportFromModel(model) {
     // Organize all RAIL IRs by type and name in a tree. A node of this tree is
@@ -48,19 +48,23 @@ tr.exportTo('pi.wr', function() {
       if (!(ir instanceof tr.e.rail.RAILInteractionRecord))
         return;
       allIRs.push(ir);
-      addIRToNode(irTree, ir, [ir.railTypeName, ir.name || 'Unknown name']);
+      var path = [
+        tr.e.rail.userFriendlyRailTypeName(ir.railTypeName),
+        ir.name || 'Unnamed'
+      ];
+      addIRToNode(irTree, ir, path);
     });
     irTree.overallScore = (new tr.e.rail.RAILScore(allIRs)).overallScore;
 
     var railTypeNameByGUID = getRAILTypeNameForEventsByGUID(model, allIRs);
-    var threadGrouping = new pi.wr.ThreadGrouping();
+    var threadGrouping = new pi.m.ThreadGrouping();
     threadGrouping.autoInitUsingHelpers(model);
 
     var wr = {
       irTree: irTree,
       irCoverage: tr.model.getIRCoverageFromModel(model),
-      sliceCosts: pi.wr.getSliceCostReport(model, threadGrouping,
-                                           railTypeNameByGUID)
+      sliceCosts: pi.m.getSliceCostReport(model, threadGrouping,
+                                          railTypeNameByGUID)
     };
     return wr;
   }
@@ -72,23 +76,24 @@ tr.exportTo('pi.wr', function() {
         // Unassociated events have already been assigned to a RTN.
         if (railTypeNameByGUID[event.guid] !== undefined)
           return;
-        railTypeNameByGUID[event.guid] = ir.railTypeName;
+        railTypeNameByGUID[event.guid] = tr.e.rail.userFriendlyRailTypeName(
+            ir.railTypeName);
       }, this);
     }, this);
 
     model.iterateAllEvents(function storeEventToUnassociatedSet(event) {
       if (railTypeNameByGUID[event.guid] !== undefined)
         return;
-      railTypeNameByGUID[event.guid] = 'unknown';
+      railTypeNameByGUID[event.guid] = 'Unknown';
     });
     return railTypeNameByGUID;
   }
 
   function weatherReportMapFunction(results, runInfo, model) {
-    var wr = pi.wr.getWeatherReportFromModel(model);
+    var wr = pi.m.getWeatherReportFromModel(model);
     results.addValue(new pi.v.DictValue(runInfo, 'wr', wr));
   }
-  pi.MapFunction.register(weatherReportMapFunction);
+  pi.FunctionRegistry.register(weatherReportMapFunction);
 
   return {
     getWeatherReportFromModel: getWeatherReportFromModel,

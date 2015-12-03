@@ -15,8 +15,8 @@ tr.b.unittest.testSuite(function() {
   var test_utils = tr.c.TestUtils;
 
   test('optimalEfficiency', function() {
-    var idleIR = new tr.e.rail.IdleInteractionRecord(0, 150);
-    assert.equal(0, idleIR.normalizedUserPain);
+    var idleIR = new tr.e.rail.IdleInteractionRecord(undefined, 0, 150);
+    assert.equal(1, idleIR.normalizedUserComfort);
     assert.equal(1, idleIR.normalizedEfficiency);
   });
 
@@ -30,10 +30,10 @@ tr.b.unittest.testSuite(function() {
     slice.isTopLevel = true;
     slice.cpuSelfTime = 150;
 
-    var idleIR = new tr.e.rail.IdleInteractionRecord(0, 150);
+    var idleIR = new tr.e.rail.IdleInteractionRecord(undefined, 0, 150);
     idleIR.associatedEvents.push(slice);
 
-    assert.equal(0, idleIR.normalizedUserPain);
+    assert.equal(1, idleIR.normalizedUserComfort);
     assert.equal(0, idleIR.normalizedEfficiency);
   });
 });

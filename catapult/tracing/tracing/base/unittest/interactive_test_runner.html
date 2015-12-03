@@ -14,12 +14,13 @@ found in the LICENSE file.
 
 <style>
   x-base-interactive-test-runner {
-    display: -webkit-flex;
-    -webkit-flex-direction: column;
+    display: flex;
+    flex-direction: column;
+    flex: 0 0 auto;
   }
 
   x-base-interactive-test-runner > * {
-    -webkit-flex: 0 0 auto;
+    flex: 0 0 auto;
   }
   x-base-interactive-test-runner > #title {
     font-size: 16pt;
@@ -66,7 +67,7 @@ found in the LICENSE file.
   }
 
   x-base-interactive-test-runner > #results-container {
-    -webkit-flex: 1 1 auto;
+    flex: 1 1 auto;
     min-height: 0;
     overflow: auto;
     padding: 0 4px 0 4px;
@@ -111,20 +112,27 @@ found in the LICENSE file.
 
     <div>
       <span>
-        <input type="radio" name="test-type-to-run" value="unit" />
-        Run unit tests
+        <label>
+          <input type="radio" name="test-type-to-run" value="unit" />
+          Run unit tests
+        </label>
       </span>
       <span>
-        <input type="radio" name="test-type-to-run" value="perf" />
-        Run perf tests
+        <label>
+          <input type="radio" name="test-type-to-run" value="perf" />
+          Run perf tests
+          </label>
       </span>
       <span>
-        <input type="radio" name="test-type-to-run" value="all" />
-        Run all tests
+        <label>
+          <input type="radio" name="test-type-to-run" value="all" />
+          Run all tests
+        </label>
       </span>
     </div>
     <span>
-      <input type="checkbox" id="short-format" /> Short format
+      <label>
+        <input type="checkbox" id="short-format" /> Short format</label>
     </span>
   </div>
   <div id="shortform-results">
@@ -397,6 +405,10 @@ tr.exportTo('tr.b.unittest', function() {
         return true;
       }, this);
 
+      // Reverse the tests array to keep them in alphabetical order since
+      // TestRunner displays them last-to-first.
+      tests.reverse();
+
       this.runner_ = new tr.b.unittest.TestRunner(this.results_, tests);
       this.runner_.beginRunning();
 
@@ -563,17 +575,17 @@ tr.exportTo('tr.b.unittest', function() {
       overlay.style.backgroundColor = 'white';
       overlay.style.boxSizing = 'border-box';
       overlay.style.color = 'black';
-      overlay.style.display = '-webkit-flex';
+      overlay.style.display = 'flex';
       overlay.style.height = '100%';
       overlay.style.left = 0;
       overlay.style.padding = '8px';
       overlay.style.position = 'fixed';
       overlay.style.top = 0;
-      overlay.style.webkitFlexDirection = 'column';
+      overlay.style.flexDirection = 'column';
       overlay.style.width = '100%';
 
       var element = document.createElement('div');
-      element.style.webkitFlex = '1 1 auto';
+      element.style.flex = '1 1 auto';
       element.style.overflow = 'auto';
       overlay.appendChild(element);
 

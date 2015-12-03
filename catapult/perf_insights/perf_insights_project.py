@@ -12,6 +12,11 @@ def _AddToPathIfNeeded(path):
 
 
 def _IsRunningInAppEngine():
+  # Cloud workers run on appengine but in a managed vm, which gives them full
+  # access to the filesystem. Since they manage their own checkout of catapult
+  # to do trace processing, they need the paths properly setup.
+  if 'PI_CLOUD_WORKER' in os.environ:
+    return False
   if 'SERVER_SOFTWARE' not in os.environ:
     return False
   if os.environ['SERVER_SOFTWARE'].startswith('Google App Engine/'):
@@ -31,7 +36,7 @@ def UpdateSysPathIfNeeded():
   if not _IsRunningInAppEngine():
     _AddToPathIfNeeded(p.catapult_path)
     _AddToPathIfNeeded(p.tracing_root_path)
-    _AddToPathIfNeeded(p.beautifulsoup_path)
+    _AddToPathIfNeeded(p.py_vulcanize_path)
 
     import tracing_project
     tracing_project.UpdateSysPathIfNeeded()
@@ -69,29 +74,23 @@ def _IsFilenameATest(x):  # pylint: disable=unused-argument
 
 class PerfInsightsProject(object):
   catapult_path = os.path.abspath(
-      os.path.join(os.path.dirname(__file__), '..'))
+      os.path.join(os.path.dirname(__file__), os.path.pardir))
 
-  perf_insights_root_path = os.path.abspath(
-      os.path.join(catapult_path, 'perf_insights'))
-  perf_insights_src_path = os.path.abspath(
-      os.path.join(perf_insights_root_path, 'perf_insights'))
-  perf_insights_ui_path = os.path.abspath(
-      os.path.join(perf_insights_src_path, 'ui'))
-  perf_insights_test_data_path = os.path.abspath(
-      os.path.join(perf_insights_root_path, 'test_data'))
-  perf_insights_examples_path = os.path.abspath(
-      os.path.join(perf_insights_root_path, 'perf_insights_examples'))
+  perf_insights_root_path = os.path.join(catapult_path, 'perf_insights')
+  perf_insights_src_path = os.path.join(
+      perf_insights_root_path, 'perf_insights')
+  perf_insights_ui_path = os.path.join(perf_insights_src_path, 'ui')
+  perf_insights_test_data_path = os.path.join(
+      perf_insights_root_path, 'test_data')
+  perf_insights_examples_path = os.path.join(
+      perf_insights_root_path, 'perf_insights_examples')
 
-  perf_insights_third_party_path = os.path.abspath(
-      os.path.join(perf_insights_root_path, 'third_party'))
+  perf_insights_third_party_path = os.path.join(
+      perf_insights_root_path, 'third_party')
 
-  tracing_root_path = os.path.abspath(
-      os.path.join(catapult_path, 'tracing'))
+  tracing_root_path = os.path.join(catapult_path, 'tracing')
 
-  beautifulsoup_path = os.path.abspath(
-      os.path.join(tracing_root_path, 'third_party', 'tvcm',
-                   'third_party', 'beautifulsoup'))
-
+  py_vulcanize_path = os.path.join(catapult_path, 'third_party', 'py_vulcanize')
 
   def __init__(self):  # pylint: disable=unused-argument
     self._source_paths = None
@@ -121,7 +120,7 @@ class PerfInsightsProject(object):
     return None
 
   def CreateVulcanizer(self):
-    from tvcm import project as project_module
+    from py_vulcanize import project as project_module
     return project_module.Project(self.source_paths)
 
   def IsD8CompatibleFile(self, filename):

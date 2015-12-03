@@ -9,7 +9,11 @@ import shutil
 import tempfile
 import unittest
 
-from vinn import d8_runner
+sys.path.append(
+    os.path.join(os.path.dirname(__file__), '..', '..', 'mock'))
+import mock
+
+import vinn
 
 
 @unittest.skipIf(sys.platform.startswith('win'),
@@ -52,7 +56,7 @@ class VinnUnittest(unittest.TestCase):
     try:
       temp_file_name = os.path.join(tmp_dir, 'out_file')
       with open(temp_file_name, 'w') as f:
-        d8_runner.ExcecuteJsString(
+        vinn.ExecuteJsString(
             'print("Hello w0rld");\n', stdout=f)
       with open(temp_file_name, 'r') as f:
         self.assertEquals(f.read(), 'Hello w0rld\n')
@@ -64,7 +68,7 @@ class VinnUnittest(unittest.TestCase):
     try:
       temp_file_name = os.path.join(tmp_dir, 'out_file')
       with open(temp_file_name, 'w') as f:
-        d8_runner.RunJsString(
+        vinn.RunJsString(
             'print("Hello w0rld");\n', stdout=f)
       with open(temp_file_name, 'r') as f:
         self.assertEquals(f.read(), 'Hello w0rld\n')
@@ -77,7 +81,7 @@ class VinnUnittest(unittest.TestCase):
     try:
       temp_file_name = os.path.join(tmp_dir, 'out_file')
       with open(temp_file_name, 'w') as f:
-        d8_runner.ExecuteFile(file_path, stdout=f)
+        vinn.ExecuteFile(file_path, stdout=f)
       with open(temp_file_name, 'r') as f:
         self.assertEquals(f.read(), 'Hello W0rld from simple.js\n')
     finally:
@@ -89,7 +93,7 @@ class VinnUnittest(unittest.TestCase):
     try:
       temp_file_name = os.path.join(tmp_dir, 'out_file')
       with open(temp_file_name, 'w') as f:
-        d8_runner.RunFile(file_path, stdout=f)
+        vinn.RunFile(file_path, stdout=f)
       with open(temp_file_name, 'r') as f:
         self.assertEquals(f.read(), 'Hello W0rld from simple.js\n')
     finally:
@@ -98,13 +102,13 @@ class VinnUnittest(unittest.TestCase):
   def testSimpleJsExecution(self):
     file_path = self.GetTestFilePath('print_file_content.js')
     dummy_test_path = self.GetTestFilePath('dummy_test_file')
-    output = d8_runner.ExecuteFile(file_path, source_paths=[self.test_data_dir],
+    output = vinn.ExecuteFile(file_path, source_paths=[self.test_data_dir],
                                    js_args=[dummy_test_path])
     self.assertIn(
         'This is file contains only data for testing.\n1 2 3 4', output)
 
   def testDuplicateSourcePaths(self):
-    output = d8_runner.ExcecuteJsString(
+    output = vinn.ExecuteJsString(
       "loadHTML('/load_simple_html.html');",
       source_paths=[self.test_data_dir]*100)
     self.assertIn(
@@ -112,7 +116,7 @@ class VinnUnittest(unittest.TestCase):
 
   def testJsFileLoadHtmlFile(self):
     file_path = self.GetTestFilePath('load_simple_html.js')
-    output = d8_runner.ExecuteFile(file_path, source_paths=[self.test_data_dir])
+    output = vinn.ExecuteFile(file_path, source_paths=[self.test_data_dir])
     expected_output = ('File foo.html is loaded\n'
                        'x = 1\n'
                        "File foo.html's second script is loaded\n"
@@ -122,14 +126,14 @@ class VinnUnittest(unittest.TestCase):
 
   def testJsFileLoadJsFile(self):
     file_path = self.GetTestFilePath('load_simple_js.js')
-    output = d8_runner.ExecuteFile(file_path, source_paths=[self.test_data_dir])
+    output = vinn.ExecuteFile(file_path, source_paths=[self.test_data_dir])
     expected_output = ('bar.js is loaded\n'
                        'load_simple_js.js is loaded\n')
     self.assertEquals(output, expected_output)
 
   def testHTMLFileLoadHTMLFile(self):
     file_path = self.GetTestFilePath('load_simple_html.html')
-    output = d8_runner.ExecuteFile(
+    output = vinn.ExecuteFile(
         file_path, source_paths=[self.test_data_dir])
     expected_output = ('File foo.html is loaded\n'
                        'x = 1\n'
@@ -141,22 +145,22 @@ class VinnUnittest(unittest.TestCase):
 
   def testQuit0Handling(self):
     file_path = self.GetTestFilePath('quit_0_test.js')
-    res = d8_runner.RunFile(file_path, source_paths=[self.test_data_dir])
+    res = vinn.RunFile(file_path, source_paths=[self.test_data_dir])
     self.assertEquals(res.returncode, 0)
 
   def testQuit1Handling(self):
     file_path = self.GetTestFilePath('quit_1_test.js')
-    res = d8_runner.RunFile(file_path, source_paths=[self.test_data_dir])
+    res = vinn.RunFile(file_path, source_paths=[self.test_data_dir])
     self.assertEquals(res.returncode, 1)
 
   def testQuit42Handling(self):
     file_path = self.GetTestFilePath('quit_42_test.js')
-    res = d8_runner.RunFile(file_path, source_paths=[self.test_data_dir])
+    res = vinn.RunFile(file_path, source_paths=[self.test_data_dir])
     self.assertEquals(res.returncode, 42)
 
   def testQuit274Handling(self):
     file_path = self.GetTestFilePath('quit_274_test.js')
-    res = d8_runner.RunFile(file_path, source_paths=[self.test_data_dir])
+    res = vinn.RunFile(file_path, source_paths=[self.test_data_dir])
     self.assertEquals(res.returncode, 238)
 
   def testErrorStackTraceJs(self):
@@ -170,7 +174,7 @@ class VinnUnittest(unittest.TestCase):
     # Finally, we call maybeRaiseExceptionInFoo() error_stack_test.js
     # Exception log should capture these method calls' stack trace.
     with self.assertRaises(RuntimeError) as context:
-      d8_runner.ExecuteFile(file_path, source_paths=[self.test_data_dir])
+      vinn.ExecuteFile(file_path, source_paths=[self.test_data_dir])
 
     # Assert error stack trace contain src files' info.
     exception_message = context.exception.message
@@ -195,7 +199,7 @@ class VinnUnittest(unittest.TestCase):
     # Finally, we call maybeRaiseExceptionInFoo() error_stack_test.js
     # Exception log should capture these method calls' stack trace.
     with self.assertRaises(RuntimeError) as context:
-      d8_runner.ExecuteFile(file_path, source_paths=[self.test_data_dir])
+      vinn.ExecuteFile(file_path, source_paths=[self.test_data_dir])
 
     # Assert error stack trace contain src files' info.
     exception_message = context.exception.message
@@ -214,7 +218,7 @@ class VinnUnittest(unittest.TestCase):
   def testStackTraceOfErroWhenLoadingHTML(self):
     file_path = self.GetTestFilePath('load_error.html')
     with self.assertRaises(RuntimeError) as context:
-      d8_runner.ExecuteFile(file_path, source_paths=[self.test_data_dir])
+      vinn.ExecuteFile(file_path, source_paths=[self.test_data_dir])
 
     # Assert error stack trace contain src files' info.
     exception_message = context.exception.message
@@ -226,7 +230,7 @@ class VinnUnittest(unittest.TestCase):
   def testStackTraceOfErroWhenSyntaxErrorOccurs(self):
     file_path = self.GetTestFilePath('syntax_error.html')
     with self.assertRaises(RuntimeError) as context:
-      d8_runner.ExecuteFile(file_path, source_paths=[self.test_data_dir])
+      vinn.ExecuteFile(file_path, source_paths=[self.test_data_dir])
 
     # Assert error stack trace contain src files' info.
     exception_message = context.exception.message
@@ -237,7 +241,7 @@ class VinnUnittest(unittest.TestCase):
   def testStackTraceOfErroWhenLoadingJS(self):
     file_path = self.GetTestFilePath('load_js_error.html')
     with self.assertRaises(RuntimeError) as context:
-      d8_runner.ExecuteFile(file_path, source_paths=[self.test_data_dir])
+      vinn.ExecuteFile(file_path, source_paths=[self.test_data_dir])
 
     # Assert error stack trace contain src files' info.
     exception_message = context.exception.message
@@ -251,7 +255,7 @@ class VinnUnittest(unittest.TestCase):
   def testStrictError(self):
     file_path = self.GetTestFilePath('non_strict_error.html')
     with self.assertRaises(RuntimeError) as context:
-      d8_runner.ExecuteFile(file_path, source_paths=[self.test_data_dir])
+      vinn.ExecuteFile(file_path, source_paths=[self.test_data_dir])
 
     # Assert error stack trace contain src files' info.
     exception_message = context.exception.message
@@ -262,17 +266,49 @@ class VinnUnittest(unittest.TestCase):
 
   def testConsolePolyfill(self):
     self.assertEquals(
-        d8_runner.ExcecuteJsString('console.log("hello", "world");'),
+        vinn.ExecuteJsString('console.log("hello", "world");'),
         'hello world\n')
     self.assertEquals(
-        d8_runner.ExcecuteJsString('console.info("hello", "world");'),
+        vinn.ExecuteJsString('console.info("hello", "world");'),
         'Info: hello world\n')
     self.assertEquals(
-        d8_runner.ExcecuteJsString('console.warn("hello", "world");'),
+        vinn.ExecuteJsString('console.warn("hello", "world");'),
         'Warning: hello world\n')
     self.assertEquals(
-        d8_runner.ExcecuteJsString('console.error("hello", "world");'),
+        vinn.ExecuteJsString('console.error("hello", "world");'),
         'Error: hello world\n')
+
+  def testConsoleTimeEndAssertion(self):
+    file_path = self.GetTestFilePath('console_time_test.js')
+    try:
+        vinn.ExecuteFile(file_path)
+    except RuntimeError:
+      self.fail()
+
+  def testConsoleTime(self):
+    self.assertEquals(
+        vinn.ExecuteJsString('console.time("AA")'),
+        '')
+
+  def testConsoleTimeEndOutput(self):
+    output = vinn.ExecuteJsString('console.time("AA");console.timeEnd("AA")')
+    m = re.search('\d+\.\d+', output)
+    if not m:
+      sys.stderr.write('\nExpected to find output of timer AA')
+      self.fail()
+    a_duration = float(m.group())
+    self.assertTrue(a_duration > 0.0)
+    output = vinn.ExecuteJsString("""console.time("BB");
+                                     console.time("CC");
+                                     console.timeEnd("CC");
+                                     console.timeEnd("BB")""")
+    m = re.findall('(\d+\.\d+)', output)
+    if not m:
+      sys.stderr.write('\nExpected to find output of timer\n')
+      self.fail()
+    c_duration = float(m[0])
+    b_duration = float(m[1])
+    self.assertTrue(b_duration > c_duration)
 
 
 @unittest.skipIf(sys.platform.startswith('win'),
@@ -281,13 +317,16 @@ class PathUtilUnittest(unittest.TestCase):
   def testPathUtil(self):
     path_util_js_test = os.path.abspath(os.path.join(
         os.path.dirname(__file__), 'path_utils_test.js'))
+    path_utils_js_dir = os.path.abspath(
+    os.path.join(os.path.dirname(__file__), 'path_utils.js'))
+
     test_loading_js = """
     load('%s');
     load('%s');
     runTests();
-    """ % (d8_runner._PATH_UTILS_JS_DIR, path_util_js_test)
+    """ % (path_utils_js_dir, path_util_js_test)
 
-    res = d8_runner.RunJsString(test_loading_js)
+    res = vinn.RunJsString(test_loading_js)
     self.assertEquals(res.returncode, 0)
 
 
@@ -332,7 +371,7 @@ class HTMLGeneratorTest(unittest.TestCase):
       temp_file_name = os.path.join(tmp_dir, 'test.html')
       with open(temp_file_name, 'w') as f:
         f.write(html_text)
-      return d8_runner.ExcecuteJsString(
+      return vinn.ExecuteJsString(
           'write(generateJsFromHTML(read("%s")));' % temp_file_name)
     finally:
       shutil.rmtree(tmp_dir)
@@ -521,3 +560,51 @@ loadHTML('/base/this_is_line_28.html');
         _GetLineNumberOfSubstring(generated_js, 'this_is_line_28.html'),
         28)
     self.AssertStringEquals(generated_js, expected_js)
+
+
+class VinnV8ArgsTest(unittest.TestCase):
+
+  @classmethod
+  def setUpClass(cls):
+    cls.test_data_dir = os.path.abspath(
+        os.path.join(os.path.dirname(__file__), 'test_data'))
+
+  def GetTestFilePath(self, file_name):
+    return os.path.join(self.test_data_dir, file_name)
+
+  def setUp(self):
+    self.patcher = mock.patch('_vinn.subprocess.Popen')
+    self.mock_popen = self.patcher.start()
+    mock_rv = mock.Mock()
+    mock_rv.returncode = 0
+    # Communicate() returns [stdout, stderr]
+    mock_rv.communicate.return_value = ['', None]
+    self.mock_popen.return_value = mock_rv
+
+  def tearDown(self):
+    mock.patch.stopall()
+
+  def testRunJsStringWithV8Args(self):
+    vinn.RunJsString('var x = 1;', v8_args=['--foo', '--bar=True'])
+    v8_args = self.mock_popen.call_args[0][0]
+    self.assertIn('--foo', v8_args)
+    self.assertIn('--bar=True', v8_args)
+
+  def testExecuteJsStringWithV8Args(self):
+    vinn.ExecuteJsString('var x = 1;', v8_args=['--foo', '--bar=True'])
+    v8_args = self.mock_popen.call_args[0][0]
+    self.assertIn('--foo', v8_args)
+    self.assertIn('--bar=True', v8_args)
+
+  def testRunFileWithV8Args(self):
+    file_path = self.GetTestFilePath('simple.js')
+    vinn.RunFile(file_path, v8_args=['--foo', '--bar=True'])
+    v8_args = self.mock_popen.call_args[0][0]
+    self.assertIn('--foo', v8_args)
+
+  def testExecuteFileWithV8Args(self):
+    file_path = self.GetTestFilePath('simple.js')
+    vinn.ExecuteFile(file_path, v8_args=['--foo', '--bar=True'])
+    v8_args = self.mock_popen.call_args[0][0]
+    self.assertIn('--foo', v8_args)
+    self.assertIn('--bar=True', v8_args)

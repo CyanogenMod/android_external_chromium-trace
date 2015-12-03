@@ -33,10 +33,11 @@ tr.b.unittest.testSuite(function() {
       }));
 
       model.ir1 = new tr.e.rail.StubRAILInteractionRecord({
+        parentModel: model,
         start: 0, end: 100,
         railTypeName: 'rail_idle',
         normalizedEfficiency: 0.8,
-        normalizedUserPain: 0.0,
+        normalizedUserComfort: 0.0,
         associatedEvents: [
           {
             guid: 0,
@@ -49,10 +50,11 @@ tr.b.unittest.testSuite(function() {
       model.ir1.associatedEvents.push(model.s1);
 
       model.ir2 = new tr.e.rail.StubRAILInteractionRecord({
+        parentModel: model,
         start: 100, end: 200,
         railTypeName: 'rail_response',
         normalizedEfficiency: 0.92935252939242,
-        normalizedUserPain: 0.24128432825823582,
+        normalizedUserComfort: 0.24128432825823582,
         associatedEvents: [
           {
             guid: 1,
@@ -80,6 +82,8 @@ tr.b.unittest.testSuite(function() {
     assert.equal(rows.length, 2);
 
     this.addHTMLOutput(panel);
+
+    panel.rangeOfInterest = tr.b.Range.fromExplicitRange(0, 10);
   });
 });
 </script>

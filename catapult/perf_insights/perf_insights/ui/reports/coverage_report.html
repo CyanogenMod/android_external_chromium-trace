@@ -1,11 +1,10 @@
-<!DOCTYPE HTML>
+<!DOCTYPE html>
 <!--
 Copyright (c) 2015 The Chromium Authors. All rights reserved.
 Use of this source code is governed by a BSD-style license that can be
 found in the LICENSE file.
 -->
 <link rel="import" href="/tracing/ui/base/dom_helpers.html">
-<link rel="import" href="/tracing/ui/base/info_bar_group.html">
 <link rel="import" href="/tracing/ui/base/overlay.html">
 <link rel="import" href="/tracing/ui/base/table.html">
 <link rel="import" href="/tracing/ui/units/time_duration_span.html">
@@ -17,7 +16,7 @@ found in the LICENSE file.
 
 <polymer-element name="pi-ui-wr-coverage-report"
     extends="pi-ui-r-pi-report"
-    map-function-href="/perf_insights/wr/weather_report_map_function.html"
+    map-function-href="/perf_insights/mappers/weather_report_map_function.html"
     map-function-name="weatherReportMapFunction">
   <template>
     <style>
@@ -38,7 +37,6 @@ found in the LICENSE file.
     </style>
     <top-controls>
     </top-controls>
-    <tr-ui-b-info-bar-group id="infobars"></tr-ui-b-info-bar-group>
     <tr-ui-b-table id="table"></tr-ui-b-table>
   </template>
   <script>
@@ -64,9 +62,6 @@ found in the LICENSE file.
       var results = this.mapResults_;
       if (!results)
         results = new tr.r.Results();
-
-      this.$.infobars.clearMessages();
-      this.maybeAddFailuresInfoBarMessage_(results);
 
       var columns = this.createColumns_();
       table.tableColumns = columns;
@@ -101,33 +96,6 @@ found in the LICENSE file.
 
       table.tableRows = allCoverageInfo;
       table.rebuild();
-    },
-
-    maybeAddFailuresInfoBarMessage_: function(results) {
-      if (!results.hadFailures)
-        return;
-
-      function onTellMeMore() {
-        var dlg = new tr.ui.b.Overlay();
-        dlg.dlg = 'Results summary';
-
-        var grv = document.createElement('pi-ui-generic-results-view');
-
-        grv.mapResults = results;
-        grv.style.minHeight = '500px';
-        dlg.appendChild(grv);
-        dlg.visible = true;
-      }
-
-      var numFailedRuns = results.failedRunInfos.length;
-      this.$.infobars.addMessage(
-          'There were ' + numFailedRuns + ' traces that did not process.',
-          [
-            {
-              buttonText: 'Tell me more...',
-              onClick: onTellMeMore
-            }
-          ]);
     },
 
     createColumns_: function() {
@@ -171,6 +139,7 @@ found in the LICENSE file.
             return formatCount(row.coverage.associatedEventsCount +
                                row.coverage.unassociatedEventsCount);
           },
+          textAlign: 'right',
           cmp: function(a, b) {
             var aTotal = a.coverage.associatedEventsCount +
                          a.coverage.unassociatedEventsCount;
@@ -184,6 +153,7 @@ found in the LICENSE file.
           value: function(row) {
             return formatPercent(row.coverage.coveredEventsCountRatio);
           },
+          textAlign: 'right',
           cmp: function(a, b) {
             return tr.b.compareNumericWithNaNs(
                 a.coverage.coveredEventsCountRatio,
@@ -196,6 +166,7 @@ found in the LICENSE file.
             return formatMs(row.coverage.associatedEventsCpuTimeMs +
                             row.coverage.unassociatedEventsCpuTimeMs);
           },
+          textAlign: 'right',
           cmp: function(a, b) {
             var aTotal = a.coverage.associatedEventsCpuTimeMs +
                          a.coverage.unassociatedEventsCpuTimeMs;
@@ -209,6 +180,7 @@ found in the LICENSE file.
           value: function(row) {
             return formatPercent(row.coverage.coveredEventsCpuTimeRatio);
           },
+          textAlign: 'right',
           cmp: function(a, b) {
             return tr.b.compareNumericWithNaNs(
                 a.coverage.coveredEventsCpuTimeRatio,

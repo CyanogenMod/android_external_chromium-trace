@@ -8,13 +8,13 @@ import sys
 import traceback
 import json
 
+from perf_insights import corpus_driver_cmdline
 from perf_insights import corpus_query
-from perf_insights import local_directory_corpus_driver
-from perf_insights import map_function_handle as map_function_handle_module
+from perf_insights import function_handle
 from perf_insights import map_runner
 from perf_insights import progress_reporter as progress_reporter_module
 from perf_insights.results import json_output_formatter
-from tvcm import generate
+from py_vulcanize import generate
 import perf_insights
 import perf_insights_project
 import bs4
@@ -23,7 +23,7 @@ import bs4
 def Main(argv, pi_report_file=None):
   parser = argparse.ArgumentParser(
       description='Runs a PerfInsights report and outputs it to html')
-  parser.add_argument('trace_directory')
+  corpus_driver_cmdline.AddArguments(parser)
   if pi_report_file is None:
     parser.add_argument('pi_report_file')
 
@@ -33,15 +33,15 @@ def Main(argv, pi_report_file=None):
   parser.add_argument('-o', '--output-file')
   parser.add_argument('-s', '--stop-on-error',
                       action='store_true')
+
   args = parser.parse_args(argv[1:])
+  corpus_driver = corpus_driver_cmdline.GetCorpusDriver(parser, args)
+
   if not args.output_file:
     parser.error('Must provide -o')
 
   if pi_report_file is None:
     pi_report_file = os.path.abspath(args.pi_report_file)
-
-  if not os.path.exists(args.trace_directory):
-    parser.error('trace_directory does not exist')
 
   if args.query is None:
     query = corpus_query.CorpusQuery.FromString('True')
@@ -50,9 +50,9 @@ def Main(argv, pi_report_file=None):
         args.query)
 
   with codecs.open(args.output_file, mode='w', encoding='utf-8') as ofile:
-    return PiReportToHTML(ofile, args.trace_directory,
-                        pi_report_file, query, args.json,
-                        args.stop_on_error, args.jobs)
+    return PiReportToHTML(ofile, corpus_driver, pi_report_file, query,
+                          args.json, args.stop_on_error, args.jobs)
+
 
 def _GetMapFunctionHrefFromPiReport(html_contents):
   soup = bs4.BeautifulSoup(html_contents)
@@ -62,32 +62,35 @@ def _GetMapFunctionHrefFromPiReport(html_contents):
       map_function_href = element.attrs.get('map-function-href', None)
       if map_function_href is None:
         raise Exception('Report is missing map-function-href attribute')
+      map_function_name = element.attrs.get('map-function-name', None)
+      if map_function_name is None:
+        raise Exception('Report is missing map-function-name attribute')
       pi_report_element_name = element.attrs.get('name', None)
       if pi_report_element_name is None:
         raise Exception('Report is missing name attribute')
-      return map_function_href, pi_report_element_name
+      return map_function_href, map_function_name, pi_report_element_name
   raise Exception('No element that extends pi-ui-r-pi-report was found')
 
 
-def PiReportToHTML(ofile, trace_directory, pi_report_file,
-                   query, json_output=False,
-                   stop_on_error=False, jobs=1, quiet=False):
+def PiReportToHTML(ofile, corpus_driver, pi_report_file, query,
+                   json_output=False, stop_on_error=False, jobs=1, quiet=False):
   project = perf_insights_project.PerfInsightsProject()
 
   with open(pi_report_file, 'r') as f:
     pi_report_file_contents = f.read()
 
-  map_function_href, pi_report_element_name = _GetMapFunctionHrefFromPiReport(
-    pi_report_file_contents)
+  map_function_href, map_function_name, pi_report_element_name = (
+      _GetMapFunctionHrefFromPiReport(pi_report_file_contents))
   map_file = project.GetAbsPathFromHRef(map_function_href)
-  map_function_handle = map_function_handle_module.MapFunctionHandle(
-      filename=map_file)
+  module = function_handle.ModuleToLoad(filename=map_file)
+  map_function_handle = function_handle.FunctionHandle([module],
+                                                       map_function_name)
 
   if map_file == None:
     raise Exception('Could not find %s' % map_function_href)
 
-  results = _MapTraces(trace_directory, map_function_handle,
-                       query, stop_on_error, jobs, quiet)
+  results = _MapTraces(corpus_driver, map_function_handle, query, stop_on_error,
+                       jobs, quiet)
   if stop_on_error and results.had_failures:
     sys.stderr.write('There were mapping errors. Aborting.');
     return 255
@@ -101,12 +104,8 @@ def PiReportToHTML(ofile, trace_directory, pi_report_file,
   return 0
 
 
-def _MapTraces(trace_directory, map_function_handle, query,
-               stop_on_error=False,
+def _MapTraces(corpus_driver, map_function_handle, query, stop_on_error=False,
                jobs=1, quiet=False):
-  corpus_driver = local_directory_corpus_driver.LocalDirectoryCorpusDriver(
-      os.path.abspath(os.path.expanduser(trace_directory)))
-
   trace_handles = corpus_driver.GetTraceHandlesMatchingQuery(query)
   if quiet:
     alt_progress_reporter = progress_reporter_module.ProgressReporter()
@@ -114,8 +113,9 @@ def _MapTraces(trace_directory, map_function_handle, query,
     alt_progress_reporter = None
   runner = map_runner.MapRunner(trace_handles, map_function_handle,
                   stop_on_error=stop_on_error,
-                  progress_reporter=alt_progress_reporter)
-  return runner.Run(jobs=jobs)
+                  progress_reporter=alt_progress_reporter,
+                  jobs=jobs)
+  return runner.Run()
 
 
 def WriteResultsToFile(ofile, project,

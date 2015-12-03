@@ -36,30 +36,25 @@ def _FindAllFilesRecursive(source_paths):
 
 
 def _IsFilenameATest(x):
-  # TODO(chrisphan): Add general test filters.
-  if x.endswith('alert-remove-box-test.html'):
+  if x.endswith('-test.html'):
     return True
-
+  if x.endswith('_test.html'):
+    return True
   return False
 
 
 class DashboardProject(object):
   catapult_path = os.path.abspath(
-      os.path.join(os.path.dirname(__file__), '..'))
-  catapult_third_party_path = os.path.abspath(
-      os.path.join(catapult_path, 'third_party'))
+      os.path.join(os.path.dirname(__file__), os.path.pardir))
 
-  dashboard_root_path = os.path.abspath(
-      os.path.join(catapult_path, 'dashboard'))
-  dashboard_src_path = os.path.abspath(
-      os.path.join(dashboard_root_path, 'dashboard'))
-  dashboard_test_data_path = os.path.abspath(
-      os.path.join(dashboard_root_path, 'test_data'))
-  dashboard_polymer_path = os.path.abspath(
-      os.path.join(catapult_third_party_path, 'polymer'))
+  catapult_third_party_path = os.path.join(catapult_path, 'third_party')
 
-  tracing_root_path = os.path.abspath(
-      os.path.join(catapult_path, 'tracing'))
+  dashboard_root_path = os.path.join(catapult_path, 'dashboard')
+  dashboard_src_path = os.path.join(dashboard_root_path, 'dashboard')
+  dashboard_test_data_path = os.path.join(dashboard_root_path, 'test_data')
+  dashboard_polymer_path = os.path.join(catapult_third_party_path, 'polymer')
+
+  tracing_root_path = os.path.join(catapult_path, 'tracing')
 
   def __init__(self):
     self._source_paths = None
@@ -72,6 +67,7 @@ class DashboardProject(object):
       self._source_paths = []
       self._source_paths.append(self.dashboard_root_path)
       self._source_paths.append(self.dashboard_polymer_path)
+      self._source_paths.append(self.catapult_third_party_path)
 
       import tracing_project as tracing_project_module
       tracing_project = tracing_project_module.TracingProject()

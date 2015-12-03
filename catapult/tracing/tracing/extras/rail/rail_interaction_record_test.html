@@ -29,18 +29,19 @@ tr.b.unittest.testSuite(function() {
 
     var modelHelper = new tr.e.audits.ChromeModelHelper(model);
     var rir = new tr.e.rail.RAILInteractionRecord(
-        'simple', 'rail_response', 0, 100);
+        model, 'simple', 'rail_response', 0, 100);
     rir.associatedEvents.push(model.rendererMain.sliceGroup.slices[0]);
     rir.updateArgs();
 
     assert.equal(rir.args.layoutInfo.timeInLayout, 100);
   });
 
+  // This basically just tests weightedAverage2.
   test('railScore', function() {
     var ir = new tr.e.rail.StubRAILInteractionRecord({
       start: 0, end: 100,
       railTypeName: 'rail_idle',
-      normalizedUserPain: 1,
+      normalizedUserComfort: 0,
       normalizedEfficiency: 0
     });
     assert.closeTo(0, ir.railScore, 1e-5);
@@ -48,7 +49,7 @@ tr.b.unittest.testSuite(function() {
     ir = new tr.e.rail.StubRAILInteractionRecord({
       start: 0, end: 100,
       railTypeName: 'rail_idle',
-      normalizedUserPain: 0,
+      normalizedUserComfort: 1,
       normalizedEfficiency: 1
     });
     assert.closeTo(1, ir.railScore, 1e-5);
@@ -56,7 +57,7 @@ tr.b.unittest.testSuite(function() {
     ir = new tr.e.rail.StubRAILInteractionRecord({
       start: 0, end: 100,
       railTypeName: 'rail_idle',
-      normalizedUserPain: 0,
+      normalizedUserComfort: 1,
       normalizedEfficiency: 0
     });
     assert.closeTo(0.42388, ir.railScore, 1e-5);
@@ -64,10 +65,26 @@ tr.b.unittest.testSuite(function() {
     ir = new tr.e.rail.StubRAILInteractionRecord({
       start: 0, end: 100,
       railTypeName: 'rail_idle',
-      normalizedUserPain: 1,
+      normalizedUserComfort: 0,
       normalizedEfficiency: 1
     });
     assert.closeTo(0.15536, ir.railScore, 1e-5);
+  });
+
+  test('userFriendlyRailTypeName', function() {
+    // Invalid names shouldn't be modified.
+    var result = tr.e.rail.userFriendlyRailTypeName('not_a_rail_type_name');
+    assert.equal('not_a_rail_type_name', result);
+    result = tr.e.rail.userFriendlyRailTypeName('rail_');
+    assert.equal('rail_', result);
+
+    // Some valid things.
+    result = tr.e.rail.userFriendlyRailTypeName('rail_animate');
+    assert.equal('Animate', result);
+    result = tr.e.rail.userFriendlyRailTypeName('rail_b');
+    assert.equal('B', result);
+    result = tr.e.rail.userFriendlyRailTypeName('rail_123');
+    assert.equal('123', result);
   });
 });
 </script>

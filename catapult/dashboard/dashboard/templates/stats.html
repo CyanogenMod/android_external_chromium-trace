@@ -1,5 +1,14 @@
-{% extends "base.html" %}
-{% block head %}
+<!DOCTYPE html>
+<html>
+<head>
+  <link type="text/css" rel="stylesheet" href="/dashboard/static/base.css">
+  <link rel="import" href="/components/polymer/polymer.html">
+
+  <script src="/jquery/jquery-2.1.4.min.js"></script>
+  <script src="/flot/jquery.flot.min.js"></script>
+  <script src="/flot/jquery.flot.pie.min.js"></script>
+  <script src="/flot/jquery.flot.stack.min.js"></script>
+
   <style>
     form, ul {
       margin-left: 20px;
@@ -42,15 +51,17 @@
       width: 800px;
     }
   </style>
-
-  <link rel="import" href="/components/polymer/polymer.html">
-{% endblock %}
-{% block content %}
+</head>
+<body>
+  {% include 'nav.html' %}
   <h1>Chrome Performance Statistics</h1>
   {% if waiting %}
     Waiting ({{processed}} of {{total}})...
     <script>
-      window.setTimeout(function() { location.reload(); }, 5000);
+      'use strict';
+      window.setTimeout(function() {
+        location.reload();
+      }, 5000);
     </script>
   {% elif have_stats %}
     <h2>{{title}}:</h2>
@@ -122,11 +133,6 @@
                                        background-color:white; color: black;">
         </div>
       </div>
-
-      <script src="/third_party/jquery/jquery-2.1.4.min.js"></script>
-      <script src="/third_party/flot/jquery.flot.min.js"></script>
-      <script src="/third_party/flot/jquery.flot.pie.min.js"></script>
-      <script src="/third_party/flot/jquery.flot.stack.min.js"></script>
 
       <script>
         'use strict';
@@ -293,4 +299,5 @@
     {% endfor %}
     </ul>
   {% endif %}
-{% endblock %}
+</body>
+</html>

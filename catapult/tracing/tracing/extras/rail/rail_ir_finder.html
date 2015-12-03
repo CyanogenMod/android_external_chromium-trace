@@ -44,6 +44,28 @@ tr.exportTo('tr.e.rail', function() {
     return false;
   }
 
+  function forEventTypesIn(events, typeNames, cb, opt_this) {
+    events.forEach(function(event) {
+      if (typeNames.indexOf(event.typeName) >= 0) {
+        cb.call(opt_this, event);
+      }
+    });
+  }
+
+  var RENDER_FRAME_IMPL_PREFIX = 'RenderFrameImpl::';
+  var CREATE_CHILD_TITLE = RENDER_FRAME_IMPL_PREFIX + 'createChildFrame';
+  var START_LOAD_TITLE = RENDER_FRAME_IMPL_PREFIX + 'didStartProvisionalLoad';
+  var FAIL_LOAD_TITLE = RENDER_FRAME_IMPL_PREFIX + 'didFailProvisionalLoad';
+  var FINISH_LOAD_TITLE = RENDER_FRAME_IMPL_PREFIX + 'didFinishLoad';
+
+  // This is an instant event that is a subSlice of a FINISH_LOAD_TITLE
+  // event.
+  var LOAD_FINISHED_TITLE = 'LoadFinished';
+
+  function isRenderFrameImplEvent(event) {
+    return event.title.indexOf(RENDER_FRAME_IMPL_PREFIX) === 0;
+  }
+
   // If there's less than this much time between the end of one event and the
   // start of the next, then they might be merged.
   // There was not enough thought given to this value, so if you have any slight
@@ -202,12 +224,13 @@ tr.exportTo('tr.e.rail', function() {
           tr.b.convertEventsToRanges(otherIRs),
           this.model.bounds);
       var irs = [];
+      var model = this.model;
       emptyRanges.forEach(function(range) {
         // Ignore insignificantly tiny idle ranges.
         if (range.max < (range.min + INSIGNIFICANT_MS))
           return;
         irs.push(new tr.e.rail.IdleInteractionRecord(
-            range.min, range.max - range.min));
+            model, range.min, range.max - range.min));
       });
       return irs;
     },
@@ -227,7 +250,7 @@ tr.exportTo('tr.e.rail', function() {
 
     getStartLoadEvents: function() {
       function isStartLoadSlice(slice) {
-        return slice.title === 'RenderFrameImpl::didStartProvisionalLoad';
+        return slice.title === START_LOAD_TITLE;
       }
       return this.modelHelper.browserHelper.getAllAsyncSlicesMatching(
           isStartLoadSlice).sort(compareEvents);
@@ -235,21 +258,28 @@ tr.exportTo('tr.e.rail', function() {
 
     getFailLoadEvents: function() {
       function isFailLoadSlice(slice) {
-        return slice.title === 'RenderFrameImpl::didFailProvisionalLoad';
+        return slice.title === FAIL_LOAD_TITLE;
       }
       return this.modelHelper.browserHelper.getAllAsyncSlicesMatching(
           isFailLoadSlice).sort(compareEvents);
     },
 
-    // Main runner events are emitted very early on in the lifetime of browser
-    // and renderer processes. It's emitted in the Initialize method of
-    // ContentMainRunner as soon as TRACE_EVENT is available.
-    getMainRunnerEvents: function() {
-      function isMainRunnerSlice(slice) {
-        return slice.title === 'ContentMainRunnerImpl::Initialize';
+    // If a thread contains a typical initialization slice, then the first event
+    // on that thread is a startup event.
+    getStartupEvents: function() {
+      function isStartupSlice(slice) {
+        return slice.title === 'BrowserMainLoop::CreateThreads';
       }
-      return this.modelHelper.browserHelper.getAllAsyncSlicesMatching(
-          isMainRunnerSlice).sort(compareEvents);
+      var events = this.modelHelper.browserHelper.getAllAsyncSlicesMatching(
+          isStartupSlice);
+      var deduper = new tr.model.EventSet();
+      events.forEach(function(event) {
+        var sliceGroup = event.parentContainer.sliceGroup;
+        var slice = sliceGroup && sliceGroup.findFirstSlice();
+        if (slice)
+          deduper.push(slice);
+      });
+      return deduper.toArray();
     },
 
     // Match every event in |openingEvents| to the first following event from
@@ -257,6 +287,7 @@ tr.exportTo('tr.e.rail', function() {
     // for each pair.
     findLoadInteractionRecords_: function(openingEvents, closingEvents) {
       var lirs = [];
+      var model = this.model;
       openingEvents.forEach(function(openingEvent) {
         closingEvents.forEach(function(closingEvent) {
           // Ignore opening event that already have a closing event.
@@ -280,18 +311,98 @@ tr.exportTo('tr.e.rail', function() {
           openingEvent.closingEvent = closingEvent;
           closingEvent.openingEvent = openingEvent;
           var lir = new tr.e.rail.LoadInteractionRecord(
-              openingEvent.start, closingEvent.end - openingEvent.start);
+              model, openingEvent.start,
+              closingEvent.end - openingEvent.start);
           lir.associatedEvents.push(openingEvent);
           lir.associatedEvents.push(closingEvent);
+
+          // All RenderFrameImpl events contain the routingId.
+          // |openingEvent| may be either didStartProvisionaLoad or
+          // didCommitProvisionalLoad, so use a general prefix test.
+          if (isRenderFrameImplEvent(openingEvent)) {
+            var renderProcessId = openingEvent.parentContainer.parent.pid;
+            lir.renderProcess = this.model.processes[renderProcessId];
+            lir.renderMainThread = lir.renderProcess.findAtMostOneThreadNamed(
+                'CrRendererMain');
+            lir.routingId = openingEvent.args.id;
+            lir.parentRoutingId = this.findLoadParentRoutingId_(lir);
+            this.findLoadFinishedEvent_(lir);
+          }
           lirs.push(lir);
-        });
-      });
+        }, this);
+      }, this);
       return lirs;
+    },
+
+    // Find the routingId of the createChildFrame event that created the Load
+    // IR's RenderFrame.
+    findLoadParentRoutingId_: function(lir) {
+      var createChildEvent = undefined;
+      lir.renderMainThread.iterateAllEvents(function(event) {
+        if (event.title !== CREATE_CHILD_TITLE)
+          return;
+
+        if (event.args.child !== lir.routingId)
+          return;
+
+        createChildEvent = event;
+      });
+
+      if (!createChildEvent)
+        return undefined;
+
+      return createChildEvent.args.id;
+    },
+
+    findLoadFinishedEvent_: function(lir) {
+      // First, find the RenderFrameImpl::didFinishLoad event that indicates a
+      // successful load.
+
+      var finishLoadEvent = undefined;
+      lir.renderMainThread.iterateAllEvents(function(event) {
+        if (event.title !== FINISH_LOAD_TITLE)
+          return;
+
+        if (event.start < lir.start)
+          return;
+
+        // TODO(benjhayden) This part of the heuristic is problematic for now
+        // because |lir.end| is naively the first paint after the load starts.
+        if (event.start > lir.end)
+          return;
+
+        if (event.args.id !== lir.routingId)
+          return;
+
+        finishLoadEvent = event;
+      });
+
+      if (!finishLoadEvent)
+        return undefined;
+
+      lir.associatedEvents.push(finishLoadEvent);
+
+      // Then, see if finishLoadEvent contains a subSlice titled
+      // 'LoadFinished', which indicates that the load was for a main frame.
+
+      var loadFinishedEvent = undefined;
+      finishLoadEvent.subSlices.forEach(function(event) {
+        if (event.title !== LOAD_FINISHED_TITLE)
+          return;
+
+        loadFinishedEvent = event;
+      });
+
+      if (!loadFinishedEvent)
+        return;
+
+      lir.loadFinishedEvent = loadFinishedEvent;
+      lir.associatedEvents.push(loadFinishedEvent);
     },
 
     // Match up RenderFrameImpl events with frame render events.
     findLoadInteractionRecords: function() {
-      var mainRunnerEvents = this.getMainRunnerEvents();
+      var startupEvents = this.getStartupEvents();
       var commitLoadEvents =
           this.modelHelper.browserHelper.getCommitProvisionalLoadEventsInRange(
               this.model.bounds);
@@ -300,78 +411,107 @@ tr.exportTo('tr.e.rail', function() {
       var failLoadEvents = this.getFailLoadEvents();
       var lirs = [];
 
-      // Attach frame events to every main runner events.
-      var startupLIRs = this.findLoadInteractionRecords_(mainRunnerEvents,
+      // Attach frame events to every startup events.
+      var startupLIRs = this.findLoadInteractionRecords_(startupEvents,
           frameEvents);
       this.setIRNames_(LOAD_STARTUP_IR_NAME, startupLIRs);
       lirs.push.apply(lirs, startupLIRs);
 
       // Attach frame events to every commit load events.
-      var succesfulLIRs = this.findLoadInteractionRecords_(commitLoadEvents,
+      var successfulLIRs = this.findLoadInteractionRecords_(commitLoadEvents,
           frameEvents);
-      this.setIRNames_(LOAD_SUCCEEDED_IR_NAME, succesfulLIRs);
-      lirs.push.apply(lirs, succesfulLIRs);
+      this.setIRNames_(LOAD_SUCCEEDED_IR_NAME, successfulLIRs);
+      successfulLIRs.forEach(function(lir) {
+        // If a successful Load IR has a loadFinishedEvent, then it is a main
+        // frame.
+        // Drop sub-frame Loads for now.
+        if (lir.loadFinishedEvent)
+          lirs.push(lir);
+      });
 
       // Attach fail load events to every start load events.
       var failedLIRs = this.findLoadInteractionRecords_(startLoadEvents,
           failLoadEvents);
       this.setIRNames_(LOAD_FAILED_IR_NAME, failedLIRs);
-      lirs.push.apply(lirs, failedLIRs);
+      failedLIRs.forEach(function(lir) {
+        // If a failed Load IR has a parentRoutingId, then it is a sub-frame.
+        // Drop sub-frame Loads for now.
+        if (lir.parentRoutingId === undefined)
+          lirs.push(lir);
+      });
 
       return lirs;
     },
 
     // Find ProtoIRs, post-process them, convert them to real IRs.
     findInputInteractionRecords: function() {
-      var protoIRs = this.findProtoIRs();
+      var sortedInputEvents = this.getSortedInputEvents();
+      var protoIRs = this.findProtoIRs(sortedInputEvents);
       protoIRs = this.postProcessProtoIRs(protoIRs);
-      this.checkAllInputEventsHandled(protoIRs);
+      this.checkAllInputEventsHandled(sortedInputEvents, protoIRs);
 
       var irs = [];
+      var model = this.model;
       protoIRs.forEach(function(protoIR) {
-        var ir = protoIR.createInteractionRecord();
+        var ir = protoIR.createInteractionRecord(model);
         if (ir)
           irs.push(ir);
       });
       return irs;
     },
 
-    findProtoIRs: function() {
+    findProtoIRs: function(sortedInputEvents) {
       var protoIRs = [];
       // This order is not important. Handlers are independent.
-      protoIRs.push.apply(protoIRs, this.handleKeyboardEvents());
-      protoIRs.push.apply(protoIRs, this.handleMouseResponseEvents());
-      protoIRs.push.apply(protoIRs, this.handleMouseWheelEvents());
-      protoIRs.push.apply(protoIRs, this.handleMouseDragEvents());
-      protoIRs.push.apply(protoIRs, this.handleTapResponseEvents());
-      protoIRs.push.apply(protoIRs, this.handlePinchEvents());
-      protoIRs.push.apply(protoIRs, this.handleFlingEvents());
-      protoIRs.push.apply(protoIRs, this.handleTouchEvents());
-      protoIRs.push.apply(protoIRs, this.handleScrollEvents());
-      protoIRs.push.apply(protoIRs, this.handleCSSAnimations());
+      var handlers = [
+        this.handleKeyboardEvents,
+        this.handleMouseResponseEvents,
+        this.handleMouseWheelEvents,
+        this.handleMouseDragEvents,
+        this.handleTapResponseEvents,
+        this.handlePinchEvents,
+        this.handleFlingEvents,
+        this.handleTouchEvents,
+        this.handleScrollEvents,
+        this.handleCSSAnimations
+      ];
+      handlers.forEach(function(handler) {
+        protoIRs.push.apply(protoIRs, handler.call(this, sortedInputEvents));
+      }, this);
       protoIRs.sort(compareEvents);
       return protoIRs;
     },
 
-    getSortedInputEvents: function(typeNames) {
-      function isMatchingSlice(slice) {
+    getSortedInputEvents: function() {
+      var inputEvents = [];
+
+      var browserProcess = this.modelHelper.browserHelper.process;
+      var mainThread = browserProcess.findAtMostOneThreadNamed(
+          'CrBrowserMain');
+      mainThread.asyncSliceGroup.iterateAllEvents(function(slice) {
         if (!slice.isTopLevel)
-          return false;
+          return;
 
         if (!(slice instanceof tr.e.cc.InputLatencyAsyncSlice))
-          return false;
+          return;
 
-        return typeNames.indexOf(slice.typeName) >= 0;
-      }
+        // TODO(beaudoin): This should never happen but it does. Investigate
+        // the trace linked at in #1567 and remove that when it's fixed.
+        if (isNaN(slice.start) ||
+            isNaN(slice.duration) ||
+            isNaN(slice.end))
+          return;
 
-      return this.modelHelper.browserHelper.getAllAsyncSlicesMatching(
-          isMatchingSlice).sort(compareEvents);
+        inputEvents.push(slice);
+      }, this);
+
+      return inputEvents.sort(compareEvents);
     },
 
     // Every keyboard event is a Response.
-    handleKeyboardEvents: function() {
+    handleKeyboardEvents: function(sortedInputEvents) {
       var protoIRs = [];
-      this.getSortedInputEvents(KEYBOARD_TYPE_NAMES).forEach(function(event) {
+      forEventTypesIn(sortedInputEvents, KEYBOARD_TYPE_NAMES, function(event) {
         var pir = new ProtoIR(ProtoIR.RESPONSE_TYPE, KEYBOARD_IR_NAME);
         pir.pushEvent(event);
         protoIRs.push(pir);
@@ -380,10 +520,10 @@ tr.exportTo('tr.e.rail', function() {
     },
 
     // Some mouse events can be translated directly into Responses.
-    handleMouseResponseEvents: function() {
+    handleMouseResponseEvents: function(sortedInputEvents) {
       var protoIRs = [];
-      var mouseEvents = this.getSortedInputEvents(MOUSE_RESPONSE_TYPE_NAMES);
-      mouseEvents.forEach(function(event) {
+      forEventTypesIn(
+          sortedInputEvents, MOUSE_RESPONSE_TYPE_NAMES, function(event) {
         var pir = new ProtoIR(ProtoIR.RESPONSE_TYPE, MOUSE_IR_NAME);
         pir.pushEvent(event);
         protoIRs.push(pir);
@@ -401,12 +541,12 @@ tr.exportTo('tr.e.rail', function() {
     // NB this threshold uses the two events' start times, unlike
     // ProtoIR.isNear, which compares the end time of the previous event with
     // the start time of the next.
-    handleMouseWheelEvents: function() {
+    handleMouseWheelEvents: function(sortedInputEvents) {
       var protoIRs = [];
       var currentPIR = undefined;
       var prevEvent_ = undefined;
-      var wheelEvents = this.getSortedInputEvents(MOUSE_WHEEL_TYPE_NAMES);
-      wheelEvents.forEach(function(event) {
+      forEventTypesIn(
+          sortedInputEvents, MOUSE_WHEEL_TYPE_NAMES, function(event) {
         // Switch prevEvent in one place so that we can early-return later.
         var prevEvent = prevEvent_;
         prevEvent_ = event;
@@ -443,11 +583,12 @@ tr.exportTo('tr.e.rail', function() {
     // RRRRRRRAAAAAAAAAAAAAAAAAAAA
     // DDD MMM MMM MMM MMM MMM UUU
     //
-    handleMouseDragEvents: function() {
+    handleMouseDragEvents: function(sortedInputEvents) {
       var protoIRs = [];
       var currentPIR = undefined;
       var mouseDownEvent = undefined;
-      this.getSortedInputEvents(MOUSE_DRAG_TYPE_NAMES).forEach(function(event) {
+      forEventTypesIn(
+          sortedInputEvents, MOUSE_DRAG_TYPE_NAMES, function(event) {
         switch (event.typeName) {
           case INPUT_TYPE.MOUSE_DOWN:
             if (causedFrame(event)) {
@@ -462,11 +603,11 @@ tr.exportTo('tr.e.rail', function() {
             break;
             // There may be more than 100ms between the start of the mouse down
             // and the start of the mouse up. Chrome and the web don't start to
-            // respond until the mouse up. ResponseIRs start scoring "pain" at
-            // 100ms duration. If more than that 100ms duration is burned
+            // respond until the mouse up. ResponseIRs start deducting comfort
+            // at 100ms duration. If more than that 100ms duration is burned
             // through while waiting for the user to release the
-            // mouse button, then ResponseIR will unfairly start scoring pain
-            // before Chrome even has a mouse up to respond to.
+            // mouse button, then ResponseIR will unfairly start deducting
+            // comfort before Chrome even has a mouse up to respond to.
             // It is technically possible for a site to afford one response on
             // mouse down and another on mouse up, but that is an edge case. The
             // vast majority of mouse downs are not responses.
@@ -551,10 +692,10 @@ tr.exportTo('tr.e.rail', function() {
     // RRRRRRR
     // DDD CCC
     //
-    handleTapResponseEvents: function() {
+    handleTapResponseEvents: function(sortedInputEvents) {
       var protoIRs = [];
       var currentPIR = undefined;
-      this.getSortedInputEvents(TAP_TYPE_NAMES).forEach(function(event) {
+      forEventTypesIn(sortedInputEvents, TAP_TYPE_NAMES, function(event) {
         switch (event.typeName) {
           case INPUT_TYPE.TAP_DOWN:
             currentPIR = new ProtoIR(ProtoIR.RESPONSE_TYPE, TAP_IR_NAME);
@@ -603,12 +744,12 @@ tr.exportTo('tr.e.rail', function() {
     // RRRRRRRAAAAAAAAAAAAAAAAAAAA
     // BBB UUU UUU UUU UUU UUU EEE
     //
-    handlePinchEvents: function() {
+    handlePinchEvents: function(sortedInputEvents) {
       var protoIRs = [];
       var currentPIR = undefined;
       var sawFirstUpdate = false;
       var modelBounds = this.model.bounds;
-      this.getSortedInputEvents(PINCH_TYPE_NAMES).forEach(function(event) {
+      forEventTypesIn(sortedInputEvents, PINCH_TYPE_NAMES, function(event) {
         switch (event.typeName) {
           case INPUT_TYPE.PINCH_BEGIN:
             if (currentPIR &&
@@ -669,17 +810,21 @@ tr.exportTo('tr.e.rail', function() {
     // AAAAAAAAAAA
     // SSS        CCC
     //
-    handleFlingEvents: function() {
+    handleFlingEvents: function(sortedInputEvents) {
       var protoIRs = [];
       var currentPIR = undefined;
-      var flingEvents = this.getSortedInputEvents(FLING_TYPE_NAMES);
 
       function isRendererFling(event) {
         return event.title === RENDERER_FLING_TITLE;
       }
       var browserHelper = this.modelHelper.browserHelper;
-      flingEvents.push.apply(flingEvents,
-          browserHelper.getAllAsyncSlicesMatching(isRendererFling));
+      var flingEvents = browserHelper.getAllAsyncSlicesMatching(
+          isRendererFling);
+
+      forEventTypesIn(sortedInputEvents, FLING_TYPE_NAMES, function(event) {
+        flingEvents.push(event);
+      });
+      flingEvents.sort(compareEvents);
 
       flingEvents.forEach(function(event) {
         if (event.title === RENDERER_FLING_TITLE) {
@@ -748,11 +893,11 @@ tr.exportTo('tr.e.rail', function() {
     // RRRRRRR
     // SSS EEE
     //
-    handleTouchEvents: function() {
+    handleTouchEvents: function(sortedInputEvents) {
       var protoIRs = [];
       var currentPIR = undefined;
       var sawFirstMove = false;
-      this.getSortedInputEvents(TOUCH_TYPE_NAMES).forEach(function(event) {
+      forEventTypesIn(sortedInputEvents, TOUCH_TYPE_NAMES, function(event) {
         switch (event.typeName) {
           case INPUT_TYPE.TOUCH_START:
             if (currentPIR) {
@@ -825,11 +970,11 @@ tr.exportTo('tr.e.rail', function() {
     // RRRRRRRAAAAAAAAAAAAAAAAAAAA
     // BBB UUU UUU UUU UUU UUU EEE
     //
-    handleScrollEvents: function() {
+    handleScrollEvents: function(sortedInputEvents) {
       var protoIRs = [];
       var currentPIR = undefined;
       var sawFirstUpdate = false;
-      this.getSortedInputEvents(SCROLL_TYPE_NAMES).forEach(function(event) {
+      forEventTypesIn(sortedInputEvents, SCROLL_TYPE_NAMES, function(event) {
         switch (event.typeName) {
           case INPUT_TYPE.SCROLL_BEGIN:
             // Always begin a new PIR even if there already is one, unlike
@@ -878,10 +1023,11 @@ tr.exportTo('tr.e.rail', function() {
     },
 
     // CSS Animations are merged into Animations when they intersect.
-    handleCSSAnimations: function() {
+    handleCSSAnimations: function(sortedInputEvents) {
       var animationEvents = this.modelHelper.browserHelper.
           getAllAsyncSlicesMatching(function(event) {
-            return event.title === CSS_ANIMATION_TITLE;
+            return ((event.title === CSS_ANIMATION_TITLE) &&
+                    (event.duration > 0));
       });
 
       var animationRanges = [];
@@ -1101,7 +1247,7 @@ tr.exportTo('tr.e.rail', function() {
     },
 
     // Check that none of the handlers accidentally ignored an input event.
-    checkAllInputEventsHandled: function(protoIRs) {
+    checkAllInputEventsHandled: function(sortedInputEvents, protoIRs) {
       var handledEvents = [];
       protoIRs.forEach(function(protoIR) {
         protoIR.associatedEvents.forEach(function(event) {
@@ -1114,8 +1260,7 @@ tr.exportTo('tr.e.rail', function() {
         });
       });
 
-      this.getSortedInputEvents(ALL_HANDLED_TYPE_NAMES).forEach(
-          function(event) {
+      sortedInputEvents.forEach(function(event) {
         if (handledEvents.indexOf(event) < 0) {
           console.error('UNHANDLED INPUT EVENT!',
               event.typeName, parseInt(event.start), parseInt(event.end));

@@ -1,4 +1,4 @@
-<!DOCTYPE HTML>
+<!DOCTYPE html>
 <!--
 Copyright (c) 2015 The Chromium Authors. All rights reserved.
 Use of this source code is governed by a BSD-style license that can be
@@ -8,7 +8,7 @@ found in the LICENSE file.
 <link rel="import" href="/tracing/base/statistics.html">
 <link rel="import" href="/tracing/base/units/units.html">
 <link rel="import" href="/tracing/base/units/histogram.html">
-<link rel="import" href="/tracing/ui/base/table.html">
+<link rel="import" href="/tracing/ui/base/bar_chart.html">
 <link rel="import" href="/tracing/ui/units/scalar_span.html">
 
 <polymer-element name="tr-ui-u-histogram-span">
@@ -39,8 +39,7 @@ found in the LICENSE file.
       </span>
       average=<tr-ui-u-scalar-span id="average"></tr-ui-u-scalar-span>
     </div>
-    <tr-ui-b-table id="table">
-    </tr-ui-b-table>
+    <div id="container"></div>
   </template>
   <script>
   'use strict';
@@ -48,6 +47,91 @@ found in the LICENSE file.
   Polymer({
     created: function() {
       this.histogram_ = undefined;
+      this.chart_ = new tr.ui.b.BarChart();
+      this.chart_.width = 400;
+      this.chart_.height = 200;
+      this.mouseDownBin_ = undefined;
+      this.brushedBins_ = [];
+      this.chart_.addEventListener('item-mousedown',
+          this.onMouseDown_.bind(this));
+      this.chart_.addEventListener('item-mousemove',
+          this.onMouseMove_.bind(this));
+      this.chart_.addEventListener('item-mouseup',
+          this.onMouseUp_.bind(this));
+    },
+
+    ready: function() {
+      this.$.container.appendChild(this.chart_);
+    },
+
+    get brushedBins() {
+      return this.brushedBins_;
+    },
+
+    updateBrushedRange_: function(currentX) {
+      this.brushedBins_ = [this.histogram_.getBinForValue(currentX)];
+      var r = new tr.b.Range();
+      r.addValue(this.mouseDownX_);
+      r.addValue(currentX);
+
+      // Collect bins:
+      var centralMin = Number.MAX_VALUE;
+      var centralMax = -Number.MAX_VALUE;
+      this.histogram_.centralBins.forEach(function(bin) {
+        centralMin = Math.min(centralMin, bin.range.min);
+        centralMax = Math.max(centralMax, bin.range.max);
+        if ((bin.range.max > r.min) &&
+            (bin.range.min < r.max) &&
+            (this.brushedBins_.indexOf(bin) < 0))
+          this.brushedBins_.push(bin);
+      }, this);
+      if ((this.histogram_.underflowBin.max > r.min) &&
+          (this.brushedBins_.indexOf(this.histogram_.underflowBin) < 0)) {
+        this.brushedBins_.push(this.histogram_.underflowBin);
+      }
+      if ((this.histogram_.overflowBin.min < r.max) &&
+          (this.brushedBins_.indexOf(this.histogram_.overflowBin) < 0)) {
+        this.brushedBins_.push(this.histogram_.overflowBin);
+      }
+      this.brushedBins_.sort(function(a, b) {
+        return a.range.min - b.range.min;
+      });
+
+      // Prevent Infinity:
+      var minBin = this.histogram_.getBinForValue(r.min);
+      var maxBin = this.histogram_.getBinForValue(r.max);
+      var binWidth = this.histogram_.centralBins[0].range.range;
+      r.min = minBin ? Math.max(centralMin - binWidth, minBin.range.min) :
+        centralMin - binWidth;
+      r.max = maxBin ? Math.min(centralMax + binWidth, maxBin.range.max) :
+        centralMax + binWidth;
+
+      this.chart_.brushedRange = r;
+
+      this.dispatchEvent(new tr.b.Event('brushed-bins-changed'));
+    },
+
+    onMouseDown_: function(chartEvent) {
+      chartEvent.stopPropagation();
+      if (!this.histogram_)
+        return;
+      this.mouseDownX_ = chartEvent.x;
+      this.updateBrushedRange_(chartEvent.x);
+    },
+
+    onMouseMove_: function(chartEvent) {
+      chartEvent.stopPropagation();
+      if (!this.histogram_)
+        return;
+      this.updateBrushedRange_(chartEvent.x);
+    },
+
+    onMouseUp_: function(chartEvent) {
+      chartEvent.stopPropagation();
+      if (!this.histogram_)
+        return;
+      this.updateBrushedRange_(chartEvent.x);
+      this.mouseDownX_ = undefined;
     },
 
     get histogram() {
@@ -60,11 +144,10 @@ found in the LICENSE file.
     },
 
     updateContents_: function() {
-      var table = this.$.table;
+      this.$.container.style.display = this.histogram_ ? '' : 'none';
       if (!this.histogram_) {
         this.$.nsamples.textContent = 0;
         this.$.average.setValueAndUnit(undefined, undefined);
-        this.$.table.tableRows = [];
         return;
       }
 
@@ -82,50 +165,25 @@ found in the LICENSE file.
                                                 function(bin) {
                                                   return bin.count;
                                                 });
-      table.tableColumns = [
-        {
-          title: 'Min',
-          width: '200px',
-          value: function(bin) {
-            if (bin === this.histogram_.underflowBin)
-              return '-' + String.fromCharCode(0x221e);
-            var span = document.createElement('tr-ui-u-scalar-span');
-            span.setValueAndUnit(bin.range.min, this.histogram_.unit);
-            return span;
-          }.bind(this)
-        },
-        {
-          title: 'Max (exclusive)',
-          width: '200px',
-          value: function(bin) {
-            if (bin === this.histogram_.overflowBin)
-              return String.fromCharCode(0x221e);
-            var span = document.createElement('tr-ui-u-scalar-span');
-            span.setValueAndUnit(bin.range.max, this.histogram_.unit);
-            return span;
-          }.bind(this)
-        },
-        {
-          title: 'Quantity',
-          width: '100%',
-          value: function(bin) {
-            var span = document.createElement('tr-ui-u-scalar-span');
-            span.setValueAndUnit(bin.count, tr.b.u.Units.unitlessNumber);
-            span.percentage = bin.count / maximumBinValue;
-            span.rightAlign = true;
-            return span;
-          }
+      var chartData = [];
+      var binWidth = this.histogram_.centralBins[0].range.range;
+      this.histogram_.allBins.forEach(function(bin) {
+        var x = bin.range.min;
+        if (x === -Number.MAX_VALUE) {
+          if (!bin.count)
+            return;
+          x = bin.range.max - binWidth;
         }
-      ];
-      var rows = [];
-      if (this.histogram_.underflowBin.count)
-        rows.push(this.histogram_.underflowBin);
-      rows.push.apply(rows, this.histogram.centralBins);
-      if (this.histogram_.overflowBin.count)
-        rows.push(this.histogram_.overflowBin);
-      table.tableRows = rows;
-      this.rowHighlightEnabled = true;
-      table.rebuild();
+        chartData.push({x: x,
+                        y: bin.count});
+      });
+      chartData.sort(function(x, y) {
+        return x.x - y.x;
+      });
+      this.$.container.style.display = chartData.length ? '' : 'none';
+      this.chart_.data = chartData;
+      this.brushedBins_ = [];
+      this.chart_.brushedRange = new tr.b.Range();
     }
   });
   </script>

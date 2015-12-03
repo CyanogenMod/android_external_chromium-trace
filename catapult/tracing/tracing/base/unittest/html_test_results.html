@@ -5,18 +5,20 @@ Use of this source code is governed by a BSD-style license that can be
 found in the LICENSE file.
 -->
 <link rel="import" href="/tracing/base/event.html">
-<link rel="import" href="/tracing/base/utils.html">
 <link rel="import" href="/tracing/base/unittest/constants.html">
+<link rel="import" href="/tracing/base/utils.html">
+<link rel="import" href="/tracing/base/xhr.html">
 <link rel="import" href="/tracing/ui/base/ui.html">
 <link rel="import" href="/tracing/ui/base/utils.html">
 
 <style>
-  x-tr.b.unittest-test-resultsbase
-    display: -webkit-flex;
-    -webkit-flex-direction: column;
+  x-tr-b-unittest-test-results {
+    display: flex;
+    flex-direction: column;
+    flex: 0 0 auto;
   }
 
-  x-tr.b.unittest-test-results > x-html-test-case-result.dark {
+  x-tr-b-unittest-test-results > x-html-test-case-result.dark {
     background-color: #eee;
   }
 
@@ -251,7 +253,7 @@ tr.exportTo('tr.b.unittest', function() {
   /**
    * @constructor
    */
-  var HTMLTestResults = tr.ui.b.define('x-tr.b.unittest-test-results');
+  var HTMLTestResults = tr.ui.b.define('x-tr-b-unittest-test-results');
 
   HTMLTestResults.prototype = {
     __proto__: HTMLUnknownElement.prototype,
@@ -299,7 +301,7 @@ tr.exportTo('tr.b.unittest', function() {
       this.showPendingAndPassedTests_ = showPendingAndPassedTests;
 
       var testCaseResults = this.querySelectorAll('x-html-test-case-result');
-      for (var i = 0; i < testCaseResults.length; i++)
+      for (var i = testCaseResults.length - 1; i >= 0; i--)
         this.updateDisplayStateForResult_(testCaseResults[i]);
     },
 
@@ -319,16 +321,16 @@ tr.exportTo('tr.b.unittest', function() {
 
       // This bit of mess gives res objects a dark class based on whether their
       // last visible sibling was not dark. It relies on the
-      // updateDisplayStateForResult_ being called on all previous siblings of
+      // updateDisplayStateForResult_ being called on all next siblings of
       // an element before being called on the element itself. Yay induction.
       var dark;
-      if (!res.previousSibling) {
+      if (!res.nextSibling) {
         dark = true;
       } else {
         var lastVisible;
-        for (var cur = res.previousSibling;
+        for (var cur = res.nextSibling;
              cur;
-             cur = cur.previousSibling) {
+             cur = cur.nextSibling) {
           if (cur.style.display == '') {
             lastVisible = cur;
             break;
@@ -356,7 +358,7 @@ tr.exportTo('tr.b.unittest', function() {
         this.currentTestCaseResult_.testCaseHRef = href;
       this.currentTestCaseResult_.testStatus = TestStatus.RUNNING;
       this.currentTestCaseStartTime_ = window.performance.now();
-      this.appendChild(this.currentTestCaseResult_);
+      this.insertBefore(this.currentTestCaseResult_, this.firstChild);
       this.updateDisplayStateForResult_(this.currentTestCaseResult_);
       this.log_(testCase.fullyQualifiedName + ': ');
     },
@@ -426,8 +428,8 @@ tr.exportTo('tr.b.unittest', function() {
     notifyTestResultToDevServer_: function(result, extra_msg) {
       var req = new XMLHttpRequest();
       var testName = this.currentTestCaseResult_.testCase.fullyQualifiedName;
-      req.open('POST', '/tracing/notify_test_result', true);
-      req.send(result + '  ' + testName + ' ' + (extra_msg || ''));
+      var data = result + '  ' + testName + ' ' + (extra_msg || '');
+      tr.b.postAsync('/tracing/notify_test_result', data);
     },
 
     notifyTestCompletionToDevServer_: function() {
@@ -437,9 +439,7 @@ tr.exportTo('tr.b.unittest', function() {
       data += '\nPassed tests: ' + this.numTestsThatPassed_ +
               '  Failed tests: ' + this.numTestsThatFailed_;
 
-      var req = new XMLHttpRequest();
-      req.open('POST', '/tracing/notify_tests_completed', true);
-      req.send(data);
+      tr.b.postAsync('/tracing/notify_tests_completed', data);
     },
 
     log_: function(msg) {

@@ -71,7 +71,9 @@ class AutoTriageHandler(request_handler.RequestHandler):
       return
 
     TriageAnomalies.Process()
+    utils.TickMonitoringCustomMetric('TriageAnomalies')
     TriageBugs.Process()
+    utils.TickMonitoringCustomMetric('TriageBugs')
 
 
 class TriageAnomalies(object):
@@ -236,14 +238,16 @@ def _IsAnomalyRecovered(anomaly_entity):
   # If no improvement direction is provided, use absolute changes.
   if test.improvement_direction == anomaly.UNKNOWN:
     absolute_change = abs(median_after - median_before)
-    relative_change = abs(_RelativeChange(median_before, median_after))
+    relative_change = abs(
+        math_utils.RelativeChange(median_before, median_after))
   else:
     if test.improvement_direction == anomaly.UP:
       direction = -1
     else:
       direction = 1
     absolute_change = direction * (median_after - median_before)
-    relative_change = direction * _RelativeChange(median_before, median_after)
+    relative_change = direction * math_utils.RelativeChange(
+        median_before, median_after)
 
   measurements = {
       'segment_size_after': anomaly_entity.segment_size_after,
@@ -279,35 +283,26 @@ def _IsAnomalyRecovered(anomaly_entity):
   return True, measurements
 
 
-def _RelativeChange(before, after):
-  """Returns the none absolute value of the relative change between two values.
-
-  Args:
-    before: First value.
-    after: Second value.
-
-  Returns:
-    Relative change from the first to the second value.
-  """
-  return (after - before) / float(before) if before != 0 else float('inf')
-
-
-def _AddLogForRecoveredAnomaly(anomaly_entity, bug_id=None):
-  """Adds a log for an anomaly that has recovered."""
+def _AddLogForRecoveredAnomaly(anomaly_entity):
+  """Adds a quick log entry for an anomaly that has recovered."""
+  formatter = quick_logger.Formatter()
   sheriff_key = anomaly_entity.test.get().sheriff
   if not sheriff_key:
     return
   sheriff_name = sheriff_key.string_id()
-  html_str = 'Alert on %s has recovered.%s See <a href="%s">graph</a>.'
-  alert_url = ('https://chromeperf.appspot.com/group_report?keys=' +
-               anomaly_entity.key.urlsafe())
-  bug_link = ''
-  if bug_id:
-    bug_link = (' Bug: <a href="https://chromeperf.appspot.com/group_report?'
-                'bug_id=%s">%s</a>' % (bug_id, bug_id))
-
-  test_path = utils.TestPath(anomaly_entity.test)
-  formatter = quick_logger.Formatter()
   logger = quick_logger.QuickLogger('auto_triage', sheriff_name, formatter)
-  logger.Log(html_str, test_path, bug_link, alert_url)
+  logger.Log(
+      'Alert on %s has recovered. See <a href="%s">graph</a>.%s',
+      utils.TestPath(anomaly_entity.test),
+      ('https://chromeperf.appspot.com/group_report?keys=' +
+       anomaly_entity.key.urlsafe()),
+      _BugLink(anomaly_entity))
   logger.Save()
+
+
+def _BugLink(anomaly_entity):
+  if anomaly_entity.bug_id > 0:
+    bug_id = anomaly_entity.bug_id
+    return (' Bug: <a href="https://chromeperf.appspot.com/group_report?'
+            'bug_id=%s">%s</a>' % (bug_id, bug_id))
+  return ''

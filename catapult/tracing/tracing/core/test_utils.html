@@ -7,6 +7,7 @@ found in the LICENSE file.
 
 <link rel="import" href="/tracing/importer/import.html">
 <link rel="import" href="/tracing/model/counter.html">
+<link rel="import" href="/tracing/model/interaction_record.html">
 <link rel="import" href="/tracing/model/model.html">
 <link rel="import" href="/tracing/model/slice.html">
 <link rel="import" href="/tracing/model/slice_group.html">
@@ -20,6 +21,8 @@ found in the LICENSE file.
  * @fileoverview Helper functions for use in tracing tests.
  */
 tr.exportTo('tr.c', function() {
+  var ColorScheme = tr.b.ColorScheme;
+
   function _getStartAndCpuDurationFromDict(
       options, required, startFieldName, durationFieldName, endFieldName) {
 
@@ -93,8 +96,9 @@ tr.exportTo('tr.c', function() {
     var colorId;
     if (options.colorId) {
       if (options.colorId === 'random') {
-        colorId = Math.floor(Math.random() *
-                   tr.ui.b.paletteProperties.numGeneralPurposeColorIds);
+        colorId = Math.floor(
+            Math.random() *
+            ColorScheme.proprties.numGeneralPurposeColorIds);
       } else {
         colorId = options.colorId;
       }
@@ -223,7 +227,7 @@ tr.exportTo('tr.c', function() {
       model = thread.parent.model;
     else
       model = undefined;
-    var sf = TestUtils.newStackTrace(model, category, frameNames);
+    var sf = TestUtils.newStackTrace(model, frameNames);
     var s = new tr.model.Sample(undefined, thread,
                                         sampleName, start,
                                         sf,
@@ -265,14 +269,13 @@ tr.exportTo('tr.c', function() {
     return slice;
   }
 
-  TestUtils.newStackTrace = function(model, category, titles) {
+  TestUtils.newStackTrace = function(model, titles) {
     var frame = undefined;
-    for (var i = 0; i < titles.length; i++) {
-      frame = new tr.model.StackFrame(frame, tr.b.GUID.allocate(),
-                                                 category, titles[i], 7);
+    titles.forEach(function(title) {
+      frame = new tr.model.StackFrame(frame, tr.b.GUID.allocate(), title, 7);
       if (model)
         model.addStackFrame(frame);
-    }
+    });
     return frame;
   }
 
@@ -283,6 +286,10 @@ tr.exportTo('tr.c', function() {
       if (slices[i].title == name)
         return slices[i];
       return undefined;
+  }
+
+  TestUtils.newInteractionRecord = function(parentModel, start, duration) {
+    return new tr.model.InteractionRecord(parentModel, 'a', 0, start, duration);
   }
 
   TestUtils.newModel = function(customizeModelCallback) {

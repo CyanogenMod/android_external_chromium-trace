@@ -6,6 +6,7 @@
 
 import datetime
 import json
+import logging
 
 from dashboard import datastore_hooks
 from dashboard import request_handler
@@ -41,7 +42,8 @@ class AutoBisectHandler(request_handler.RequestHandler):
       self.RenderHtml('result.html', _PrintStartedAndFailedBisectJobs())
       return
     datastore_hooks.SetPrivilegedRequest()
-    _RestartFailedBisectJobs()
+    if _RestartFailedBisectJobs():
+      utils.TickMonitoringCustomMetric('RestartFailedBisectJobs')
 
 
 class NotBisectableError(Exception):
@@ -53,16 +55,29 @@ def _RestartFailedBisectJobs():
   """Restarts failed bisect jobs.
 
   Bisect jobs that ran out of retries will be deleted.
+
+  Returns:
+    True if all bisect jobs that were retried were successfully triggered,
+    and False otherwise.
   """
   bisect_jobs = try_job.TryJob.query(try_job.TryJob.status == 'failed').fetch()
+  all_successful = True
   for job in bisect_jobs:
     if job.run_count > 0:
       if job.run_count <= len(_BISECT_RESTART_PERIOD_DAYS):
         if _IsBisectJobDueForRestart(job):
+          # Start bisect right away if this is the first retry. Otherwise,
+          # try bisect with different config.
           if job.run_count == 1:
-            start_try_job.PerformBisect(job)
+            try:
+              start_try_job.PerformBisect(job)
+            except Exception as e:
+              logging.error(e.message)
+              all_successful = False
           elif job.bug_id:
-            _RestartBisect(job)
+            restart_successful = _RestartBisect(job)
+            if not restart_successful:
+              all_successful = False
       else:
         if job.bug_id:
           comment = ('Failed to run bisect %s times.'
@@ -70,6 +85,7 @@ def _RestartFailedBisectJobs():
                      job.run_count)
           start_try_job.LogBisectResult(job.bug_id, comment)
         job.key.delete()
+  return all_successful
 
 
 def _RestartBisect(bisect_job):
@@ -77,16 +93,24 @@ def _RestartBisect(bisect_job):
 
   Args:
     bisect_job: TryJob entity with initialized bot name and config.
+
+  Returns:
+    True if the bisect was successfully triggered and False otherwise.
   """
   try:
     new_bisect_job = _MakeBisectTryJob(
         bisect_job.bug_id, bisect_job.run_count)
   except NotBisectableError:
-    return
+    return False
   bisect_job.config = new_bisect_job.config
   bisect_job.bot = new_bisect_job.bot
   bisect_job.put()
-  start_try_job.PerformBisect(bisect_job)
+  try:
+    start_try_job.PerformBisect(bisect_job)
+  except Exception as e:
+    logging.error(e.message)
+    return False
+  return True
 
 
 def StartNewBisectForBug(bug_id):
@@ -97,7 +121,8 @@ def StartNewBisectForBug(bug_id):
 
   Returns:
     If successful, a dict containing "issue_id" and "issue_url" for the
-    bisect job. Otherwise, a dict containing "error".
+    bisect job. Otherwise, a dict containing "error", with some description
+    of the reason why a job wasn't started.
   """
   try:
     bisect_job = _MakeBisectTryJob(bug_id)
@@ -105,7 +130,10 @@ def StartNewBisectForBug(bug_id):
     return {'error': e.message}
   bisect_job_key = bisect_job.put()
 
-  bisect_result = start_try_job.PerformBisect(bisect_job)
+  try:
+    bisect_result = start_try_job.PerformBisect(bisect_job)
+  except request_handler.InvalidInputError as e:
+    bisect_result = {'error': e.message}
   if 'error' in bisect_result:
     bisect_job_key.delete()
   return bisect_result
@@ -158,7 +186,6 @@ def _MakeBisectTryJob(bug_id, run_count=0):
       bad_revision=bad_revision,
       repeat_count=10,
       max_time_minutes=20,
-      truncate_percent=25,
       bug_id=bug_id,
       use_archive='true',
       use_buildbucket=use_recipe)
@@ -166,8 +193,7 @@ def _MakeBisectTryJob(bug_id, run_count=0):
   if 'error' in new_bisect_config:
     raise NotBisectableError('Could not make a valid config.')
 
-  config_python_string = 'config = %s\n' % json.dumps(
-      new_bisect_config, sort_keys=True, indent=2, separators=(',', ': '))
+  config_python_string = utils.BisectConfigPythonString(new_bisect_config)
 
   bisect_job = try_job.TryJob(
       bot=bisect_bot,
