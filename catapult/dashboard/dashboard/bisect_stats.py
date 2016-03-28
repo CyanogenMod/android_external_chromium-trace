@@ -91,7 +91,9 @@ def UpdateBisectStats(bot_name, status):
     bot_name: Name of the bisect bot.
     status: Bisect status.  Either 'failed' or 'completed'.
   """
-  assert status in ['failed', 'completed']
+  # TODO(chrisphan): Add stats for staled bisect.
+  if status not in ['failed', 'completed']:
+    return
   series_name = _GetSeriesNameFromBotName(bot_name)
   week_timestamp = _GetLastMondayTimestamp()
 
@@ -116,7 +118,7 @@ def UpdateBisectStats(bot_name, status):
 
 
 def _GetLastMondayTimestamp():
-  """Get timestamp of 00:00 last Monday in milliseconds as an integer."""
+  """Gets timestamp of 00:00 last Monday in milliseconds as an integer."""
   today = datetime.date.today()
   monday = today - datetime.timedelta(days=today.weekday())
   return utils.TimestampMilliseconds(monday)

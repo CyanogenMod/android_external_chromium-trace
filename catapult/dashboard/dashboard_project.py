@@ -4,7 +4,6 @@
 
 import sys
 import os
-import re
 
 
 def _AddToPathIfNeeded(path):
@@ -45,7 +44,7 @@ def _IsFilenameATest(x):
 
 class DashboardProject(object):
   catapult_path = os.path.abspath(
-      os.path.join(os.path.dirname(__file__), os.path.pardir))
+      os.path.join(os.path.dirname(__file__), '..'))
 
   catapult_third_party_path = os.path.join(catapult_path, 'third_party')
 

@@ -5,7 +5,6 @@
 """Provides the web interface for reporting a graph of traces."""
 
 import json
-import os
 
 from google.appengine.ext import ndb
 
@@ -20,20 +19,26 @@ class ReportHandler(chart_handler.ChartHandler):
   """URL endpoint for /report page."""
 
   def get(self):
-    """Renders the UI for selecting graphs."""
-
+    """Renders the static UI for selecting graphs."""
     query_string = self._GetQueryStringForOldUri()
     if query_string:
       self.redirect('/report?' + query_string)
       return
+    self.RenderStaticHtml('report.html')
 
-    dev_version = ('Development' in os.environ['SERVER_SOFTWARE'] or
-                   self.request.host == 'chrome-perf.googleplex.com')
-
-    self.RenderHtml('report.html', {
-        'dev_version': dev_version,
-        'test_suites': json.dumps(update_test_suites.FetchCachedTestSuites()),
-    })
+  def post(self):
+    """Gets dynamic data for selecting graphs"""
+    values = {}
+    self.GetDynamicVariables(values)
+    self.response.out.write(json.dumps({
+        'is_internal_user': values['is_internal_user'],
+        'login_url': values['login_url'],
+        'revision_info': values['revision_info'],
+        'warning_bug': values['warning_bug'],
+        'warning_message': values['warning_message'],
+        'xsrf_token': values['xsrf_token'],
+        'test_suites': update_test_suites.FetchCachedTestSuites(),
+    }))
 
   def _GetQueryStringForOldUri(self):
     """Gets a new query string if old URI parameters are present.
@@ -107,11 +112,11 @@ def _CreatePageState(masters, bots, tests, checked):
       for test in tests:
         test_parts = test.split('/')
         if len(test_parts) == 1:
-          first_test = _GetFirstTest(test, master + '/' + bot)
-          if first_test:
-            test += '/' + first_test
+          first_test_parts = _GetFirstTest(test, master + '/' + bot)
+          if first_test_parts:
+            test += '/' + '/'.join(first_test_parts)
             if not selected_series:
-              selected_series.append(first_test)
+              selected_series.append(first_test_parts[-1])
         test_paths.append(master + '/' + bot + '/' + test)
 
   chart_states = []
@@ -131,7 +136,8 @@ def _GetFirstTest(test_suite, bot_path):
     bot_path: Master and bot name separated by a slash.
 
   Returns:
-    The first test that has rows, otherwise returns None.
+    A list of test path parts of the first test that has rows, otherwise
+    returns None.
   """
   sub_test_tree = list_tests.GetSubTests(test_suite, [bot_path])
   test_parts = []
@@ -139,6 +145,6 @@ def _GetFirstTest(test_suite, bot_path):
     first_test = sorted(sub_test_tree.keys())[0]
     test_parts.append(first_test)
     if sub_test_tree[first_test]['has_rows']:
-      return '/'.join(test_parts)
+      return test_parts
     sub_test_tree = sub_test_tree[first_test]['sub_tests']
   return None

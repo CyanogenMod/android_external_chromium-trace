@@ -76,7 +76,7 @@ def _NamespaceKey(key, namespace=None):
 
 
 def Prewarm(keys):
-  """Prewarm the NDB in-context cache by doing async_get for the keys.
+  """Prewarms the NDB in-context cache by doing async_get for the keys.
 
   For requests like /add_point which can get/set dozens of keys, contention
   occasionally causes the gets to take several seconds. But they will be
@@ -145,7 +145,7 @@ def Set(key, value, days_to_keep=None, namespace=None):
 def SetExternal(key, value, days_to_keep=None):
   """Sets the value in the datastore for the externally namespaced key.
 
-  Needed for things like /add_point that update internal/exteral data at the
+  Needed for things like /add_point that update internal/external data at the
   same time.
 
   Args:

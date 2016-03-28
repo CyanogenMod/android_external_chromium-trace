@@ -12,6 +12,11 @@ THIRD_PARTY_LIBRARIES = [
     'uritemplate',
 ]
 
+# Directories in perf_insights/third_party required by cloud_mapper.
+THIRD_PARTY_LIBRARIES_IN_PERF_INSIGHTS = [
+    'cloudstorage',
+]
+
 # Libraries bundled with the App Engine SDK.
 THIRD_PARTY_LIBRARIES_IN_SDK = [
     'httplib2',
@@ -27,11 +32,11 @@ CLOUD_MAPPER_FILES = [
     'local_worker.yaml',
     'queue.yaml',
     'dispatch.yaml',
+    'cron.yaml',
     'index.yaml',
     'Dockerfile',
     'perf_insights',
     'perf_insights_project.py',
-    'third_party',
 ]
 
 
@@ -71,5 +76,10 @@ def PathsForDeployment():
   third_party_dir = os.path.join(catapult_path, 'third_party')
   for library_dir in THIRD_PARTY_LIBRARIES:
     paths.append(os.path.join(third_party_dir, library_dir))
+
+  third_party_dir = os.path.join(catapult_path, 'perf_insights', 'third_party')
+  for library_dir in THIRD_PARTY_LIBRARIES_IN_PERF_INSIGHTS:
+    paths.append(os.path.join(third_party_dir, library_dir))
+  print paths
 
   return paths

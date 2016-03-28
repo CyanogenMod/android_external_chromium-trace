@@ -2,6 +2,12 @@
      Use of this source code is governed by a BSD-style license that can be
      found in the LICENSE file.
 -->
+# Code of Conduct
+
+We follow the [Chromium code of conduct](
+https://chromium.googlesource.com/chromium/src/+/master/CODE_OF_CONDUCT.md) in
+our our repos and organizations, mailing lists, and other communications.
+
 # Workflow
 
 Install [depot_tools]
@@ -41,7 +47,7 @@ git checkout master
 git branch -D foo
 ```
 
-# Legal
+# Becoming a committer
 
 If you're new to the chromium-family of projects, you will also need to sign the
 chrome contributors license agreement. You can sign the
@@ -55,6 +61,9 @@ us as described on that page.
 
 If you've never submitted code before, you must add your (or your
 organization's) name and contact info to the Chromium AUTHORS file.
+
+Next, ask an admin to add you (see
+[adding committers](/docs/adding-committers.md))
 
 # Contributing from a Chromium checkout
 
@@ -79,10 +88,15 @@ catapult folder (third_party/catapult):
 
 # Code style
 
-We follow the [Chromium style]
-(https://www.chromium.org/developers/coding-style). 
+See the [style guide](/docs/style-guide.md).
 
-If you're contributing to Trace Viewer, refer to the [Trace Viewer style guide](https://docs.google.com/document/d/1MMOfywou2Oaho4jOttUk-ZSJcHVd5G5BTsD48rPrBtQ/edit).
+# Individual project documentation
+
+Look to individual project documentation for more info on getting started:
+   * [perf dashboard](/dashboard/README.md)
+   * [systrace](/systrace/README.md)
+   * [telemetry](/telemetry/README.md)
+   * [trace-viewer](/tracing/README.md)
 
 # Tests
 
@@ -95,22 +109,12 @@ automatically runs all tests. Run the tests before committing with the
 
 # Updating Chromium's about:tracing (rolling DEPS)
 
-To get your change to appear in Chrome's about:tracing or other
-third_party/catapult files, commit to catapult. Then check the [mirror]
-(https://chromium.googlesource.com/external/github.com/catapult-project/catapult.git)
-to find the git hash of your commit. (Note: it may take a few minutes to be
-mirrored).
+Chromium's DEPS file needs to be rolled to the catapult revision containing your
+change in order for it to appear in Chrome's about:tracing or other
+third_party/catapult files. Follow the [directions for rolling DEPS]
+(/docs/rolling-deps.md) to do this.
 
-Then edit Chrome's [src/DEPS]
-(https://code.google.com/p/chromium/codesearch#chromium/src/DEPS) file. Look for
-a line like:
+# Adding a new project
 
-```
-  'src/third_party/catapult':
-    Var('chromium_git') + '/external/github.com/catapult-project/catapult.git' + '@' +
-    '2da8924915bd6fb7609c518f5b1f63cb606248eb',
-```
-
-Update the number to the git hash you want to roll to, and [contribute a
-codereview to chrome](http://www.chromium.org/developers/contributing-code)
-for your edit. If you are a Chromium committer, feel free to TBR this.
+Please read the [directory structure guide](/docs/directory-structure.md)
+to learn the conventions for new directories.

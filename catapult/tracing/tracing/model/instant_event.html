@@ -5,28 +5,29 @@ Use of this source code is governed by a BSD-style license that can be
 found in the LICENSE file.
 -->
 
-<link rel="import" href="/tracing/base/units/time_stamp.html">
 <link rel="import" href="/tracing/model/timed_event.html">
+<link rel="import" href="/tracing/value/unit.html">
 
 <script>
 'use strict';
 
-/**
- * @fileoverview Provides the InstantEvent class.
- */
 tr.exportTo('tr.model', function() {
   var InstantEventType = {
     GLOBAL: 1,
     PROCESS: 2
   };
 
+  /**
+   * An InstantEvent is a zero-duration event.
+   *
+   * @constructor
+   */
   function InstantEvent(category, title, colorId, start, args) {
-    tr.model.TimedEvent.call(this);
+    tr.model.TimedEvent.call(this, start);
 
     this.category = category || '';
     this.title = title;
     this.colorId = colorId;
-    this.start = start;
     this.args = args;
 
     this.type = undefined;
@@ -36,6 +37,15 @@ tr.exportTo('tr.model', function() {
     __proto__: tr.model.TimedEvent.prototype
   };
 
+  /**
+   * A GlobalInstantEvent is a zero-duration event that's not tied to any
+   * particular process.
+   *
+   * An example is a trace event that's issued when a new USB device is plugged
+   * into the machine.
+   *
+   * @constructor
+   */
   function GlobalInstantEvent(category, title, colorId, start, args) {
     InstantEvent.apply(this, arguments);
     this.type = InstantEventType.GLOBAL;
@@ -45,10 +55,18 @@ tr.exportTo('tr.model', function() {
     __proto__: InstantEvent.prototype,
     get userFriendlyName() {
       return 'Global instant event ' + this.title + ' @ ' +
-          tr.b.u.TimeStamp.format(start);
+          tr.v.Unit.byName.timeStampInMs.format(start);
     }
   };
 
+  /**
+   * A ProcessInstantEvent is a zero-duration event that's tied to a
+   * particular process.
+   *
+   * An example is a trace event that's issued when a kill signal is received.
+   *
+   * @constructor
+   */
   function ProcessInstantEvent(category, title, colorId, start, args) {
     InstantEvent.apply(this, arguments);
     this.type = InstantEventType.PROCESS;
@@ -59,7 +77,7 @@ tr.exportTo('tr.model', function() {
 
     get userFriendlyName() {
       return 'Process-level instant event ' + this.title + ' @ ' +
-          tr.b.u.TimeStamp.format(start);
+          tr.v.Unit.byName.timeStampInMs.format(start);
     }
   };
 

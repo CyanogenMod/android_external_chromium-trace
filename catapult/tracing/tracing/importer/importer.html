@@ -18,6 +18,10 @@ tr.exportTo('tr.importer', function() {
   Importer.prototype = {
     __proto__: Object.prototype,
 
+    get importerName() {
+      return 'Importer';
+    },
+
     /**
      * Called by the Model to check whether the importer type stores the actual
      * trace data or just holds it as container for further extraction.
@@ -31,6 +35,12 @@ tr.exportTo('tr.importer', function() {
      */
     extractSubtraces: function() {
       return [];
+    },
+
+    /**
+     * Called to import clock sync markers into the Model.
+     */
+    importClockSyncMarkers: function() {
     },
 
     /**
@@ -50,13 +60,6 @@ tr.exportTo('tr.importer', function() {
      * events.
      */
     finalizeImport: function() {
-    },
-
-    /**
-     * Called by the Model to join references between objects, after final
-     * model bounds have been computed.
-     */
-    joinRefs: function() {
     }
   };
 

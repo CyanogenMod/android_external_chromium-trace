@@ -31,12 +31,28 @@ class RequestHandler(webapp2.RequestHandler):
 
     Args:
       template_file: string. File name under templates directory.
-      template_values: dict. Mapping of template variables to corresponding
+      template_values: dict. Mapping of template variables to corresponding.
           values.
       status: int. HTTP status code.
     """
     self.response.set_status(status)
     template = JINJA2_ENVIRONMENT.get_template(template_file)
+    self.GetDynamicVariables(template_values)
+    self.response.out.write(template.render(template_values))
+
+  def RenderStaticHtml(self, filename):
+    filename = os.path.join(os.path.dirname(__file__), 'static', filename)
+    contents = open(filename, 'r')
+    self.response.out.write(contents.read())
+    contents.close()
+
+  def GetDynamicVariables(self, template_values, request_path=None):
+    """Gets the values that vary for every page.
+
+    Args:
+      template_values: dict of name/value pairs.
+      request_path: path for login urls, None if using the current path.
+    """
     user_info = ''
     xsrf_token = ''
     user = users.get_current_user()
@@ -49,7 +65,7 @@ class RequestHandler(webapp2.RequestHandler):
       xsrf_token = xsrf.GenerateToken(user)
       is_admin = users.is_current_user_admin()
     try:
-      login_url = users.create_login_url(self.request.path_qs)
+      login_url = users.create_login_url(request_path or self.request.path_qs)
     except users.RedirectTooLongError:
       # On the bug filing pages, the full login URL can be too long. Drop
       # the correct redirect URL, since the user should already be logged in at
@@ -57,6 +73,8 @@ class RequestHandler(webapp2.RequestHandler):
       login_url = users.create_login_url('/')
     user_info = '<a href="%s" title="%s">%s</a>' % (
         login_url, title, display_username)
+    template_values['login_url'] = login_url
+    template_values['display_username'] = display_username
     template_values['user_info'] = user_info
     template_values['is_admin'] = is_admin
     template_values['is_internal_user'] = utils.IsInternalUser()
@@ -64,7 +82,7 @@ class RequestHandler(webapp2.RequestHandler):
     template_values['xsrf_input'] = (
         '<input type="hidden" name="xsrf_token" value="%s">' % xsrf_token)
     template_values['login_url'] = login_url
-    self.response.out.write(template.render(template_values))
+    return template_values
 
   def ReportError(self, error_message, status=500):
     """Reports the given error to the client and logs the error.
@@ -75,7 +93,8 @@ class RequestHandler(webapp2.RequestHandler):
     """
     logging.error(error_message)
     self.response.set_status(status)
-    self.response.out.write('%s\n' % error_message)
+    self.response.out.write('%s\nrequest_id:%s\n' %
+                            (error_message, utils.GetRequestId()))
 
   def ReportWarning(self, warning_message, status=200):
     """Reports a warning to the client and logs the warning.
@@ -86,7 +105,8 @@ class RequestHandler(webapp2.RequestHandler):
     """
     logging.warning(warning_message)
     self.response.set_status(status)
-    self.response.out.write('%s\n' % warning_message)
+    self.response.out.write('%s\nrequest_id:%s\n' %
+                            (warning_message, utils.GetRequestId()))
 
 
 class InvalidInputError(Exception):

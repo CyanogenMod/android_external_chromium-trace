@@ -14,9 +14,10 @@ if version != (2, 7):
   sys.exit(1)
 
 systrace_dir = os.path.abspath(
-    os.path.join(os.path.dirname(__file__), 'catapult', 'systrace', 'systrace'))
+    os.path.join(os.path.dirname(__file__), 'catapult', 'systrace'))
 sys.path.insert(0, systrace_dir)
-import systrace
+
+from systrace import systrace
 
 if __name__ == '__main__':
   sys.exit(systrace.main())

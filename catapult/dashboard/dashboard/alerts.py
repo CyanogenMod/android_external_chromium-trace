@@ -25,7 +25,11 @@ class AlertsHandler(request_handler.RequestHandler):
   """Shows an overview of recent anomalies for perf sheriffing."""
 
   def get(self):
-    """Renders the UI for listing alerts.
+    """Renders the UI for listing alerts."""
+    self.RenderStaticHtml('alerts.html')
+
+  def post(self):
+    """Returns dynamic data for listing alerts in response to XHR.
 
     Request parameters:
       sheriff: The name of a sheriff (optional).
@@ -33,10 +37,16 @@ class AlertsHandler(request_handler.RequestHandler):
       improvements: Whether to include improvement anomalies.
 
     Outputs:
-      A page displaying an overview table of all alerts.
+      JSON data for an XHR request to show a table of alerts.
     """
     sheriff_name = self.request.get('sheriff', 'Chromium Perf Sheriff')
     sheriff_key = ndb.Key('Sheriff', sheriff_name)
+    if not _SheriffIsFound(sheriff_key):
+      self.response.out.write(json.dumps({
+          'error': 'Sheriff "%s" not found.' % sheriff_name
+      }))
+      return
+
     include_improvements = bool(self.request.get('improvements'))
     include_triaged = bool(self.request.get('triaged'))
 
@@ -45,14 +55,24 @@ class AlertsHandler(request_handler.RequestHandler):
     anomalies = ndb.get_multi(anomaly_keys[:_MAX_ANOMALIES_TO_SHOW])
     stoppage_alerts = _FetchStoppageAlerts(sheriff_key, include_triaged)
 
-    self.RenderHtml('alerts.html', {
-        'anomaly_list': json.dumps(AnomalyDicts(anomalies)),
-        'stoppage_alert_list': json.dumps(StoppageAlertDicts(stoppage_alerts)),
-        'have_anomalies': bool(anomalies),
-        'have_stoppage_alerts': bool(stoppage_alerts),
-        'sheriff_list': json.dumps(_GetSheriffList()),
-        'num_anomalies': len(anomaly_keys),
-    })
+    values = {
+        'anomaly_list': AnomalyDicts(anomalies),
+        'stoppage_alert_list': StoppageAlertDicts(stoppage_alerts),
+        'sheriff_list': _GetSheriffList(),
+    }
+    self.GetDynamicVariables(values)
+    self.response.out.write(json.dumps(values))
+
+
+def _SheriffIsFound(sheriff_key):
+  """Checks whether the sheriff can be found for the current user."""
+  try:
+    sheriff_entity = sheriff_key.get()
+  except AssertionError:
+    # This assertion is raised in InternalOnlyModel._post_get_hook,
+    # and indicates an internal-only Sheriff but an external user.
+    return False
+  return sheriff_entity is not None
 
 
 def _FetchAnomalyKeys(sheriff_key, include_improvements, include_triaged):

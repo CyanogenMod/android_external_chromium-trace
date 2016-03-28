@@ -1,15 +1,13 @@
 # Copyright 2015 The Chromium Authors. All rights reserved.
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
-import os
-import multiprocessing
-import sys
 import threading
-import time
 import traceback
 import Queue
 
-class ThreadedWorkQueue:
+
+class ThreadedWorkQueue(object):
+
   def __init__(self, num_threads):
     self._num_threads = num_threads
 
@@ -20,8 +18,7 @@ class ThreadedWorkQueue:
     self._stop = False
     self._stop_result = None
 
-    self._main_thread_tasks = Queue.Queue()
-    self._any_thread_tasks = Queue.Queue()
+    self.Reset()
 
   @property
   def is_running(self):
@@ -58,6 +55,11 @@ class ThreadedWorkQueue:
     self._stop_result = stop_result
     self._stop = True
     return True
+
+  def Reset(self):
+    assert not self.is_running
+    self._main_thread_tasks = Queue.Queue()
+    self._any_thread_tasks = Queue.Queue()
 
   def PostMainThreadTask(self, cb, *args, **kwargs):
     def RunTask():
@@ -99,10 +101,10 @@ class ThreadedWorkQueue:
   def _RunMultiThreaded(self):
     threads = []
     for _ in range(self._num_threads):
-        t = threading.Thread(target=self._ThreadMain)
-        t.setDaemon(True)
-        t.start()
-        threads.append(t)
+      t = threading.Thread(target=self._ThreadMain)
+      t.setDaemon(True)
+      t.start()
+      threads.append(t)
 
     while True:
       if self._stop:

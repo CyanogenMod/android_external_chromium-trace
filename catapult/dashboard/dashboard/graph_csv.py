@@ -8,13 +8,14 @@ import csv
 import logging
 import StringIO
 
+from dashboard import datastore_hooks
 from dashboard import request_handler
 from dashboard import utils
 from dashboard.models import graph_data
 
 
 class GraphCsvHandler(request_handler.RequestHandler):
-  """Get data from data store and outputs it in CSV format."""
+  """Request handler for getting data from one series as CSV."""
 
   def get(self):
     """Gets CSV from data store and outputs it.
@@ -40,6 +41,10 @@ class GraphCsvHandler(request_handler.RequestHandler):
     logging.info('Got request to /graph_csv for test: "%s".', test_path)
 
     test_key = utils.TestKey(test_path)
+    test = test_key.get()
+    assert(datastore_hooks.IsUnalteredQueryPermitted() or
+           not test.internal_only)
+    datastore_hooks.SetSinglePrivilegedRequest()
     q = graph_data.Row.query()
     q = q.filter(graph_data.Row.parent_test == test_key)
     if rev:
@@ -61,7 +66,7 @@ class GraphCsvHandler(request_handler.RequestHandler):
     self.get()
 
   def _GenerateRows(self, points, attributes):
-    """Generate all the rows based on the attributes given.
+    """Generates CSV rows based on the attributes given.
 
     Args:
       points: A list of Row entities.

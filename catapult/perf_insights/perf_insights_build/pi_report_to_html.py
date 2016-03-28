@@ -5,7 +5,6 @@ import argparse
 import codecs
 import os
 import sys
-import traceback
 import json
 
 from perf_insights import corpus_driver_cmdline
@@ -13,9 +12,8 @@ from perf_insights import corpus_query
 from perf_insights import function_handle
 from perf_insights import map_runner
 from perf_insights import progress_reporter as progress_reporter_module
-from perf_insights.results import json_output_formatter
+from perf_insights.mre import job as job_module
 from py_vulcanize import generate
-import perf_insights
 import perf_insights_project
 import bs4
 
@@ -85,18 +83,19 @@ def PiReportToHTML(ofile, corpus_driver, pi_report_file, query,
   module = function_handle.ModuleToLoad(filename=map_file)
   map_function_handle = function_handle.FunctionHandle([module],
                                                        map_function_name)
+  job = job_module.Job(map_function_handle, None)
 
   if map_file == None:
     raise Exception('Could not find %s' % map_function_href)
 
-  results = _MapTraces(corpus_driver, map_function_handle, query, stop_on_error,
+  results = _MapTraces(corpus_driver, job, query, stop_on_error,
                        jobs, quiet)
   if stop_on_error and results.had_failures:
-    sys.stderr.write('There were mapping errors. Aborting.');
+    sys.stderr.write('There were mapping errors. Aborting.')
     return 255
 
   if json_output:
-    json.dump(results.AsDict(), ofile, indent=2)
+    json.dump([result.AsDict() for result in results], ofile, indent=2)
   else:
     WriteResultsToFile(ofile, project,
                        pi_report_file, pi_report_element_name,
@@ -104,14 +103,14 @@ def PiReportToHTML(ofile, corpus_driver, pi_report_file, query,
   return 0
 
 
-def _MapTraces(corpus_driver, map_function_handle, query, stop_on_error=False,
+def _MapTraces(corpus_driver, job, query, stop_on_error=False,
                jobs=1, quiet=False):
   trace_handles = corpus_driver.GetTraceHandlesMatchingQuery(query)
   if quiet:
     alt_progress_reporter = progress_reporter_module.ProgressReporter()
   else:
     alt_progress_reporter = None
-  runner = map_runner.MapRunner(trace_handles, map_function_handle,
+  runner = map_runner.MapRunner(trace_handles, job,
                   stop_on_error=stop_on_error,
                   progress_reporter=alt_progress_reporter,
                   jobs=jobs)
@@ -132,7 +131,7 @@ def WriteResultsToFile(ofile, project,
 
   load_sequence = vulcanizer.CalcLoadSequenceForModules(modules)
 
-  results_string = json.dumps(results.AsDict())
+  results_string = json.dumps([result.AsDict() for result in results])
 
   bootstrap_script = generate.ExtraScript(text_content="""
     document.addEventListener('DOMContentLoaded', function() {

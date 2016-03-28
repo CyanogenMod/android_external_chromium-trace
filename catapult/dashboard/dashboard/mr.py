@@ -25,6 +25,7 @@ from mapreduce import operation as op
 
 from google.appengine.ext import ndb
 
+from dashboard import datastore_hooks
 from dashboard import layered_cache
 from dashboard import request_handler
 from dashboard.models import graph_data
@@ -57,7 +58,7 @@ class MRDeprecateTestsHandler(request_handler.RequestHandler):
   """Handler to run a deprecate tests mapper job."""
 
   def get(self):
-    # TODO(qyearsley): Add test coverage. See http://crbug.com/447432
+    # TODO(qyearsley): Add test coverage. See catapult:#1346.
     name = 'Update test deprecation status.'
     handler = ('dashboard.mr.DeprecateTestsMapper')
     reader = 'mapreduce.input_readers.DatastoreInputReader'
@@ -87,18 +88,19 @@ def DeprecateTestsMapper(entity):
   """
   # Make sure that we have a non-deprecated Test with Rows.
   if entity.key.kind() != 'Test' or not entity.has_rows or entity.deprecated:
-    # TODO(qyearsley): Add test coverage. See http://crbug.com/447432
+    # TODO(qyearsley): Add test coverage. See catapult:#1346.
     logging.error(
         'Got bad entity in mapreduce! Kind: %s, has_rows: %s, deprecated: %s',
         entity.key.kind(), entity.has_rows, entity.deprecated)
     return
 
   # Fetch the last row.
+  datastore_hooks.SetPrivilegedRequest()
   query = graph_data.Row.query(graph_data.Row.parent_test == entity.key)
   query = query.order(-graph_data.Row.timestamp)
   last_row = query.get()
   if not last_row:
-    # TODO(qyearsley): Add test coverage. See http://crbug.com/
+    # TODO(qyearsley): Add test coverage. See catapult:#1346.
     logging.error('No rows for %s (but has_rows=True)', entity.key)
     return
 

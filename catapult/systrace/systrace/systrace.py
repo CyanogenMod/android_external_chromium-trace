@@ -25,8 +25,6 @@ import imp
 import optparse
 import os
 
-import util
-
 
 # The default agent directory.
 DEFAULT_AGENT_DIR = 'agents'
@@ -139,7 +137,7 @@ def write_trace_html(html_filename, script_dir, agents):
 
   html_file.write(html_suffix)
   html_file.close()
-  print('\n    wrote file://%s\n' % os.path.abspath(html_filename))
+  print '\n    wrote file://%s\n' % os.path.abspath(html_filename)
 
 
 def create_agents(options, categories):
@@ -193,7 +191,7 @@ def main():
     sys.exit(1)
 
   try:
-    update_systrace_trace_viewer = __import__('update_systrace_trace_viewer')
+    from . import update_systrace_trace_viewer
   except ImportError:
     pass
   else:
@@ -216,5 +214,11 @@ def read_asset(src_dir, filename):
   return open(os.path.join(src_dir, filename)).read()
 
 
-if __name__ == '__main__':
+if __name__ == '__main__' and __package__ is None:
+  # Add current package to search path.
+  _SYSTRACE_DIR = os.path.abspath(
+      os.path.join(os.path.dirname(__file__), os.path.pardir))
+  sys.path.insert(0, _SYSTRACE_DIR)
+  __package__ = "systrace"  # pylint: disable=redefined-builtin
+
   main()

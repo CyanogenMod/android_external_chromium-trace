@@ -1,10 +1,16 @@
 <!DOCTYPE html>
+<!--
+Copyright 2016 The Chromium Authors. All rights reserved.
+Use of this source code is governed by a BSD-style license that can be
+found in the LICENSE file.
+-->
 <html>
 <head>
   <link type="text/css" rel="stylesheet" href="/dashboard/static/base.css">
+  <link rel="import" href="/dashboard/elements/nav-bar.html">
 </head>
 <body>
-{% include 'nav.html' %}
+  <nav-bar></nav-bar>
 {% if error %}
   <pre>
   Status of the bisect job {{job_id}}: ERROR, {{error}}

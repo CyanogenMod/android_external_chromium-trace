@@ -3,7 +3,6 @@
 # found in the LICENSE file.
 
 import datetime
-import sys
 import unittest
 
 import mock
@@ -67,7 +66,7 @@ class AutoBisectTest(testing_common.TestCase):
     job_key = try_job.TryJob(
         bug_id=333, status='failed',
         last_ran_timestamp=datetime.datetime.now(),
-        run_count=len(auto_bisect._BISECT_RESTART_PERIOD_DAYS)+1).put()
+        run_count=len(auto_bisect._BISECT_RESTART_PERIOD_DAYS) + 1).put()
     self.testapp.post('/auto_bisect')
     self.assertIsNone(job_key.get())
     mock_log_result.assert_called_once_with(333, mock.ANY)
@@ -92,6 +91,7 @@ class AutoBisectTest(testing_common.TestCase):
 
 
 class StartNewBisectForBugTest(testing_common.TestCase):
+
   def setUp(self):
     super(StartNewBisectForBugTest, self).setUp()
     stored_object.Set(
@@ -194,7 +194,7 @@ class TickMonitoringCustomMetricTest(testing_common.TestCase):
   @mock.patch.object(utils, 'TickMonitoringCustomMetric')
   def testPost_RunCount1_ExceptionInPerformBisect_CustomMetricNotTicked(
       self, mock_tick, mock_perform_bisect):
-    mock_perform_bisect.side_effect = Exception('Error')
+    mock_perform_bisect.side_effect = request_handler.InvalidInputError()
     try_job.TryJob(
         bug_id=222, status='failed',
         last_ran_timestamp=datetime.datetime.now(),
@@ -206,7 +206,7 @@ class TickMonitoringCustomMetricTest(testing_common.TestCase):
   @mock.patch.object(utils, 'TickMonitoringCustomMetric')
   def testPost_RunCount2_ExceptionInPerformBisect_CustomMetricNotTicked(
       self, mock_tick, mock_perform_bisect):
-    mock_perform_bisect.side_effect = Exception('Error')
+    mock_perform_bisect.side_effect = request_handler.InvalidInputError()
     try_job.TryJob(
         bug_id=111, status='failed',
         last_ran_timestamp=datetime.datetime.now() - datetime.timedelta(days=8),
